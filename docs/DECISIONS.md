@@ -27,3 +27,13 @@ live Devpost managed-hackathon catalog. No Devpost event identity was invented
 and no unrelated registration was performed. Competition updates supplied by
 the organizer are recorded as project inputs until an official Agent Index
 surface exposes an authoritative rules API.
+
+## ADR-005 — Incomplete live rule sources block visibly
+
+Real event pages often omit deadlines, prohibitions, or machine-readable rule
+markup. Galahad may infer conservative candidates from ordinary HTML, but it
+must not invent missing hard rules. If the rules quality gate fails, the
+mission is persisted in `BLOCKED`, a `QUALITY_GATE_FAILED` event records the
+specific findings, and status exposes them without making downstream tasks
+ready. A missing deadline is recorded as explicitly unknown rather than
+silently treated as known.

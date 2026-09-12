@@ -48,7 +48,7 @@ Verification:
   occurred during that deterministic fixture run.
 - Docker image build — passed from the immutable official base. The current
   Compose image manifest list is
-  `sha256:45293d0da20d614be7ba5ac864003a485e6e664f2dd79417c4967a7cc92b9da8`.
+  `sha256:13478d98e09f279a85b5e7655ceee3df68df9bd93459b12ba1cd28641af857e7`.
 - Container `doctor` — healthy with migration v4, Git, all six skills, Plow
   discovery, explicit test `AGENT_ID`, service wiring, Agent Index client
   smoke (`not_registered` is safely visible), and no embedded credentials.
@@ -97,3 +97,31 @@ The rendered community page at
 Hermes / Plow runtime, one active user, and 119K tokens. A fresh supervised
 report submitted the exact current total of 119,363 tokens across two rows and
 received HTTP 200. Verification is still unavailable until 2026-09-14.
+
+A live-source rehearsal against `https://aiworthusing.com/agent-index` exposed
+two research edge cases that fixtures had hidden: ordinary public copy produced
+a first-person story false positive, and an incomplete official surface caused
+an unhandled quality-gate exception. The heuristic now rejects narrative-heavy
+blocks unless they contain explicit normative language and recognizes common
+registration/reporting requirements. Incomplete rule sets persist an
+inspectable blocked mission instead of advancing or crashing. The repeated live
+run stored six evidence records and returned `BLOCKED` with only the truthful
+finding `critical prohibitions are missing`.
+
+The first shipped-image rehearsal then exposed a packaging permission defect:
+Docker had created `/opt/galahad` as `0644`, so the unprivileged Hermes user
+could not traverse it to import the mission package. The image now normalizes
+all package directories to `0755` and files to `0644`; the image contract test
+pins the directory rule.
+
+The rebuilt-image `doctor` also revealed two diagnostic namespace mismatches:
+the Plow MCP URL is injected through the root-owned `s6` environment directory,
+and Agent Index identity lives in `HERMES_HOME`, not Galahad's application-state
+subdirectory. Doctor now checks the non-secret presence of the runtime marker
+without reading it and runs the official client smoke check against the actual
+Hermes home.
+
+The final rebuilt-image `doctor` returned healthy with migration v4, all six
+skills, Plow tools available, the stable agent id present, Agent Index status
+`registered`, and the credential present at mode `0600`. The supervised report
+again returned HTTP 200 for 119,363 tokens across two rows.

@@ -201,22 +201,35 @@ def _infer_rule_candidates(blocks: list[str]) -> list[dict[str, str]]:
     for block in blocks:
         text = " ".join(block.split())
         lower = text.lower()
+        explicit_normative = re.search(
+            r"\b(must|must not|required|eligible|eligibility|to rank|do not|may not|prohibited)\b",
+            lower,
+        )
+        first_person_markers = re.findall(r"\b(i|me|my|mine|we|us|our|ours)\b", lower)
         if (
             len(text) < 12
             or len(text) > 800
             or any(marker in lower for marker in _INJECTION_MARKERS)
+            or (len(first_person_markers) >= 3 and not explicit_normative)
         ):
             continue
         kind: str | None = None
         if re.search(r"\b(must not|may not|prohibited|forbidden|do not|cannot)\b", lower):
             kind = "prohibited"
         elif "license" in lower or re.search(
-            r"\b(eligible|eligibility|minimum age|team size)\b", lower
+            r"\b(eligible|eligibility|minimum age|team size|must be|to rank)\b", lower
         ):
             kind = "eligibility"
-        elif re.search(r"\b(must use|required to use|built with|build with)\b", lower):
+        elif re.search(
+            r"\b(must use|required to use|built with|build with)\b", lower
+        ) or re.search(
+            r"\bcopy\b.*\b(client|service)\b|\breport(?:ing)?\b.*\bleaderboard\b", lower
+        ):
             kind = "required-technology"
-        elif re.search(r"\b(submit|submission|demo|video|repository|source code)\b", lower):
+        elif re.search(
+            r"\b(submit|submission|provide|include|publish|upload|register|demo|video|repository|source code)\b",
+            lower,
+        ):
             kind = "submission"
         if kind and lower not in seen:
             seen.add(lower)
@@ -324,6 +337,7 @@ def extract_spec(
         canonical_url=primary.uri,
         deadline_at=deadline,
         judging_mode=primary.judging_mode,
+        deadline_explicitly_unknown=primary.deadline is None,
         required_technologies=[rule["text"] for _, rule in by_kind.get("required-technology", [])],
         prohibited_actions=[rule["text"] for _, rule in by_kind.get("prohibited", [])],
         submission_requirements=requirements("submission"),

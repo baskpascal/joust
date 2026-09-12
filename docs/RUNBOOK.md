@@ -20,6 +20,11 @@ Missions and tasks are persisted in SQLite. On process restart, stale running
 tasks are changed to retryable failure and can be resumed within their retry
 limit. Never delete the database to hide a failed task.
 
+When a live source does not contain enough official rule information, mission
+creation returns an inspectable `BLOCKED` status with `quality_blockers` rather
+than a traceback. Add or refresh from a richer official rules source; do not
+override the gate with community claims.
+
 ## Submission safety
 
 Galahad may prepare artifacts automatically. Publishing or submitting remains

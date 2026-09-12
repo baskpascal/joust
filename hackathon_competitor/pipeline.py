@@ -213,8 +213,12 @@ def run_vertical_slice(
     mission = orchestrator.transition_state(mission, MissionState.RULES_LOCK)
     gate = rules_gate(spec)
     if not gate.passed:
-        orchestrator.transition_state(mission, MissionState.BLOCKED)
-        raise RuntimeError(f"rules quality gate failed: {gate.blocking_findings}")
+        orchestrator.database.append_event(
+            mission.id,
+            "QUALITY_GATE_FAILED",
+            {"gate": gate.name, "findings": gate.blocking_findings},
+        )
+        return orchestrator.transition_state(mission, MissionState.BLOCKED)
     mission = orchestrator.transition_state(mission, MissionState.LANDSCAPE_ANALYSIS)
     for contradiction in contradictions:
         orchestrator.database.append_event(
@@ -379,7 +383,13 @@ def run_vertical_slice(
 
 
 def mission_status(orchestrator: MissionOrchestrator, mission: Mission) -> dict:
-    orchestrator.tasks.refresh_ready(mission.id)
+    if mission.state not in {
+        MissionState.PAUSED,
+        MissionState.BLOCKED,
+        MissionState.FAILED,
+        MissionState.CANCELLED,
+    }:
+        orchestrator.tasks.refresh_ready(mission.id)
     tasks = orchestrator.database.list_tasks(mission.id)
     evidence = orchestrator.database.list_evidence(mission.id)
     artifacts = orchestrator.database.list_artifacts(mission.id)
@@ -387,6 +397,11 @@ def mission_status(orchestrator: MissionOrchestrator, mission: Mission) -> dict:
     decisions = orchestrator.database.list_decisions(mission.id)
     failed = [task for task in tasks if task.status.value.startswith("FAILED")]
     ready = [task for task in tasks if task.status.value == "READY"]
+    gate_failures = [
+        event["payload"]
+        for event in orchestrator.database.events(mission.id)
+        if event["event_type"] == "QUALITY_GATE_FAILED"
+    ]
     metric_totals: dict[str, float] = {}
     for metric in orchestrator.database.metrics(mission.id):
         name = str(metric["metric"])
@@ -409,6 +424,7 @@ def mission_status(orchestrator: MissionOrchestrator, mission: Mission) -> dict:
         "tokens": int(metric_totals.get("tokens", 0)),
         "tool_calls": int(metric_totals.get("tool_calls", 0)),
         "last_error": failed[-1].error if failed else None,
+        "quality_blockers": gate_failures[-1]["findings"] if gate_failures else [],
         "next_ready_tasks": [task.type for task in ready],
     }
 

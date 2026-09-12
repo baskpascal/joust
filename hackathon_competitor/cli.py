@@ -41,6 +41,13 @@ def runtime(home: Path | None = None) -> MissionOrchestrator:
     )
 
 
+def _runtime_marker_present(path: Path) -> bool:
+    try:
+        return path.is_file() and path.stat().st_size > 0
+    except OSError:
+        return False
+
+
 def doctor(home: Path | None = None) -> tuple[dict[str, dict[str, object]], bool]:
     root = (home or default_home()).resolve()
     checks: dict[str, dict[str, object]] = {}
@@ -84,9 +91,14 @@ def doctor(home: Path | None = None) -> tuple[dict[str, dict[str, object]], bool
         for name in expected_skills
     }
     checks["skills"] = {"ok": all(installed.values()), "installed": installed}
+    plow_tools_available = (
+        bool(os.environ.get("PLOW_MCP_URL"))
+        or shutil.which("plow-gog") is not None
+        or _runtime_marker_present(Path("/run/s6/container_environment/PLOW_MCP_URL"))
+    )
     checks["plow_tools"] = {
-        "ok": bool(os.environ.get("PLOW_MCP_URL")) or shutil.which("plow-gog") is not None,
-        "available": bool(os.environ.get("PLOW_MCP_URL")) or shutil.which("plow-gog") is not None,
+        "ok": plow_tools_available,
+        "available": plow_tools_available,
     }
     checks["agent_id"] = {
         "ok": bool(os.environ.get("AGENT_ID")),
@@ -100,8 +112,9 @@ def doctor(home: Path | None = None) -> tuple[dict[str, dict[str, object]], bool
     client = Path("/opt/plow/agent-index-client.py")
     if client.is_file():
         smoke_environment = os.environ.copy()
-        smoke_environment["HOME"] = str(root)
-        smoke_environment["HERMES_HOME"] = str(root)
+        hermes_home = Path(os.environ.get("HERMES_HOME") or root).resolve()
+        smoke_environment["HOME"] = str(hermes_home)
+        smoke_environment["HERMES_HOME"] = str(hermes_home)
         try:
             result = subprocess.run(
                 [sys.executable, str(client), "status"],

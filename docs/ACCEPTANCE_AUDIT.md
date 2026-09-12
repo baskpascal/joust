@@ -25,9 +25,10 @@ runtime evidence nor client registration proves a public Verified listing.
 | Chosen `AGENT_ID` wiring | Explicit compose env, reporter, and doctor check | PASS (local) |
 | Verified listing | Organizer eligibility surface, expected to open 2026-09-14 | EXTERNAL / NOT YET AVAILABLE |
 | Real-user activation trial | Fresh-session reply identified as Galahad and reached delivery state `delivered` | PASS (live owner trial) |
+| Real official-source intake | Public Agent Index URL produced six evidence records and a persisted, explicit quality blocker instead of inventing missing prohibitions | PASS (safe partial-source behavior) |
 | External action safety | `ExternalActionService` requires explicit approval and idempotency | PASS (local gate) |
 | Explicit postmortem and reusable lessons | `record_postmortem`, `POSTMORTEM.md`, `competition_memory` | PASS (local) |
-| Unit/integration/E2E/secret/license quality | 68 tests, Ruff, `uv lock --check`, diff check, MIT license | PASS |
+| Unit/integration/E2E/secret/license quality | 71 tests, Ruff, `uv lock --check`, diff check, MIT license | PASS |
 
 ## External handoff
 
