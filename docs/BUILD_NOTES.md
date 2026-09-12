@@ -125,3 +125,11 @@ The final rebuilt-image `doctor` returned healthy with migration v4, all six
 skills, Plow tools available, the stable agent id present, Agent Index status
 `registered`, and the credential present at mode `0600`. The supervised report
 again returned HTTP 200 for 119,363 tokens across two rows.
+
+A public source bundle builder now archives only committed content, applies the
+repository's export exclusions, and validates install markers, required files,
+MIT licensing, forbidden secret/state paths, and Linux control-file line
+endings. A clean extracted ZIP installed the Python package, exposed the CLI,
+and built the complete Docker image successfully. The builder explicitly
+disables host `core.autocrlf` conversion after the first Windows smoke revealed
+that carriage returns would corrupt the pinned client path.

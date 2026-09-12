@@ -19,6 +19,7 @@ runtime evidence nor client registration proves a public Verified listing.
 | Independent evaluators and meta-judge | six strategy roles, five implementation roles plus test-gap reviewer, stored evaluations | PASS |
 | Red team and improvement tasks | V0 completion path and evaluation capability | PASS |
 | Submission pack and blocker gate | compliance report, install validation, final checklist | PASS (local) |
+| Public distribution bundle | Committed-tree ZIP passed secret/path checks, clean Python install, CLI smoke, and Docker build | PASS (local artifact) |
 | Agent Index client pinned and integrity checked | `vendor/client.pin`, Docker build checksum step | PASS |
 | Agent Index reporter supervised | Live status registered; supervised usage report returned HTTP 200 for two rows | PASS (live runtime) |
 | Public Agent Index entry | Rendered `/agent-index/galahad-hackathon` page showed Galahad, one active user, and 119K tokens | PASS (public community listing) |

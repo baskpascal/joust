@@ -14,6 +14,7 @@ owner's explicit confirmation.
 - Usage reporting: live
 - Verified: unavailable until 2026-09-14
 - Public repository URL: pending
+- Validated local source bundle: `dist/galahad-public.zip`
 - One-click install URL: pending Plow-team setup
 - Demo media: pending
 
