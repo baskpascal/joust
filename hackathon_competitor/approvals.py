@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from uuid import UUID
 
 from .models import Approval, ApprovalLevel, ApprovalStatus, utcnow
@@ -8,6 +9,52 @@ from .storage import Database
 
 class ApprovalRequired(PermissionError):
     pass
+
+
+class ExternalActionService:
+    """Single gate for publish, message, deploy, and final submission adapters."""
+
+    def __init__(self, database: Database):
+        self.database = database
+        self.approvals = ApprovalService(database)
+
+    def request(self, mission_id: UUID, action: str, level: ApprovalLevel) -> Approval:
+        if level == ApprovalLevel.AUTO:
+            raise ApprovalRequired("external actions cannot use AUTO approval")
+        return self.approvals.request(mission_id, action, level)
+
+    def execute(
+        self,
+        approval_id: UUID,
+        *,
+        idempotency_key: str,
+        action: Callable[[], str],
+    ) -> str:
+        if not idempotency_key.strip():
+            raise ValueError("external action requires an idempotency key")
+        approval = self.approvals.require_granted(approval_id)
+        prior = [
+            event
+            for event in self.database.events(approval.mission_id)
+            if event["event_type"] == "EXTERNAL_ACTION"
+            and event["payload"].get("idempotency_key") == idempotency_key
+        ]
+        if prior:
+            if any(event["payload"].get("action") != approval.action for event in prior):
+                raise ApprovalRequired("idempotency key is already bound to another action")
+            return str(prior[-1]["payload"].get("result", ""))
+        result = action()
+        self.database.append_event(
+            approval.mission_id,
+            "EXTERNAL_ACTION",
+            {
+                "approval_id": str(approval.id),
+                "action": approval.action,
+                "idempotency_key": idempotency_key,
+                "result": result,
+            },
+        )
+        return result
 
 
 class ApprovalService:

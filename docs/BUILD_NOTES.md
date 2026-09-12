@@ -27,7 +27,7 @@
 Verification:
 
 - `quick_validate.py` — all six skills valid.
-- `pytest -q tests/` — 61 passed (including five deadline parameter cases).
+- `pytest -q tests/` — 64 passed (including five deadline parameter cases).
 - `ruff check hackathon_competitor tests` — passed.
 - `git diff --check` — passed (Windows line-ending notices only).
 - `docker compose config --quiet` with `AGENT_ID=galahad` — passed.

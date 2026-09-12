@@ -22,7 +22,8 @@ of the owner's live registration or Agent Index listing.
 | Agent Index reporter supervised | `image/s6-overlay/s6-rc.d/agent-index` and image doctor | PASS (not registered in smoke) |
 | Real `AGENT_ID` and Verified listing | Owner registration / organizer surface | EXTERNAL / UNVERIFIED |
 | Real-user activation trial | Mission task `real_user_activation_trial` waits for approval | PENDING HUMAN |
-| Unit/integration/E2E/secret/license quality | 57 tests, Ruff, `uv lock --check`, diff check, MIT license | PASS |
+| External action safety | `ExternalActionService` requires explicit approval and idempotency | PASS (local gate) |
+| Unit/integration/E2E/secret/license quality | 64 tests, Ruff, `uv lock --check`, diff check, MIT license | PASS |
 
 ## External handoff
 
