@@ -146,3 +146,8 @@ push and clean clone, but also found that a normal Windows clone with global
 Docker build. Repository attributes now force LF for the Dockerfile, pin files,
 shell scripts, and every `s6` control file; the image contract test prevents
 that cross-platform install regression.
+
+The publication rehearsal was repeated from a fresh bare remote with
+`core.autocrlf=true`: `HEAD` cloned as default branch `main`, the pin contained
+zero carriage returns, and the Docker image built successfully from that clean
+clone.
