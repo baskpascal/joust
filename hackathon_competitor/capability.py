@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -45,6 +46,22 @@ class FunctionCapability:
         if not self.can_handle(task):
             raise ValueError(f"{self.name} cannot handle task capability {task.capability}")
         return await self._handler(task, ctx)
+
+
+def service_capability(name: str) -> FunctionCapability:
+    async def invoke(task: Task, ctx: MissionContext) -> CapabilityResult:
+        handlers = ctx.services.get("capability_handlers", {})
+        handler = handlers.get(name)
+        if not callable(handler):
+            raise LookupError(f"no handler is configured for capability: {name}")
+        result = handler(task, ctx)
+        if inspect.isawaitable(result):
+            result = await result
+        if not isinstance(result, CapabilityResult):
+            raise TypeError(f"capability {name} returned a non-structured result")
+        return result
+
+    return FunctionCapability(name, invoke)
 
 
 class CapabilityRegistry:

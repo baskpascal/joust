@@ -470,10 +470,16 @@ class Database:
             "evaluations": [
                 item.model_dump(mode="json") for item in self.list_evaluations(mission.id)
             ],
+            "ideas": [item.model_dump(mode="json") for item in self.list_ideas(mission.id)],
             "experiments": [
                 item.model_dump(mode="json") for item in self.list_experiments(mission.id)
             ],
             "approvals": [item.model_dump(mode="json") for item in self.list_approvals(mission.id)],
+            "competition_memory": [
+                item.model_dump(mode="json")
+                for item in self.list_competition_memory()
+                if item.mission_id == mission.id
+            ],
             "telemetry": self.metrics(mission.id),
             "events": self.events(mission.id),
         }

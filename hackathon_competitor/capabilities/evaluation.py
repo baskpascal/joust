@@ -34,7 +34,31 @@ def implementation_panel(
                 confidence=0.85,
             )
         )
+    results.append(evaluate_test_gaps(mission_id, target_artifact_id, validation))
     return results
+
+
+def evaluate_test_gaps(mission_id: UUID, target_artifact_id: UUID, validation: str) -> Evaluation:
+    """Check that the executable evidence covers the demo's declared fields."""
+
+    expected = ("Mission:", "State:", "Evidence:", "Selected strategy:")
+    missing = [marker for marker in expected if marker not in validation]
+    passed = not missing and "exit_code=0" in validation
+    return Evaluation(
+        mission_id=mission_id,
+        target_artifact_ids=[target_artifact_id],
+        evaluator_role="test_gap_reviewer",
+        rubric={"coverage": 1.0, "failure_risk": 1.0},
+        scores={"coverage": 1.0 if passed else 0.2, "failure_risk": 1.0 if passed else 0.2},
+        findings=[
+            "Declared demo status fields are covered by executable validation."
+            if passed
+            else f"Validation is missing fields: {missing}"
+        ],
+        blocking_findings=[] if passed else ["demo validation has an acceptance gap"],
+        recommendations=["Add an executable assertion for every submission claim."],
+        confidence=0.9,
+    )
 
 
 def improvement_tasks(mission_id: UUID, dependency: UUID) -> list[Task]:
