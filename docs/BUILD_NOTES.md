@@ -6,6 +6,8 @@
   `plow-pbc/plow-hermes-agent` commit
   `8710797b6409c77df560c6198407765d138ea617`, and the current official
   downstream variant/Agent Index pattern.
+- Preserved the attached SDD verbatim in `docs/SDD.md`; both files verify to
+  SHA-256 `572c39001c2dffb67abf1f78fa3b085084b2647d6202f2dee17aff060170d203`.
 - Converted the workspace from a temporary base clone into a downstream
   Galahad variant; generic Plow/Hermes runtime files were removed because they
   are upstream-owned.

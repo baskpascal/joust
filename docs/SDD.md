@@ -2927,4 +2927,3 @@ And when useful additional reasoning can materially improve the result, it shoul
 **North star:**
 
 > **Give it a hackathon. It tries to win it.**
-
