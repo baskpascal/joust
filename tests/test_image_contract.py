@@ -18,6 +18,13 @@ def test_variant_uses_immutable_official_base_and_does_not_vendor_runtime():
     assert "find /opt/galahad -type d -exec chmod 0755" in dockerfile
 
 
+def test_linux_control_files_stay_lf_in_windows_clones():
+    attributes = (ROOT / ".gitattributes").read_text()
+    assert "Dockerfile text eol=lf" in attributes
+    assert "vendor/*.pin text eol=lf" in attributes
+    assert "image/s6-overlay/** text eol=lf" in attributes
+
+
 def test_variant_persona_owns_the_public_agent_identity():
     persona = (ROOT / "runtime/persona.md").read_text()
     assert "Your public name is Galahad" in persona

@@ -139,3 +139,10 @@ bundle work. The route itself responded, but authenticated `initialize` still
 returned HTTP 503, confirming that the remaining Latch gap is upstream/device
 availability rather than Galahad credentials or HTTP routing. Plow Chat and
 Agent Index reporting remain healthy.
+
+A local bare-remote publication rehearsal proved the intended `HEAD -> main`
+push and clean clone, but also found that a normal Windows clone with global
+`core.autocrlf=true` converted `vendor/client.pin` back to CRLF and broke the
+Docker build. Repository attributes now force LF for the Dockerfile, pin files,
+shell scripts, and every `s6` control file; the image contract test prevents
+that cross-platform install regression.

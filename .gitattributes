@@ -1,1 +1,6 @@
 .knightwatch export-ignore
+.gitattributes text eol=lf
+Dockerfile text eol=lf
+vendor/*.pin text eol=lf
+image/s6-overlay/** text eol=lf
+*.sh text eol=lf
