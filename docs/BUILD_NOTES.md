@@ -44,10 +44,11 @@ Verification:
 - Real container E2E — mission created in one container and resumed in a second:
   `READY_FOR_SUBMISSION`, 12/14 tasks succeeded, 26 artifacts, 25 evaluations,
   five recorded source tool calls, and the rehearsal task ready. The other
-  outstanding task is a human-approval user trial; no external action occurred.
+  outstanding mission task is a human-approval user trial; no external action
+  occurred during that deterministic fixture run.
 - Docker image build — passed from the immutable official base. The current
   Compose image manifest list is
-  `sha256:925a0c029e6d439027457da05c416a29e7f6d40c1073e92584a29797b0eeb7ce`.
+  `sha256:7064661b46973a31f5e71a9bf5e3a8ea9e7e66c839b10a9db2d00b8c690fbb19`.
 - Container `doctor` — healthy with migration v4, Git, all six skills, Plow
   discovery, explicit test `AGENT_ID`, service wiring, Agent Index client
   smoke (`not_registered` is safely visible), and no embedded credentials.
@@ -64,5 +65,16 @@ platforms, and the pinned Agent Index client registered the chosen
 baseline; the Hermes store was created during gateway startup, so the first
 early reporter pass was retried after the store became available. The optional
 `agentsview` collector is not installed; the Hermes collector is the source of
-truth for this image. Verified eligibility, a real-user activation trial, and
-final submission remain human/external gates.
+truth for this image.
+
+The owner then sent a live Plow Chat message. Hermes completed the turn in 5.8
+seconds, persisted the session and response, and the delivery obligation
+reached `delivered`. The next supervised Agent Index report submitted 25,710
+tokens across two rows and received HTTP 200. This trial exposed a branding
+defect: the first response used the line's legacy `Willow` label. The public
+Plow profile is now `Galahad`, and the variant persona explicitly treats legacy
+line labels as transport metadata; the image was rebuilt and restarted with
+that correction. A branded-response retest, Verified eligibility, and final
+submission remain human/external gates. The separate Plow Latch MCP endpoint
+was returning HTTP 503 during this run, while Plow Chat and email remained
+connected.

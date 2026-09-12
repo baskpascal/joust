@@ -9,7 +9,7 @@ runtime evidence nor client registration proves a public Verified listing.
 |---|---|---|
 | Immutable Plow variant builds | `Dockerfile`, final image digest in `BUILD_NOTES.md` | PASS |
 | Runtime `/init` starts safely | s6 boot smoke with synthetic identity relay | PASS (contract) |
-| Live Hermes/Plow interaction | Authenticated compose boot; Plow Chat and email connected | PASS (runtime; user trial pending) |
+| Live Hermes/Plow interaction | Owner message produced a persisted 219-character reply; delivery state reached `delivered` | PASS (live runtime) |
 | No embedded credentials | `.gitignore`, `.dockerignore`, image/source secret scan | PASS |
 | URL mission and restart | `tests/test_vertical_slice.py`, two-instance container E2E | PASS |
 | DAG, retries, crash recovery | `tests/test_task_engine.py` | PASS |
@@ -20,19 +20,19 @@ runtime evidence nor client registration proves a public Verified listing.
 | Red team and improvement tasks | V0 completion path and evaluation capability | PASS |
 | Submission pack and blocker gate | compliance report, install validation, final checklist | PASS (local) |
 | Agent Index client pinned and integrity checked | `vendor/client.pin`, Docker build checksum step | PASS |
-| Agent Index reporter supervised | `image/s6-overlay/s6-rc.d/agent-index`; live status registered and first baseline reported | PASS (live runtime) |
+| Agent Index reporter supervised | Live status registered; supervised usage report returned HTTP 200 for two rows | PASS (live runtime) |
 | Chosen `AGENT_ID` wiring | Explicit compose env, reporter, and doctor check | PASS (local) |
 | Verified listing | Organizer eligibility surface, expected to open 2026-09-14 | EXTERNAL / NOT YET AVAILABLE |
-| Real-user activation trial | Mission task `real_user_activation_trial` waits for approval | PENDING HUMAN |
+| Real-user activation trial | Live transport and delivery passed; persona-name defect fixed after first response | PARTIAL (branded reply retest pending) |
 | External action safety | `ExternalActionService` requires explicit approval and idempotency | PASS (local gate) |
 | Explicit postmortem and reusable lessons | `record_postmortem`, `POSTMORTEM.md`, `competition_memory` | PASS (local) |
-| Unit/integration/E2E/secret/license quality | 67 tests, Ruff, `uv lock --check`, diff check, MIT license | PASS |
+| Unit/integration/E2E/secret/license quality | 68 tests, Ruff, `uv lock --check`, diff check, MIT license | PASS |
 
 ## External handoff
 
 The line-scoped `plow-credentials` has been generated with `plow-agents`, a
 stable `AGENT_ID` has been selected, and the live compose runtime is up. Run the
-live-source rehearsal and user activation trial next. After the Verified
+branded-response retest and live-source rehearsal next. After the Verified
 program opens, request that status on the Agent Index entry.
 Galahad still will not
 accept legal terms, publish, or submit without explicit confirmation immediately

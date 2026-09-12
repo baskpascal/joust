@@ -16,6 +16,12 @@ def test_variant_uses_immutable_official_base_and_does_not_vendor_runtime():
     assert (ROOT / "runtime/persona.md").is_file()
 
 
+def test_variant_persona_owns_the_public_agent_identity():
+    persona = (ROOT / "runtime/persona.md").read_text()
+    assert "Your public name is Galahad" in persona
+    assert "Never introduce yourself by that label" in persona
+
+
 def test_agent_index_client_and_supervision_are_pinned_and_wired():
     pin = (ROOT / "vendor/client.pin").read_text()
     dockerfile = (ROOT / "Dockerfile").read_text()
