@@ -21,6 +21,7 @@ runtime evidence nor client registration proves a public Verified listing.
 | Submission pack and blocker gate | compliance report, install validation, final checklist | PASS (local) |
 | Agent Index client pinned and integrity checked | `vendor/client.pin`, Docker build checksum step | PASS |
 | Agent Index reporter supervised | Live status registered; supervised usage report returned HTTP 200 for two rows | PASS (live runtime) |
+| Public Agent Index entry | Rendered `/agent-index/galahad-hackathon` page showed Galahad, one active user, and 119K tokens | PASS (public community listing) |
 | Chosen `AGENT_ID` wiring | Explicit compose env, reporter, and doctor check | PASS (local) |
 | Verified listing | Organizer eligibility surface, expected to open 2026-09-14 | EXTERNAL / NOT YET AVAILABLE |
 | Real-user activation trial | Fresh-session reply identified as Galahad and reached delivery state `delivered` | PASS (live owner trial) |
@@ -31,9 +32,9 @@ runtime evidence nor client registration proves a public Verified listing.
 ## External handoff
 
 The line-scoped `plow-credentials` has been generated with `plow-agents`, a
-stable `AGENT_ID` has been selected, and the live compose runtime is up. Run the
-branded-response retest and live-source rehearsal next. After the Verified
-program opens, request that status on the Agent Index entry.
+stable `AGENT_ID` has been selected, the live compose runtime is up, the branded
+response retest passed, and the public community entry is reporting usage.
+After the Verified program opens, request that status on the Agent Index entry.
 Galahad still will not
 accept legal terms, publish, or submit without explicit confirmation immediately
 before that irreversible action.

@@ -90,3 +90,10 @@ root-owned home to `0700`. The image now exports `HERMES_HOME_MODE=3770`, matchi
 the upstream `plow-init` shared-home contract, and the image contract test pins
 that requirement against regression. Verified eligibility and final submission
 remain external gates.
+
+The public Agent Index metadata was then completed for `galahad-hackathon`.
+The rendered community page at
+`https://aiworthusing.com/agent-index/galahad-hackathon` showed Galahad, its
+Hermes / Plow runtime, one active user, and 119K tokens. A fresh supervised
+report submitted the exact current total of 119,363 tokens across two rows and
+received HTTP 200. Verification is still unavailable until 2026-09-14.
