@@ -33,6 +33,13 @@ Use `HACKATHON_COMPETITOR_HOME` to override the default local state directory.
 
 ## Run on Plow
 
+Requirements: Git, Docker, and Docker Compose v2. After cloning the repository,
+an optional standalone image build is:
+
+```bash
+docker build -t galahad-agent .
+```
+
 1. Generate a line-scoped credential locally with the official helper:
 
    ```bash
@@ -50,10 +57,16 @@ Use `HACKATHON_COMPETITOR_HOME` to override the default local state directory.
    `AGENT_ID` to it. This is an operator-chosen identifier, not a value that
    Plow supplies; keep it unchanged across restarts and registration.
 3. When the Verified program opens (September 14, 2026 per the organizer
-   update), request Verified for that Agent Index entry, then run:
+   update), request Verified for that Agent Index entry. Start with Docker
+   Compose using the command for your shell:
 
    ```bash
    AGENT_ID=galahad-hackathon docker compose up --build -d
+   ```
+
+   ```powershell
+   $env:AGENT_ID = "galahad-hackathon"
+   docker compose up --build -d
    ```
 
    `.env.example` contains the same non-secret default if you prefer to copy
@@ -69,3 +82,15 @@ mission content, and file paths are not sent by Galahad's reporting service.
 
 See [docs/SDD.md](docs/SDD.md), [docs/DECISIONS.md](docs/DECISIONS.md), and
 [docs/RUNBOOK.md](docs/RUNBOOK.md).
+
+## Public source bundle
+
+Create a reproducible ZIP from committed files only:
+
+```bash
+python -m hackathon_competitor.cli bundle --output dist/galahad-public.zip
+```
+
+The command validates required install files, MIT licensing, README markers,
+and the absence of credentials, databases, bytecode, and internal review
+metadata before returning the archive SHA-256.

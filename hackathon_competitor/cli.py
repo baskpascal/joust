@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 from uuid import UUID
 
+from .distribution import build_public_bundle
 from .exporter import export_mission_bundle
 from .models import MissionState
 from .orchestrator import MissionOrchestrator
@@ -177,6 +178,8 @@ def build_parser() -> argparse.ArgumentParser:
     db_commands = db.add_subparsers(dest="db_command", required=True)
     db_commands.add_parser("migrate")
     commands.add_parser("doctor")
+    bundle = commands.add_parser("bundle")
+    bundle.add_argument("--output", type=Path, default=Path("dist/galahad-public.zip"))
     return parser
 
 
@@ -187,6 +190,9 @@ def main(argv: list[str] | None = None) -> int:
         checks, healthy = doctor(home)
         print(json.dumps({"healthy": healthy, "checks": checks}, indent=2))
         return 0 if healthy else 1
+    if args.command == "bundle":
+        print(json.dumps(build_public_bundle(Path.cwd(), args.output), indent=2))
+        return 0
     app = runtime(home)
     if args.command == "db":
         print(json.dumps({"migration_version": app.database.migration_version()}))
