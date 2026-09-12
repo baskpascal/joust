@@ -1,8 +1,9 @@
 # V0 acceptance audit
 
 This audit distinguishes repository evidence from external conditions. A
-synthetic Plow relay is used only for a boot contract test; it is not evidence
-of the owner's live registration or Agent Index listing.
+synthetic Plow relay is used only for the boot contract test; the live
+owner-authenticated compose evidence is recorded separately below. Neither
+runtime evidence nor client registration proves a public Verified listing.
 
 | SDD criterion | Evidence | Result |
 |---|---|---|
