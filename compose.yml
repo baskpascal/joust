@@ -2,7 +2,7 @@ services:
   agent:
     build: .
     environment:
-      AGENT_ID: ${AGENT_ID:?Set AGENT_ID to the verified Agent Index id}
+      AGENT_ID: ${AGENT_ID:?Set AGENT_ID to your stable Agent Index id}
     volumes:
       - ./plow-credentials:/var/lib/plow/credentials.host:ro
       - agent-home:/var/lib/hermes

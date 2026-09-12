@@ -7,8 +7,12 @@ tests, and `doctor`. The fixture E2E is offline and makes no external writes.
 
 ## Plow deployment
 
-Mint `plow-credentials` with `plow-agents`, set the verified `AGENT_ID`, build,
-and start with Docker Compose. Never place credentials in the image or Git.
+Generate `plow-credentials` locally with `plow-agents login`, send the printed
+activation phrase by SMS/iMessage, list lines, and mint a free line. Choose a
+stable `AGENT_ID` yourself (for example, `galahad-hackathon`); Plow does not
+assign it. Build and start with Docker Compose, keeping the credential file
+out of the image and Git. Verified status is a separate eligibility request
+that becomes available on the organizer's stated September 14 opening date.
 
 ## Recovery
 

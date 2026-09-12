@@ -50,7 +50,8 @@ repair, demo, and submission artifacts in one restart-safe mission.
 ## Install and run
 
 Build the Plow variant with `docker build .`, supply a line-scoped
-`plow-credentials` file and verified `AGENT_ID`, then use Docker Compose.
+`plow-credentials` file and your chosen stable `AGENT_ID`, then use Docker Compose.
+Request Verified separately when that program is available.
 
 ## Evidence
 

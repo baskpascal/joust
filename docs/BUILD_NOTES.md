@@ -19,6 +19,10 @@
   retry/crash recovery, provider-neutral LLM protocol, CLI, and doctor command.
 - Added auditable task-failure/cancellation metrics and an explicit postmortem
   record that persists outcome, artifact, and reusable cross-mission lessons.
+- Completed the SDD capability surface at 48 names, including screenshot,
+  video-script, and final-checklist submission capabilities. Clarified that
+  `AGENT_ID` is operator-chosen, while Verified status is a separate program
+  step expected to open on 2026-09-14.
 - Implemented the fixture-backed path from URL through locked and independently
   cross-checked rules, evidence, contradiction handling, 20 ideas in five
   clusters, six evaluator roles plus meta-judge, selected strategy,
@@ -42,7 +46,7 @@ Verification:
   five recorded source tool calls, and the rehearsal task ready. The other
   outstanding task is a human-approval user trial; no external action occurred.
 - Docker image build — passed from the immutable official base. Final manifest
-  list: `sha256:75c28bf14a66f4f252e6fea29265f1980803f0ee61ada45b6522879e9836a6ad`.
+  list: `sha256:c10585acc35ca7edeee9df4e5e5271acf92ba4c42ecabce7675af775ac98ddaf`.
 - Container `doctor` — healthy with migration v4, Git, all six skills, Plow
   discovery, explicit test `AGENT_ID`, service wiring, Agent Index client
   smoke (`not_registered` is safely visible), and no embedded credentials.
@@ -50,6 +54,7 @@ Verification:
   `/init` promoted credentials and started `plow-init`, `main-hermes`,
   `hermes-gateway`, and `agent-index` under `s6`; no owner credential was used.
 
-Authenticated Hermes/Plow startup was not attempted because the owner's real
-line-scoped credential file and registered Agent Index id were not supplied.
-Final submission and organizer verification also remain human/external gates.
+Authenticated Hermes/Plow startup is prepared through the official
+`plow-agents login` flow, but remains pending the owner's SMS/iMessage
+activation. The local credential and operator-chosen `AGENT_ID` must stay out
+of Git. Verified eligibility and final submission remain human/external gates.

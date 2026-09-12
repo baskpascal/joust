@@ -20,7 +20,8 @@ of the owner's live registration or Agent Index listing.
 | Submission pack and blocker gate | compliance report, install validation, final checklist | PASS (local) |
 | Agent Index client pinned and integrity checked | `vendor/client.pin`, Docker build checksum step | PASS |
 | Agent Index reporter supervised | `image/s6-overlay/s6-rc.d/agent-index` and image doctor | PASS (not registered in smoke) |
-| Real `AGENT_ID` and Verified listing | Owner registration / organizer surface | EXTERNAL / UNVERIFIED |
+| Chosen `AGENT_ID` wiring | Explicit compose env, reporter, and doctor check | PASS (local) |
+| Verified listing | Organizer eligibility surface, expected to open 2026-09-14 | EXTERNAL / NOT YET AVAILABLE |
 | Real-user activation trial | Mission task `real_user_activation_trial` waits for approval | PENDING HUMAN |
 | External action safety | `ExternalActionService` requires explicit approval and idempotency | PASS (local gate) |
 | Explicit postmortem and reusable lessons | `record_postmortem`, `POSTMORTEM.md`, `competition_memory` | PASS (local) |
@@ -28,7 +29,9 @@ of the owner's live registration or Agent Index listing.
 
 ## External handoff
 
-Supply the real line-scoped `plow-credentials` and registered `AGENT_ID`, then
-run the live-source rehearsal and user activation trial. Galahad still will not
+Generate the line-scoped `plow-credentials` with `plow-agents`, choose a stable
+`AGENT_ID`, then run the live-source rehearsal and user activation trial. After
+the Verified program opens, request that status on the Agent Index entry.
+Galahad still will not
 accept legal terms, publish, or submit without explicit confirmation immediately
 before that irreversible action.

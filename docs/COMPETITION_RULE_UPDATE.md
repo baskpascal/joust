@@ -12,6 +12,8 @@ official Agent Index/event surface before any eligibility or submission gate.
 - Rank 2: Mac Mini.
 - Top three: candidates for the AI Worth Using podcast with Tom Preston-Werner.
 - The agent must appear in the Verified section.
+- Verified eligibility is expected to open on September 14, 2026; it is not
+  actionable on the September 12 build date.
 - Every entry must use the Agent Index client.
 - Plow Latch and the Hermes Plow Chat plugin are encouraged integrations.
 

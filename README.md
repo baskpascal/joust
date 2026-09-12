@@ -33,9 +33,28 @@ Use `HACKATHON_COMPETITOR_HOME` to override the default local state directory.
 
 ## Run on Plow
 
-1. Install `plow-agents` and mint a line-scoped `plow-credentials` file.
-2. Set `AGENT_ID` to the agent's registered Agent Index id. Never guess it.
-3. Run `docker compose up --build -d`.
+1. Generate a line-scoped credential locally with the official helper:
+
+   ```bash
+   git clone https://github.com/plow-pbc/plow-agents.git
+   export PATH="$PWD/plow-agents/bin:$PATH"
+   plow-agents login
+   # Send the printed activation phrase by SMS/iMessage, then:
+   plow-agents lines
+   plow-agents mint <free-line-id>
+   ```
+
+   `mint` writes `./plow-credentials`. Keep that file local; it contains the
+   Plow API token and is excluded from Git and Docker build context.
+2. Choose a stable Agent Index id, for example `galahad-hackathon`, and set
+   `AGENT_ID` to it. This is an operator-chosen identifier, not a value that
+   Plow supplies; keep it unchanged across restarts and registration.
+3. When the Verified program opens (September 14, 2026 per the organizer
+   update), request Verified for that Agent Index entry, then run:
+
+   ```bash
+   AGENT_ID=galahad-hackathon docker compose up --build -d
+   ```
 
 Final contest submission, legal attestations, public pushes, and production
 deployments are never performed by the local mission pipeline. They remain
