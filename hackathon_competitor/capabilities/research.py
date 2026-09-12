@@ -52,7 +52,7 @@ class SourceFetcher:
         parsed = urlparse(uri)
         if parsed.scheme in {"http", "https"}:
             request = Request(uri, headers={"User-Agent": "Galahad/0.1 (+safe-research)"})
-            with urlopen(request, timeout=timeout) as response:  # noqa: S310 - scheme allowlisted
+            with urlopen(request, timeout=timeout) as response:
                 content_length = int(response.headers.get("Content-Length", "0") or 0)
                 if content_length > MAX_SOURCE_BYTES:
                     raise SourceTooLarge(f"source exceeds {MAX_SOURCE_BYTES} bytes")

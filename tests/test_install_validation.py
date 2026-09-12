@@ -4,7 +4,6 @@ import pytest
 
 from hackathon_competitor.install_validation import validate_install_run_documentation
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 

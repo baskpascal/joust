@@ -4,7 +4,6 @@ import json
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-
 IDENTITY = {
     "line": {"uid": "line-runtime-smoke"},
     "chats": [
@@ -32,7 +31,7 @@ IDENTITY = {
 
 
 class Handler(BaseHTTPRequestHandler):
-    def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+    def do_GET(self) -> None:
         if self.path == "/v1/agents/cloud/me":
             body = json.dumps(IDENTITY).encode()
             self.send_response(200)
@@ -43,7 +42,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.send_error(404)
 
-    def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+    def do_POST(self) -> None:
         self.send_error(404)
 
     def log_message(self, format: str, *args: object) -> None:

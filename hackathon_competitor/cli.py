@@ -17,7 +17,7 @@ from .orchestrator import MissionOrchestrator
 from .pipeline import complete_v0, mission_status, run_vertical_slice
 from .registry import default_registry
 from .rule_updates import refresh_official_rules
-from .storage import Database, MIGRATIONS
+from .storage import MIGRATIONS, Database
 
 
 def default_home() -> Path:
@@ -65,7 +65,7 @@ def doctor(home: Path | None = None) -> tuple[dict[str, dict[str, object]], bool
     try:
         current = database.migrate()
         checks["database"] = {"ok": current == len(MIGRATIONS), "version": current}
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - doctor must report every failed check
         checks["database"] = {"ok": False, "error": str(exc)}
 
     checks["git"] = {"ok": shutil.which("git") is not None}

@@ -7,7 +7,9 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_variant_uses_immutable_official_base_and_does_not_vendor_runtime():
     dockerfile = (ROOT / "Dockerfile").read_text()
     assert re.search(
-        r"^FROM public\.ecr\.aws/.+:base-[0-9a-f]{40}@sha256:[0-9a-f]{64}$", dockerfile, re.M
+        r"^FROM public\.ecr\.aws/.+:base-[0-9a-f]{40}@sha256:[0-9a-f]{64}$",
+        dockerfile,
+        re.MULTILINE,
     )
     assert not (ROOT / "image/s6-overlay/scripts/plow-init.py").exists()
     assert not (ROOT / "image/seed/SOUL.md").exists()
@@ -18,8 +20,8 @@ def test_agent_index_client_and_supervision_are_pinned_and_wired():
     pin = (ROOT / "vendor/client.pin").read_text()
     dockerfile = (ROOT / "Dockerfile").read_text()
     service = ROOT / "image/s6-overlay/s6-rc.d/agent-index"
-    assert re.search(r"^sha=[0-9a-f]{40}$", pin, re.M)
-    assert re.search(r"^sha256=[0-9a-f]{64}$", pin, re.M)
+    assert re.search(r"^sha=[0-9a-f]{40}$", pin, re.MULTILINE)
+    assert re.search(r"^sha256=[0-9a-f]{64}$", pin, re.MULTILINE)
     assert "sha256sum" in dockerfile
     assert (service / "type").read_text().strip() == "longrun"
     assert (service / "dependencies.d/plow-init").exists()

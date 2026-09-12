@@ -1,5 +1,5 @@
 from hackathon_competitor.models import Mission, MissionState
-from hackathon_competitor.storage import Database, MIGRATIONS, transition_mission
+from hackathon_competitor.storage import MIGRATIONS, Database, transition_mission
 
 
 def test_migration_persistence_and_append_only_events(tmp_path):

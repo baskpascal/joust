@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from .capability import CapabilityRegistry, service_capability
 
-
 INITIAL_CAPABILITIES: dict[str, tuple[str, ...]] = {
     "research": (
         "hackathon_discovery",

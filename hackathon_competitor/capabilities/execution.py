@@ -9,7 +9,6 @@ from pathlib import Path
 from ..models import Decision, Mission
 from ..tool_gateway import WorkspaceFileTool
 
-
 DEMO_SOURCE = """from __future__ import annotations
 
 import json

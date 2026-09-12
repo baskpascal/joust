@@ -7,7 +7,6 @@ from hackathon_competitor.orchestrator import MissionOrchestrator
 from hackathon_competitor.pipeline import run_vertical_slice
 from hackathon_competitor.storage import Database
 
-
 FIXTURE = Path(__file__).parent / "fixtures/hackathon/official.html"
 
 

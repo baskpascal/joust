@@ -4,16 +4,18 @@ import hashlib
 import importlib.util
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .artifact_graph import ArtifactGraph
+from .capabilities.evaluation import implementation_panel, improvement_tasks
+from .capabilities.execution import build_demo_project, validate_demo_project
 from .capabilities.planning import (
     render_acceptance_plan,
     render_architecture,
     render_implementation_plan,
-    render_premortem,
     render_prd,
+    render_premortem,
     render_risk_register,
     render_strategy_review,
     render_win_review,
@@ -24,13 +26,10 @@ from .capabilities.research import (
     discover_sources,
     extract_spec,
 )
-from .capabilities.evaluation import implementation_panel, improvement_tasks
-from .capabilities.execution import build_demo_project, validate_demo_project
-from .capabilities.submission import submission_documents
 from .capabilities.strategy import (
     cluster_ideas,
-    deep_candidate_analysis,
     debate_strategy,
+    deep_candidate_analysis,
     evaluate_top_ideas,
     generate_ideas,
     meta_judge,
@@ -38,6 +37,7 @@ from .capabilities.strategy import (
     screen_ideas,
     select_strategy,
 )
+from .capabilities.submission import submission_documents
 from .compliance import evaluate_compliance, rules_from_spec
 from .install_validation import validate_install_run_documentation
 from .models import (
@@ -469,7 +469,7 @@ def _fixture_compliance_statuses(spec, *, demo_valid: bool) -> dict[str, RuleSta
         elif rule.type == RuleType.DEADLINE:
             statuses[rule.id] = (
                 RuleStatus.PASS
-                if spec.deadline_at and datetime.now(timezone.utc) < spec.deadline_at
+                if spec.deadline_at and datetime.now(UTC) < spec.deadline_at
                 else RuleStatus.UNKNOWN
             )
         else:

@@ -53,7 +53,9 @@ def service_capability(name: str) -> FunctionCapability:
         handlers = ctx.services.get("capability_handlers", {})
         handler = handlers.get(name)
         if not callable(handler):
-            raise LookupError(f"no handler is configured for capability: {name}")
+            raise LookupError(  # noqa: TRY004 - missing handler is a registry lookup failure
+                f"no handler is configured for capability: {name}"
+            )
         result = handler(task, ctx)
         if inspect.isawaitable(result):
             result = await result

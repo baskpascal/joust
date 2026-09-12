@@ -56,7 +56,7 @@ def test_cycle_is_rejected_before_persistence(tmp_path):
 
 
 def test_retry_limit_and_crash_recovery_are_persisted(tmp_path):
-    database, mission, engine = setup_engine(tmp_path)
+    _database, mission, engine = setup_engine(tmp_path)
     task = Task(mission_id=mission.id, type="work", capability="work", max_retries=1)
     engine.add_tasks([task])
     engine.refresh_ready(mission.id)
@@ -70,7 +70,7 @@ def test_retry_limit_and_crash_recovery_are_persisted(tmp_path):
 
 
 def test_duplicate_task_id_is_rejected(tmp_path):
-    database, mission, engine = setup_engine(tmp_path)
+    _database, mission, engine = setup_engine(tmp_path)
     task = Task(mission_id=mission.id, type="work", capability="work")
     engine.add_tasks([task])
     with pytest.raises(DependencyError, match="already exist"):

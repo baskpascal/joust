@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -16,7 +16,7 @@ from hackathon_competitor.deadline import DeadlinePolicy
     ],
 )
 def test_deadline_modes(hours, mode, frozen):
-    now = datetime(2026, 9, 12, tzinfo=timezone.utc)
+    now = datetime(2026, 9, 12, tzinfo=UTC)
     guidance = DeadlinePolicy().assess(now + timedelta(hours=hours), now=now)
     assert guidance.mode == mode
     assert guidance.architecture_frozen is frozen
@@ -24,4 +24,4 @@ def test_deadline_modes(hours, mode, frozen):
 
 def test_deadline_requires_timezone():
     with pytest.raises(ValueError, match="timezone-aware"):
-        DeadlinePolicy().assess(datetime(2026, 9, 12))
+        DeadlinePolicy().assess(datetime(2026, 9, 12))  # noqa: DTZ001 - deliberate naive input

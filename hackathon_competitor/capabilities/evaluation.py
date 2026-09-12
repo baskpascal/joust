@@ -4,7 +4,6 @@ from uuid import UUID
 
 from ..models import Evaluation, Task, TaskStatus
 
-
 IMPLEMENTATION_ROLES = (
     "technical_reviewer",
     "qa_reviewer",

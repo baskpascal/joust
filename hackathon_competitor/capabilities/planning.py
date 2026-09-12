@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from ..models import DebateRecord, Decision, HackathonSpec, Idea, MetaJudgeResult
 
-
 ARCHITECTURE_CRITERIA = (
     "feasibility",
     "implementation_time",

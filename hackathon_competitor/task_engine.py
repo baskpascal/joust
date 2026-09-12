@@ -196,6 +196,9 @@ class TaskEngine:
                         "error": task.error,
                     },
                 )
+                self.database.record_metric(mission_id, "task_failures", 1.0)
+                if task.status == TaskStatus.FAILED_RETRYABLE:
+                    self.database.record_metric(mission_id, "retries", 1.0)
                 recovered.append(task)
         return recovered
 
@@ -215,6 +218,12 @@ class TaskEngine:
                 task.status = TaskStatus.CANCELLED
                 task.finished_at = utcnow()
                 self.database.save_task(task)
+                self.database.append_event(
+                    root.mission_id,
+                    "TASK_CANCELLED",
+                    {"task_id": str(task.id), "root_task_id": str(root.id)},
+                )
+                self.database.record_metric(root.mission_id, "tasks_cancelled", 1.0)
                 cancelled.append(task)
             queue.extend(children[current])
         return cancelled

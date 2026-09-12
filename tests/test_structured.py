@@ -2,16 +2,14 @@ import asyncio
 
 import pytest
 
-from hackathon_competitor.models import MetaJudgeResult
 from hackathon_competitor.llm import TelemetryLLMClient
-from hackathon_competitor.models import Mission
+from hackathon_competitor.models import MetaJudgeResult, Mission
 from hackathon_competitor.storage import Database
 from hackathon_competitor.structured import (
     StructuredLLMRunner,
     StructuredOutputError,
     independent_passes,
 )
-
 
 VALID = {
     "consensus": ["x"],

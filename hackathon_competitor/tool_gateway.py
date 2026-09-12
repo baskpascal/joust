@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, ClassVar, Protocol
 
 
 @dataclass(frozen=True)
@@ -164,7 +164,7 @@ class CodingAgentCommandTool:
 class PlowLatchAdapter:
     """Structured boundary for Plow/Latch-backed browser, shell, and file tools."""
 
-    policies = {
+    policies: ClassVar[dict[str, OperationPolicy]] = {
         "browser.open": OperationPolicy(
             30, True, "read", "URL-addressed navigation", "retry or record unavailable source"
         ),

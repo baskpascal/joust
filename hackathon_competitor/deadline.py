@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from .models import DeadlineGuidance
 
@@ -19,7 +19,7 @@ class DeadlinePolicy:
         self.thresholds = thresholds or DeadlineThresholds()
 
     def assess(self, deadline: datetime, *, now: datetime | None = None) -> DeadlineGuidance:
-        now = now or datetime.now(timezone.utc)
+        now = now or datetime.now(UTC)
         if deadline.tzinfo is None or now.tzinfo is None:
             raise ValueError("deadline policy requires timezone-aware datetimes")
         hours = (deadline - now).total_seconds() / 3600
