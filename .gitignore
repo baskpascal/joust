@@ -1,0 +1,13 @@
+.env
+.venv/
+__pycache__/
+*.py[co]
+.pytest_cache/
+.ruff_cache/
+*.db
+*.db-shm
+*.db-wal
+plow-credentials
+dist/
+build/
+*.egg-info/

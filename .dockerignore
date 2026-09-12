@@ -1,0 +1,10 @@
+.git
+.env
+.venv
+**/__pycache__
+**/*.py[co]
+**/.pytest_cache
+**/*.db*
+plow-credentials
+tests
+docs

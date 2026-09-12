@@ -1,0 +1,12 @@
+services:
+  agent:
+    build: .
+    environment:
+      AGENT_ID: ${AGENT_ID:?Set AGENT_ID to your stable Agent Index id}
+    volumes:
+      - ./plow-credentials:/var/lib/plow/credentials.host:ro
+      - agent-home:/var/lib/hermes
+    stop_grace_period: 35s
+
+volumes:
+  agent-home:
