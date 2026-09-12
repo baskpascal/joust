@@ -133,3 +133,9 @@ endings. A clean extracted ZIP installed the Python package, exposed the CLI,
 and built the complete Docker image successfully. The builder explicitly
 disables host `core.autocrlf` conversion after the first Windows smoke revealed
 that carriage returns would corrupt the pinned client path.
+
+The authenticated Plow/Latch MCP health probe was repeated after the public
+bundle work. The route itself responded, but authenticated `initialize` still
+returned HTTP 503, confirming that the remaining Latch gap is upstream/device
+availability rather than Galahad credentials or HTTP routing. Plow Chat and
+Agent Index reporting remain healthy.

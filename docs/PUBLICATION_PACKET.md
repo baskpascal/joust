@@ -13,7 +13,10 @@ owner's explicit confirmation.
 - Community listing: live
 - Usage reporting: live
 - Verified: unavailable until 2026-09-14
-- Public repository URL: pending
+- Proposed public repository: `https://github.com/baskpascal/galahad`
+- Proposed default branch: `main`
+- Proposed description: `Evidence-first Hermes agent that helps teams research, build, red-team, and package hackathon entries.`
+- Proposed topics: `ai-agent`, `hackathon`, `hermes`, `plow`, `python`
 - Validated local source bundle: `dist/galahad-public.zip`
 - One-click install URL: pending Plow-team setup
 - Demo media: pending
@@ -44,7 +47,8 @@ command; the client uses the existing private registration state.
 
 ## Remaining public assets
 
-1. Publish this repository or create a clean public distribution repository.
+1. Create the public `baskpascal/galahad` repository and push the current HEAD
+   to `main` (the target does not exist as of 2026-09-12).
 2. Ask the Plow team for the one-click deployment URL when that program opens.
 3. Add the resulting repository and install URLs to the public entry.
 4. Capture a real mission walkthrough and add screenshots or a short demo.
