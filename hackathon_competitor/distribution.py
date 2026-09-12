@@ -6,7 +6,14 @@ import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 
-REQUIRED_FILES = {"Dockerfile", "LICENSE", "README.md", "compose.yml", "pyproject.toml"}
+REQUIRED_FILES = {
+    "Dockerfile",
+    "LICENSE",
+    "README.md",
+    "compose.yml",
+    "pyproject.toml",
+    "vendor/client.pin",
+}
 FORBIDDEN_PARTS = {".git", ".knightwatch", "__pycache__", "plow-credentials"}
 FORBIDDEN_SUFFIXES = {".db", ".db-shm", ".db-wal", ".pyc", ".pyo"}
 
@@ -41,6 +48,18 @@ def validate_public_bundle(bundle: Path) -> dict[str, object]:
         license_text = archive.read(relative[PurePosixPath("LICENSE")]).decode("utf-8")
         if not license_text.startswith("MIT License"):
             raise ValueError("public bundle does not contain the MIT license")
+        linux_control_files = [
+            path
+            for path in relative
+            if path.suffix == ".pin" or path.parts[:2] == ("image", "s6-overlay")
+        ]
+        crlf_files = [
+            str(path)
+            for path in linux_control_files
+            if b"\r" in archive.read(relative[path])
+        ]
+        if crlf_files:
+            raise ValueError(f"Linux control files contain carriage returns: {crlf_files}")
     digest = hashlib.sha256(bundle.read_bytes()).hexdigest()
     return {"path": str(bundle.resolve()), "sha256": digest, "files": len(files)}
 
@@ -57,6 +76,8 @@ def build_public_bundle(repo_root: Path, output: Path) -> dict[str, object]:
         result = subprocess.run(
             [
                 "git",
+                "-c",
+                "core.autocrlf=false",
                 "archive",
                 "--format=zip",
                 "--prefix=galahad/",
