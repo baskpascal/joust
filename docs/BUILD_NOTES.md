@@ -48,7 +48,7 @@ Verification:
   occurred during that deterministic fixture run.
 - Docker image build — passed from the immutable official base. The current
   Compose image manifest list is
-  `sha256:13478d98e09f279a85b5e7655ceee3df68df9bd93459b12ba1cd28641af857e7`.
+  `sha256:9f63dbd5d62a95692aff6f6c859e4c895a8437cf489316aec563f827aa19b56c`.
 - Container `doctor` — healthy with migration v4, Git, all six skills, Plow
   discovery, explicit test `AGENT_ID`, service wiring, Agent Index client
   smoke (`not_registered` is safely visible), and no embedded credentials.

@@ -29,7 +29,7 @@ runtime evidence nor client registration proves a public Verified listing.
 | Real official-source intake | Public Agent Index URL produced six evidence records and a persisted, explicit quality blocker instead of inventing missing prohibitions | PASS (safe partial-source behavior) |
 | External action safety | `ExternalActionService` requires explicit approval and idempotency | PASS (local gate) |
 | Explicit postmortem and reusable lessons | `record_postmortem`, `POSTMORTEM.md`, `competition_memory` | PASS (local) |
-| Unit/integration/E2E/secret/license quality | 71 tests, Ruff, `uv lock --check`, diff check, MIT license | PASS |
+| Unit/integration/E2E/secret/license quality | 73 tests, Ruff, `uv lock --check`, diff check, MIT license | PASS |
 
 ## External handoff
 
