@@ -40,7 +40,7 @@ Verification:
   five recorded source tool calls, and the rehearsal task ready. The other
   outstanding task is a human-approval user trial; no external action occurred.
 - Docker image build — passed from the immutable official base. Final manifest
-  list: `sha256:1374ae60a04163f42424df2b6825b77c24d28db4d5b10c9b8231d40510b31ed7`.
+  list: `sha256:4a7bbd67832ea6cbfe788dbbf656bf42c8f466a2810201154d424903ab934dfe`.
 - Container `doctor` — healthy with migration v4, Git, all six skills, Plow
   discovery, explicit test `AGENT_ID`, service wiring, Agent Index client
   smoke (`not_registered` is safely visible), and no embedded credentials.
