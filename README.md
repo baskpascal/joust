@@ -56,6 +56,9 @@ Use `HACKATHON_COMPETITOR_HOME` to override the default local state directory.
    AGENT_ID=galahad-hackathon docker compose up --build -d
    ```
 
+   `.env.example` contains the same non-secret default if you prefer to copy
+   it to `.env`; never place the minted credential in `.env`.
+
 Final contest submission, legal attestations, public pushes, and production
 deployments are never performed by the local mission pipeline. They remain
 explicitly confirmation-gated actions.
