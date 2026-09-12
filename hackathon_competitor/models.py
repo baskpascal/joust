@@ -1,0 +1,322 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from enum import StrEnum
+from typing import Any
+from uuid import UUID, uuid4
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class Contract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class MissionState(StrEnum):
+    CREATED = "CREATED"
+    INTAKE = "INTAKE"
+    DISCOVERY = "DISCOVERY"
+    RULES_LOCK = "RULES_LOCK"
+    LANDSCAPE_ANALYSIS = "LANDSCAPE_ANALYSIS"
+    IDEATION = "IDEATION"
+    STRATEGY_SELECTION = "STRATEGY_SELECTION"
+    PLANNING = "PLANNING"
+    BUILDING = "BUILDING"
+    VALIDATING = "VALIDATING"
+    OPTIMIZING = "OPTIMIZING"
+    SUBMISSION_PREP = "SUBMISSION_PREP"
+    READY_FOR_SUBMISSION = "READY_FOR_SUBMISSION"
+    SUBMITTED = "SUBMITTED"
+    POSTMORTEM = "POSTMORTEM"
+    PAUSED = "PAUSED"
+    BLOCKED = "BLOCKED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class TaskStatus(StrEnum):
+    PENDING = "PENDING"
+    READY = "READY"
+    RUNNING = "RUNNING"
+    WAITING_APPROVAL = "WAITING_APPROVAL"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED_RETRYABLE = "FAILED_RETRYABLE"
+    FAILED_PERMANENT = "FAILED_PERMANENT"
+    CANCELLED = "CANCELLED"
+    SKIPPED = "SKIPPED"
+
+
+class RuleType(StrEnum):
+    ELIGIBILITY = "eligibility"
+    REQUIRED_TECHNOLOGY = "required_technology"
+    PROHIBITED = "prohibited"
+    SUBMISSION = "submission"
+    LICENSING = "licensing"
+    DEADLINE = "deadline"
+    JUDGING = "judging"
+
+
+class RuleSeverity(StrEnum):
+    INFO = "info"
+    WARNING = "warning"
+    BLOCKER = "blocker"
+
+
+class RuleStatus(StrEnum):
+    UNKNOWN = "unknown"
+    PASS = "pass"
+    FAIL = "fail"
+    NOT_APPLICABLE = "not_applicable"
+
+
+class ApprovalLevel(StrEnum):
+    AUTO = "AUTO"
+    CONFIRM = "CONFIRM"
+    HUMAN_ONLY = "HUMAN_ONLY"
+
+
+class ApprovalStatus(StrEnum):
+    PENDING = "PENDING"
+    GRANTED = "GRANTED"
+    DENIED = "DENIED"
+    EXPIRED = "EXPIRED"
+
+
+class Criterion(Contract):
+    name: str
+    description: str = ""
+    weight: float = 1.0
+
+
+class Requirement(Contract):
+    id: str
+    text: str
+    blocking: bool = True
+    evidence_ids: list[UUID] = Field(default_factory=list)
+
+
+class Resource(Contract):
+    name: str
+    uri: str
+    description: str = ""
+
+
+class Mission(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    title: str
+    state: MissionState = MissionState.CREATED
+    objective: str
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
+    deadline_at: datetime | None = None
+    timezone: str | None = None
+    source_inputs: list[str] = Field(default_factory=list)
+    hackathon_spec_id: UUID | None = None
+    selected_strategy_id: UUID | None = None
+    workspace_path: str
+
+
+class HackathonSpec(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    name: str
+    organizer: str | None = None
+    canonical_url: str | None = None
+    deadline_at: datetime | None = None
+    deadline_explicitly_unknown: bool = False
+    judging_mode: str | None = None
+    judging_criteria: list[Criterion] = Field(default_factory=list)
+    required_technologies: list[str] = Field(default_factory=list)
+    allowed_technologies: list[str] = Field(default_factory=list)
+    prohibited_actions: list[str] = Field(default_factory=list)
+    submission_requirements: list[Requirement] = Field(default_factory=list)
+    eligibility_requirements: list[Requirement] = Field(default_factory=list)
+    sponsor_resources: list[Resource] = Field(default_factory=list)
+    rules_locked: bool = False
+    version: int = Field(default=1, ge=1)
+    evidence_ids: list[UUID] = Field(default_factory=list)
+
+
+class Task(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    parent_id: UUID | None = None
+    type: str
+    capability: str
+    status: TaskStatus = TaskStatus.PENDING
+    priority: int = 0
+    depth_level: int = Field(default=1, ge=1, le=5)
+    dependencies: list[UUID] = Field(default_factory=list)
+    inputs: dict[str, Any] = Field(default_factory=dict)
+    output_artifact_ids: list[UUID] = Field(default_factory=list)
+    evidence_ids: list[UUID] = Field(default_factory=list)
+    max_retries: int = Field(default=2, ge=0)
+    retry_count: int = Field(default=0, ge=0)
+    approval_policy: str = "AUTO"
+    created_at: datetime = Field(default_factory=utcnow)
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    retry_after: datetime | None = None
+    error: str | None = None
+
+
+class Evidence(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    claim: str
+    source_type: str
+    source_uri: str | None = None
+    source_artifact_id: UUID | None = None
+    excerpt: str | None = None
+    confidence: float = Field(ge=0.0, le=1.0)
+    authority: str
+    retrieved_at: datetime = Field(default_factory=utcnow)
+    valid_until: datetime | None = None
+
+
+class SourceRecord(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    uri: str
+    authority: str
+    source_type: str
+    content_hash: str
+    retrieved_at: datetime = Field(default_factory=utcnow)
+    status: str = "available"
+
+
+class Decision(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    question: str
+    options: list[dict[str, Any]]
+    selected_option: str
+    rationale: str
+    evidence_ids: list[UUID] = Field(default_factory=list)
+    confidence: float = Field(ge=0.0, le=1.0)
+    depth_level: int = Field(ge=1, le=5)
+    reversible: bool
+    reconsider_if: list[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class Artifact(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    kind: str
+    path: str
+    version: int = Field(default=1, ge=1)
+    content_hash: str
+    status: str = "current"
+    created_by_task_id: UUID
+    depends_on: list[UUID] = Field(default_factory=list)
+    stale: bool = False
+
+
+class Evaluation(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    target_artifact_ids: list[UUID] = Field(default_factory=list)
+    evaluator_role: str
+    rubric: dict[str, float]
+    scores: dict[str, float]
+    findings: list[str] = Field(default_factory=list)
+    blocking_findings: list[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
+class Rule(Contract):
+    id: str
+    text: str
+    type: RuleType
+    severity: RuleSeverity
+    evidence_ids: list[UUID] = Field(default_factory=list)
+    verification_method: str
+    status: RuleStatus = RuleStatus.UNKNOWN
+
+
+class Experiment(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    hypothesis: str
+    method: str
+    success_metric: str
+    result: dict[str, Any] | None = None
+    conclusion: str | None = None
+    artifact_ids: list[UUID] = Field(default_factory=list)
+    evidence_ids: list[UUID] = Field(default_factory=list)
+
+
+class Approval(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    action: str
+    level: ApprovalLevel
+    status: ApprovalStatus = ApprovalStatus.PENDING
+    requested_at: datetime = Field(default_factory=utcnow)
+    decided_at: datetime | None = None
+    decision_note: str | None = None
+
+
+class DebateRecord(Contract):
+    proposal: str
+    pro_arguments: list[str]
+    con_arguments: list[str]
+    alternative_proposal: str
+    evidence_comparison: list[str]
+    judge_decision: str
+
+
+class MetaJudgeResult(Contract):
+    consensus: list[str]
+    unresolved_disagreement: list[str]
+    confidence: float = Field(ge=0.0, le=1.0)
+    recommended_next_action: str
+    more_evidence_required: bool
+
+
+class ComplianceReport(Contract):
+    rules: list[Rule]
+    blocker_failures: list[str]
+    blocker_unknowns: list[str]
+    ready: bool
+
+
+class QualityGateResult(Contract):
+    name: str
+    passed: bool
+    blocking_findings: list[str] = Field(default_factory=list)
+    evidence: list[str] = Field(default_factory=list)
+
+
+class DeadlineGuidance(Contract):
+    mode: str
+    hours_remaining: float
+    max_reasoning_depth: int = Field(ge=1, le=5)
+    architecture_frozen: bool
+    risky_changes_require_confirmation: bool
+    priorities: list[str]
+
+
+class Idea(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    title: str
+    summary: str
+    batch: str
+    dimensions: dict[str, float]
+    evidence_ids: list[UUID] = Field(default_factory=list)
+
+
+class CapabilityResult(Contract):
+    summary: str
+    artifacts: list[dict[str, Any]] = Field(default_factory=list)
+    evidence: list[dict[str, Any]] = Field(default_factory=list)
+    decisions: list[dict[str, Any]] = Field(default_factory=list)
+    proposed_tasks: list[dict[str, Any]] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    metrics: dict[str, Any] = Field(default_factory=dict)
