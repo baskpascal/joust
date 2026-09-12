@@ -71,10 +71,13 @@ The owner then sent a live Plow Chat message. Hermes completed the turn in 5.8
 seconds, persisted the session and response, and the delivery obligation
 reached `delivered`. The next supervised Agent Index report submitted 25,710
 tokens across two rows and received HTTP 200. This trial exposed a branding
-defect: the first response used the line's legacy `Willow` label. The public
-Plow profile is now `Galahad`, and the variant persona explicitly treats legacy
-line labels as transport metadata; the image was rebuilt and restarted with
-that correction. A branded-response retest, Verified eligibility, and final
-submission remain human/external gates. The separate Plow Latch MCP endpoint
-was returning HTTP 503 during this run, while Plow Chat and email remained
-connected.
+defect: the first two responses reused the line's legacy `Willow` label because
+the Plow Chat conversation retained its pre-fix system prompt. The Plow account
+profile controls the owner's display name, not the agent line's identity, so it
+remains separate from the variant. The variant persona now explicitly treats
+legacy line labels as transport metadata, the image was rebuilt, and the old
+conversation was preserved behind an official `session_reset` boundary. The
+fresh session has the corrected identity prompt. A branded-response retest,
+Verified eligibility, and final submission remain human/external gates. The
+separate Plow Latch MCP endpoint was returning HTTP 503 during this run, while
+Plow Chat and email remained connected.
