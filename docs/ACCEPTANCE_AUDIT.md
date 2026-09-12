@@ -15,7 +15,7 @@ of the owner's live registration or Agent Index listing.
 | Rules, evidence, cross-check, contradiction | `tests/test_vertical_slice.py`, `test_rule_updates.py`, research fixture | PASS |
 | Multi-batch ideas and tournament | strategy tests and persisted 20-idea mission | PASS |
 | PRD, architecture, implementation, acceptance plan | planning artifacts and artifact graph | PASS |
-| Independent evaluators and meta-judge | six strategy roles, five implementation roles, stored evaluations | PASS |
+| Independent evaluators and meta-judge | six strategy roles, five implementation roles plus test-gap reviewer, stored evaluations | PASS |
 | Red team and improvement tasks | V0 completion path and evaluation capability | PASS |
 | Submission pack and blocker gate | compliance report, install validation, final checklist | PASS (local) |
 | Agent Index client pinned and integrity checked | `vendor/client.pin`, Docker build checksum step | PASS |
