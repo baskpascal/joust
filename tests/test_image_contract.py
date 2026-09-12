@@ -45,5 +45,10 @@ def test_secret_bearing_paths_are_excluded_from_git_and_build_context():
         for path in ROOT.rglob("*")
         if path.is_file()
         and not {".git", ".venv", "__pycache__", ".pytest_cache"}.intersection(path.parts)
+        # The real local credential is intentionally present beside the
+        # checkout while the container is running.  It is ignored by Git and
+        # excluded from the Docker context; do not read it as source text in
+        # this repository-wide secret scan.
+        and path.name not in {"plow-credentials", ".env"}
     )
     assert not re.search(r"(?:sk|aik|plow)_[A-Za-z0-9_-]{24,}", tracked_text)

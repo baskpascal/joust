@@ -49,11 +49,12 @@ the URL-to-PRD path before the deeper backlog is added.
 
 ## External readiness still required
 
-An authenticated `/init` boot through the real Hermes/Plow channel requires the
-owner's line-scoped `plow-credentials` and an operator-chosen stable `AGENT_ID`.
-The credential is generated with `plow-agents login`/`mint`; the id is not
-supplied by Plow. The V0 does not perform final submission, attest legal terms,
-or claim an organizer-verified Agent Index listing. Verified eligibility is a
-separate external step expected to open on 2026-09-14. Real-user activation and
+An authenticated `/init` boot through the real Hermes/Plow channel is now
+validated in the live compose runtime with the owner's line-scoped
+`plow-credentials` and the operator-chosen stable `AGENT_ID`. The credential was
+generated with `plow-agents login`/`mint`; the id is not supplied by Plow. The V0
+does not perform final submission, attest legal terms, or claim an
+organizer-verified Agent Index listing. Verified eligibility is a separate
+external step expected to open on 2026-09-14. Real-user activation and
 rehearsal against the event's live official source remain explicit mission
 tasks.

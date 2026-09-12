@@ -8,7 +8,7 @@ of the owner's live registration or Agent Index listing.
 |---|---|---|
 | Immutable Plow variant builds | `Dockerfile`, final image digest in `BUILD_NOTES.md` | PASS |
 | Runtime `/init` starts safely | s6 boot smoke with synthetic identity relay | PASS (contract) |
-| Live Hermes/Plow interaction | Requires owner's authenticated relay | EXTERNAL / UNVERIFIED |
+| Live Hermes/Plow interaction | Authenticated compose boot; Plow Chat and email connected | PASS (runtime; user trial pending) |
 | No embedded credentials | `.gitignore`, `.dockerignore`, image/source secret scan | PASS |
 | URL mission and restart | `tests/test_vertical_slice.py`, two-instance container E2E | PASS |
 | DAG, retries, crash recovery | `tests/test_task_engine.py` | PASS |
@@ -19,7 +19,7 @@ of the owner's live registration or Agent Index listing.
 | Red team and improvement tasks | V0 completion path and evaluation capability | PASS |
 | Submission pack and blocker gate | compliance report, install validation, final checklist | PASS (local) |
 | Agent Index client pinned and integrity checked | `vendor/client.pin`, Docker build checksum step | PASS |
-| Agent Index reporter supervised | `image/s6-overlay/s6-rc.d/agent-index` and image doctor | PASS (not registered in smoke) |
+| Agent Index reporter supervised | `image/s6-overlay/s6-rc.d/agent-index`; live status registered and first baseline reported | PASS (live runtime) |
 | Chosen `AGENT_ID` wiring | Explicit compose env, reporter, and doctor check | PASS (local) |
 | Verified listing | Organizer eligibility surface, expected to open 2026-09-14 | EXTERNAL / NOT YET AVAILABLE |
 | Real-user activation trial | Mission task `real_user_activation_trial` waits for approval | PENDING HUMAN |
@@ -29,9 +29,10 @@ of the owner's live registration or Agent Index listing.
 
 ## External handoff
 
-Generate the line-scoped `plow-credentials` with `plow-agents`, choose a stable
-`AGENT_ID`, then run the live-source rehearsal and user activation trial. After
-the Verified program opens, request that status on the Agent Index entry.
+The line-scoped `plow-credentials` has been generated with `plow-agents`, a
+stable `AGENT_ID` has been selected, and the live compose runtime is up. Run the
+live-source rehearsal and user activation trial next. After the Verified
+program opens, request that status on the Agent Index entry.
 Galahad still will not
 accept legal terms, publish, or submit without explicit confirmation immediately
 before that irreversible action.

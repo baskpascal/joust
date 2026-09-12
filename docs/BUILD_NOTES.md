@@ -45,8 +45,9 @@ Verification:
   `READY_FOR_SUBMISSION`, 12/14 tasks succeeded, 26 artifacts, 25 evaluations,
   five recorded source tool calls, and the rehearsal task ready. The other
   outstanding task is a human-approval user trial; no external action occurred.
-- Docker image build — passed from the immutable official base. Final manifest
-  list: `sha256:df8d9148f5d229d65543faa1c8581dd9b3c4bae054b882ff5a856c2aed43596f`.
+- Docker image build — passed from the immutable official base. The current
+  Compose image manifest list is
+  `sha256:925a0c029e6d439027457da05c416a29e7f6d40c1073e92584a29797b0eeb7ce`.
 - Container `doctor` — healthy with migration v4, Git, all six skills, Plow
   discovery, explicit test `AGENT_ID`, service wiring, Agent Index client
   smoke (`not_registered` is safely visible), and no embedded credentials.
@@ -54,7 +55,14 @@ Verification:
   `/init` promoted credentials and started `plow-init`, `main-hermes`,
   `hermes-gateway`, and `agent-index` under `s6`; no owner credential was used.
 
-Authenticated Hermes/Plow startup is prepared through the official
-`plow-agents login` flow, but remains pending the owner's SMS/iMessage
-activation. The local credential and operator-chosen `AGENT_ID` must stay out
-of Git. Verified eligibility and final submission remain human/external gates.
+Authenticated Hermes/Plow startup was completed through the official
+`plow-agents login --new-line`, `lines`, and `mint` flow. The real line-scoped
+credential is mounted only at runtime and remains ignored by Git. The live
+container promoted it with `plow-init`, connected the Plow Chat and email
+platforms, and the pinned Agent Index client registered the chosen
+`AGENT_ID=galahad-hackathon`. Its first report created a truthful zero-use
+baseline; the Hermes store was created during gateway startup, so the first
+early reporter pass was retried after the store became available. The optional
+`agentsview` collector is not installed; the Hermes collector is the source of
+truth for this image. Verified eligibility, a real-user activation trial, and
+final submission remain human/external gates.
