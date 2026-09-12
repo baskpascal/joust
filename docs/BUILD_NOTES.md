@@ -48,7 +48,7 @@ Verification:
   occurred during that deterministic fixture run.
 - Docker image build — passed from the immutable official base. The current
   Compose image manifest list is
-  `sha256:7064661b46973a31f5e71a9bf5e3a8ea9e7e66c839b10a9db2d00b8c690fbb19`.
+  `sha256:45293d0da20d614be7ba5ac864003a485e6e664f2dd79417c4967a7cc92b9da8`.
 - Container `doctor` — healthy with migration v4, Git, all six skills, Plow
   discovery, explicit test `AGENT_ID`, service wiring, Agent Index client
   smoke (`not_registered` is safely visible), and no embedded credentials.
@@ -77,7 +77,16 @@ profile controls the owner's display name, not the agent line's identity, so it
 remains separate from the variant. The variant persona now explicitly treats
 legacy line labels as transport metadata, the image was rebuilt, and the old
 conversation was preserved behind an official `session_reset` boundary. The
-fresh session has the corrected identity prompt. A branded-response retest,
-Verified eligibility, and final submission remain human/external gates. The
+fresh session has the corrected identity prompt. Verified eligibility and final
+submission remain human/external gates. The
 separate Plow Latch MCP endpoint was returning HTTP 503 during this run, while
 Plow Chat and email remained connected.
+
+The branded-response retest passed: queued owner messages were processed after
+the permission repair, the response identified itself as Galahad, and delivery
+reached `delivered`. The temporary silence was caused by a root-run diagnostic
+invoking Hermes' generic `_secure_dir()` default, which changed the shared
+root-owned home to `0700`. The image now exports `HERMES_HOME_MODE=3770`, matching
+the upstream `plow-init` shared-home contract, and the image contract test pins
+that requirement against regression. Verified eligibility and final submission
+remain external gates.

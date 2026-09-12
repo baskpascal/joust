@@ -8,7 +8,12 @@ COPY --chmod=0644 LICENSE NOTICE /usr/share/doc/galahad/
 
 COPY --chmod=0644 pyproject.toml LICENSE README.md compose.yml Dockerfile /opt/galahad/
 COPY hackathon_competitor/ /opt/galahad/hackathon_competitor/
-ENV PYTHONPATH=/opt/galahad
+# plow-init deliberately leaves the root-owned shared home traversable and
+# writable by the hermes group. Hermes CLI commands call _secure_dir(), so
+# carry that contract into every subprocess instead of letting a root-run
+# diagnostic silently revert the volume to 0700 root:root/root:hermes.
+ENV PYTHONPATH=/opt/galahad \
+    HERMES_HOME_MODE=3770
 
 COPY skills/ /opt/hermes/skills/
 RUN find /opt/hermes/skills -mindepth 1 -type d -exec chmod 0755 {} + \

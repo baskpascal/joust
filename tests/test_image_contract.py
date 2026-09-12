@@ -14,6 +14,7 @@ def test_variant_uses_immutable_official_base_and_does_not_vendor_runtime():
     assert not (ROOT / "image/s6-overlay/scripts/plow-init.py").exists()
     assert not (ROOT / "image/seed/SOUL.md").exists()
     assert (ROOT / "runtime/persona.md").is_file()
+    assert "HERMES_HOME_MODE=3770" in dockerfile
 
 
 def test_variant_persona_owns_the_public_agent_identity():
