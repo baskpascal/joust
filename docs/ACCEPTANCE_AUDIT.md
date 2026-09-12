@@ -23,7 +23,8 @@ of the owner's live registration or Agent Index listing.
 | Real `AGENT_ID` and Verified listing | Owner registration / organizer surface | EXTERNAL / UNVERIFIED |
 | Real-user activation trial | Mission task `real_user_activation_trial` waits for approval | PENDING HUMAN |
 | External action safety | `ExternalActionService` requires explicit approval and idempotency | PASS (local gate) |
-| Unit/integration/E2E/secret/license quality | 64 tests, Ruff, `uv lock --check`, diff check, MIT license | PASS |
+| Explicit postmortem and reusable lessons | `record_postmortem`, `POSTMORTEM.md`, `competition_memory` | PASS (local) |
+| Unit/integration/E2E/secret/license quality | 67 tests, Ruff, `uv lock --check`, diff check, MIT license | PASS |
 
 ## External handoff
 

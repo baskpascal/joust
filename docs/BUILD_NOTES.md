@@ -17,6 +17,8 @@
 - Added Pydantic contracts, four SQLite migrations/repositories, append-only events,
   deterministic state transitions, persistent DAG scheduling, cycle detection,
   retry/crash recovery, provider-neutral LLM protocol, CLI, and doctor command.
+- Added auditable task-failure/cancellation metrics and an explicit postmortem
+  record that persists outcome, artifact, and reusable cross-mission lessons.
 - Implemented the fixture-backed path from URL through locked and independently
   cross-checked rules, evidence, contradiction handling, 20 ideas in five
   clusters, six evaluator roles plus meta-judge, selected strategy,
@@ -27,8 +29,8 @@
 Verification:
 
 - `quick_validate.py` — all six skills valid.
-- `pytest -q tests/` — 64 passed (including five deadline parameter cases).
-- `ruff check hackathon_competitor tests` — passed.
+- `pytest -q tests/` — 67 passed (including five deadline parameter cases).
+- `ruff check hackathon_competitor tests` and `ruff format --check` — passed.
 - `git diff --check` — passed (Windows line-ending notices only).
 - `docker compose config --quiet` with `AGENT_ID=galahad` — passed.
 - Git Bash `bash -n image/s6-overlay/s6-rc.d/agent-index/run` — passed.
@@ -40,7 +42,7 @@ Verification:
   five recorded source tool calls, and the rehearsal task ready. The other
   outstanding task is a human-approval user trial; no external action occurred.
 - Docker image build — passed from the immutable official base. Final manifest
-  list: `sha256:4a7bbd67832ea6cbfe788dbbf656bf42c8f466a2810201154d424903ab934dfe`.
+  list: `sha256:75c28bf14a66f4f252e6fea29265f1980803f0ee61ada45b6522879e9836a6ad`.
 - Container `doctor` — healthy with migration v4, Git, all six skills, Plow
   discovery, explicit test `AGENT_ID`, service wiring, Agent Index client
   smoke (`not_registered` is safely visible), and no embedded credentials.
