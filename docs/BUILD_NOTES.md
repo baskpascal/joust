@@ -27,7 +27,7 @@
 Verification:
 
 - `quick_validate.py` — all six skills valid.
-- `pytest -q tests/` — 59 passed (including five deadline parameter cases).
+- `pytest -q tests/` — 61 passed (including five deadline parameter cases).
 - `ruff check hackathon_competitor tests` — passed.
 - `git diff --check` — passed (Windows line-ending notices only).
 - `docker compose config --quiet` with `AGENT_ID=galahad` — passed.
@@ -40,7 +40,7 @@ Verification:
   five recorded source tool calls, and the rehearsal task ready. The other
   outstanding task is a human-approval user trial; no external action occurred.
 - Docker image build — passed from the immutable official base. Final manifest
-  list: `sha256:e0eb83f5a59eca9de93e0d2aa08cdf9d32f51b9c5f8cada7392d11e50a6416b8`.
+  list: `sha256:1374ae60a04163f42424df2b6825b77c24d28db4d5b10c9b8231d40510b31ed7`.
 - Container `doctor` — healthy with migration v4, Git, all six skills, Plow
   discovery, explicit test `AGENT_ID`, service wiring, Agent Index client
   smoke (`not_registered` is safely visible), and no embedded credentials.

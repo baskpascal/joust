@@ -15,6 +15,7 @@ from .exporter import export_mission_bundle
 from .models import MissionState
 from .orchestrator import MissionOrchestrator
 from .pipeline import complete_v0, mission_status, run_vertical_slice
+from .registry import default_registry
 from .rule_updates import refresh_official_rules
 from .storage import Database, MIGRATIONS
 
@@ -33,7 +34,11 @@ def runtime(home: Path | None = None) -> MissionOrchestrator:
     root = (home or default_home()).resolve()
     database = Database(root / "state.db")
     database.migrate()
-    return MissionOrchestrator(database, root / "missions")
+    return MissionOrchestrator(
+        database,
+        root / "missions",
+        capability_registry=default_registry(),
+    )
 
 
 def doctor(home: Path | None = None) -> tuple[dict[str, dict[str, object]], bool]:
