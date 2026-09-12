@@ -1,23 +1,37 @@
-from types import SimpleNamespace
+import asyncio
+from pathlib import Path
 
 import pytest
 
-from hackathon_competitor.capability import CapabilityRegistry
-from hackathon_competitor.models import CapabilityResult
+from hackathon_competitor.capability import CapabilityRegistry, MissionContext
+from hackathon_competitor.models import CapabilityResult, Mission, Task
+from hackathon_competitor.storage import Database
 
 
 class ExampleCapability:
     name = "example"
 
-    def execute(self, mission, task, context):
-        return CapabilityResult(summary=context["summary"])
+    def can_handle(self, task):
+        return task.capability == self.name
+
+    async def execute(self, task, context):
+        return CapabilityResult(summary=context.services["summary"])
 
 
-def test_capability_registry_dispatches_structured_results():
-    registry = CapabilityRegistry([ExampleCapability()])
-    result = registry.get("example").execute(
-        SimpleNamespace(), SimpleNamespace(), {"summary": "done"}
+def test_capability_registry_dispatches_structured_results(tmp_path):
+    database = Database(tmp_path / "state.db")
+    database.migrate()
+    mission = Mission(title="Test", objective="Test", workspace_path=str(tmp_path))
+    database.save_mission(mission)
+    task = Task(mission_id=mission.id, type="test", capability="example")
+    context = MissionContext(
+        mission=mission,
+        database=database,
+        artifact_root=Path(tmp_path),
+        services={"summary": "done"},
     )
+    registry = CapabilityRegistry([ExampleCapability()])
+    result = asyncio.run(registry.dispatch(task, context))
     assert result == CapabilityResult(summary="done")
     assert registry.names() == ("example",)
 

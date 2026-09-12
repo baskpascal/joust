@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from .models import (
     Artifact,
     Approval,
+    CompetitionMemory,
     Decision,
     Evaluation,
     Evidence,
@@ -117,6 +118,14 @@ MIGRATIONS: tuple[str, ...] = (
         uri TEXT NOT NULL, payload TEXT NOT NULL,
         UNIQUE(mission_id, uri)
     );
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS competition_memory (
+        id TEXT PRIMARY KEY, mission_id TEXT NOT NULL, category TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_competition_memory_category
+      ON competition_memory(category);
     """,
 )
 
@@ -257,6 +266,17 @@ class Database:
     def list_sources(self, mission_id: UUID | str) -> list[SourceRecord]:
         return self._list_for_mission("sources", mission_id, SourceRecord)
 
+    def set_source_status(
+        self, mission_id: UUID | str, uri: str, status: str
+    ) -> SourceRecord | None:
+        source = next((item for item in self.list_sources(mission_id) if item.uri == uri), None)
+        if source is None:
+            return None
+        source.status = status
+        source.retrieved_at = utcnow()
+        self.save_source(source)
+        return source
+
     def list_evidence(self, mission_id: UUID | str) -> list[Evidence]:
         return self._list_for_mission("evidence", mission_id, Evidence)
 
@@ -303,6 +323,24 @@ class Database:
 
     def list_experiments(self, mission_id: UUID | str) -> list[Experiment]:
         return self._list_for_mission("experiments", mission_id, Experiment)
+
+    def save_competition_memory(self, memory: CompetitionMemory) -> None:
+        self._save(
+            "competition_memory",
+            memory,
+            mission_id=memory.mission_id,
+            category=memory.category,
+        )
+
+    def list_competition_memory(self, *, category: str | None = None) -> list[CompetitionMemory]:
+        if category is None:
+            return self._list("competition_memory", CompetitionMemory, "rowid")
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT payload FROM competition_memory WHERE category = ? ORDER BY rowid",
+                (category,),
+            ).fetchall()
+        return [CompetitionMemory.model_validate_json(row[0]) for row in rows]
 
     def save_approval(self, approval: Approval) -> None:
         self._save(
@@ -485,8 +523,12 @@ def transition_mission(database: Database, mission: Mission, target: MissionStat
     from .state_machine import require_transition
 
     previous = mission.state
+    previous_updated_at = mission.updated_at
     require_transition(previous, target)
     mission.state = target
     database.save_mission(mission)
     database.append_event(mission.id, "STATE_CHANGED", {"from": previous.value, "to": target.value})
+    elapsed = max(0.0, (mission.updated_at - previous_updated_at).total_seconds())
+    database.record_metric(mission.id, f"phase_seconds:{previous.value}", elapsed)
+    database.record_metric(mission.id, f"stage_reached:{target.value}", 1.0)
     return mission

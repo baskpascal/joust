@@ -52,6 +52,13 @@ def refresh_official_rules(
         new_spec, evidence, contradictions = extract_spec(mission.id, sources)
         crosscheck_findings = crosscheck_extraction(new_spec, evidence, contradictions, sources)
     except Exception as exc:
+        unavailable = orchestrator.database.set_source_status(mission.id, source_uri, "unavailable")
+        if unavailable is not None:
+            orchestrator.database.append_event(
+                mission.id,
+                "SOURCE_UNAVAILABLE",
+                {"source_id": str(unavailable.id), "uri": source_uri},
+            )
         orchestrator.tasks.fail(task.id, str(exc), retryable=True)
         raise
 

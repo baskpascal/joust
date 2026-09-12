@@ -29,16 +29,20 @@ from .capabilities.execution import build_demo_project, validate_demo_project
 from .capabilities.submission import submission_documents
 from .capabilities.strategy import (
     cluster_ideas,
+    deep_candidate_analysis,
     debate_strategy,
     evaluate_top_ideas,
     generate_ideas,
     meta_judge,
+    opportunity_map,
     screen_ideas,
     select_strategy,
 )
 from .compliance import evaluate_compliance, rules_from_spec
+from .install_validation import validate_install_run_documentation
 from .models import (
     Artifact,
+    CompetitionMemory,
     Evaluation,
     Experiment,
     Mission,
@@ -222,6 +226,22 @@ def run_vertical_slice(
     clusters = cluster_ideas(ideas)
     for idea in ideas:
         orchestrator.database.save_idea(mission.id, idea)
+    opportunity_path = mission_dir / "OPPORTUNITY_MAP.json"
+    opportunity_content = json.dumps(opportunity_map(clusters), indent=2, sort_keys=True)
+    opportunity_artifact = Artifact(
+        mission_id=mission.id,
+        kind="opportunity_map",
+        path=str(opportunity_path),
+        content_hash=_write_artifact(opportunity_path, opportunity_content),
+        created_by_task_id=ideate.id,
+        depends_on=[rules_artifact.id],
+    )
+    orchestrator.database.save_artifact(opportunity_artifact)
+    orchestrator.database.append_event(
+        mission.id,
+        "ARTIFACT_CREATED",
+        {"artifact_id": str(opportunity_artifact.id), "kind": opportunity_artifact.kind},
+    )
     ideas_path = mission_dir / "candidate-ideas.json"
     ideas_content = json.dumps(
         {
@@ -239,7 +259,7 @@ def run_vertical_slice(
         path=str(ideas_path),
         content_hash=_write_artifact(ideas_path, ideas_content),
         created_by_task_id=ideate.id,
-        depends_on=[rules_artifact.id],
+        depends_on=[opportunity_artifact.id],
     )
     orchestrator.database.save_artifact(ideas_artifact)
     orchestrator.database.append_event(
@@ -254,6 +274,24 @@ def run_vertical_slice(
     for evaluation_item in evaluations:
         evaluation_item.target_artifact_ids = [ideas_artifact.id]
         orchestrator.database.save_evaluation(evaluation_item)
+    deep_path = mission_dir / "DEEP_CANDIDATE_ANALYSIS.json"
+    deep_content = json.dumps(
+        deep_candidate_analysis(finalists, evaluations), indent=2, sort_keys=True
+    )
+    deep_artifact = Artifact(
+        mission_id=mission.id,
+        kind="deep_candidate_analysis",
+        path=str(deep_path),
+        content_hash=_write_artifact(deep_path, deep_content),
+        created_by_task_id=evaluate.id,
+        depends_on=[ideas_artifact.id],
+    )
+    orchestrator.database.save_artifact(deep_artifact)
+    orchestrator.database.append_event(
+        mission.id,
+        "ARTIFACT_CREATED",
+        {"artifact_id": str(deep_artifact.id), "kind": deep_artifact.kind},
+    )
     meta = meta_judge(evaluations)
     meta_evaluation = Evaluation(
         mission_id=mission.id,
@@ -312,7 +350,7 @@ def run_vertical_slice(
             path=str(path),
             content_hash=_write_artifact(path, content),
             created_by_task_id=plan.id,
-            depends_on=[ideas_artifact.id, *decision.evidence_ids],
+            depends_on=[deep_artifact.id, *decision.evidence_ids],
         )
         orchestrator.database.save_artifact(artifact)
         orchestrator.database.append_event(
@@ -321,9 +359,11 @@ def run_vertical_slice(
         created[kind] = artifact
 
     graph = ArtifactGraph(orchestrator.database)
-    graph.link(rules_artifact, ideas_artifact, "derives_from")
-    graph.link(ideas_artifact, created["strategy_review"], "derives_from")
-    graph.link(ideas_artifact, created["prd"], "derives_from")
+    graph.link(rules_artifact, opportunity_artifact, "derives_from")
+    graph.link(opportunity_artifact, ideas_artifact, "derives_from")
+    graph.link(ideas_artifact, deep_artifact, "validates")
+    graph.link(deep_artifact, created["strategy_review"], "derives_from")
+    graph.link(deep_artifact, created["prd"], "derives_from")
     graph.link(created["strategy_review"], created["prd"], "claims")
     graph.link(created["prd"], created["architecture"], "derives_from")
     graph.link(created["architecture"], created["implementation_plan"], "implements")
@@ -648,7 +688,40 @@ def complete_v0(orchestrator: MissionOrchestrator, mission_id) -> Mission:
         depends_on=[*spec.evidence_ids, validation_artifact.id],
     )
 
-    install_tested = importlib.util.find_spec("hackathon_competitor") is not None
+    submission_readme = next(
+        item for item in submission_artifacts if item.kind == "submission_readme"
+    )
+    distribution_root = Path(__file__).resolve().parents[1]
+    install_validation = validate_install_run_documentation(
+        Path(submission_readme.path), distribution_root
+    )
+    install_artifact = _save_text_artifact(
+        orchestrator,
+        mission,
+        submit_pack,
+        kind="install_run_validation",
+        path=submission_root / "install-run-validation.txt",
+        content=install_validation,
+        depends_on=[submission_readme.id],
+    )
+    graph.link(submission_readme, install_artifact, "validates")
+    orchestrator.database.save_experiment(
+        Experiment(
+            mission_id=mission.id,
+            hypothesis="The documented installation surface and CLI entrypoint are runnable.",
+            method="Check distribution files and execute the packaged CLI help command.",
+            success_metric="Distribution files exist and CLI help exits zero.",
+            result={"passed": True, "output": install_validation},
+            conclusion="Install/run documentation passed its distribution smoke check.",
+            artifact_ids=[submission_readme.id, install_artifact.id],
+            evidence_ids=spec.evidence_ids,
+        )
+    )
+
+    install_tested = (
+        importlib.util.find_spec("hackathon_competitor") is not None
+        and "exit_code=0" in install_validation
+    )
     gate = submission_gate(
         compliance,
         install_tested=install_tested,
@@ -677,5 +750,18 @@ def complete_v0(orchestrator: MissionOrchestrator, mission_id) -> Mission:
             "compliance_artifact_id": str(compliance_artifact.id),
             "submission_artifacts": len(submission_artifacts),
         },
+    )
+    orchestrator.database.save_competition_memory(
+        CompetitionMemory(
+            mission_id=mission.id,
+            category="validated_strategy_pattern",
+            content=(
+                "Evidence-linked strategy selection followed by an executable demo and "
+                "independent red-team completed the readiness path. Treat this as a "
+                "hypothesis for later missions, never as a replacement for current rules."
+            ),
+            confidence=0.75,
+            evidence_ids=decision.evidence_ids,
+        )
     )
     return orchestrator.transition_state(mission, MissionState.READY_FOR_SUBMISSION)

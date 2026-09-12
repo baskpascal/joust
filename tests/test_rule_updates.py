@@ -1,6 +1,8 @@
 import shutil
 from pathlib import Path
 
+import pytest
+
 from hackathon_competitor.models import MissionState
 from hackathon_competitor.orchestrator import MissionOrchestrator
 from hackathon_competitor.pipeline import complete_v0, run_vertical_slice
@@ -58,3 +60,25 @@ def test_unchanged_rule_check_does_not_create_new_version(tmp_path):
     assert any(
         event["event_type"] == "RULES_CHECKED_NO_CHANGE" for event in database.events(mission.id)
     )
+
+
+class DisappearedFetcher:
+    def fetch(self, uri, *, timeout=20.0):
+        raise FileNotFoundError(uri)
+
+
+def test_disappeared_official_source_is_visible_and_retryable(tmp_path):
+    database = Database(tmp_path / "state.db")
+    database.migrate()
+    app = MissionOrchestrator(database, tmp_path / "missions")
+    uri = str(FIXTURE / "official.html")
+    mission = run_vertical_slice(app, uri)
+    with pytest.raises(FileNotFoundError):
+        refresh_official_rules(app, mission.id, uri, fetcher=DisappearedFetcher())
+    source = next(item for item in database.list_sources(mission.id) if item.uri == uri)
+    assert source.status == "unavailable"
+    failed = next(
+        item for item in database.list_tasks(mission.id) if item.type == "refresh_official_rules"
+    )
+    assert failed.status.value == "FAILED_RETRYABLE"
+    assert any(event["event_type"] == "SOURCE_UNAVAILABLE" for event in database.events(mission.id))

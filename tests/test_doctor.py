@@ -7,6 +7,7 @@ def test_doctor_reports_required_runtime_surfaces(tmp_path, monkeypatch):
     checks, healthy = doctor(tmp_path)
     assert healthy
     assert checks["database"]["ok"]
+    assert checks["workspace"]["ok"]
     assert checks["skills"]["ok"]
     assert checks["agent_index_service"]["ok"]
 

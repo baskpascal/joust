@@ -69,6 +69,23 @@ def cluster_ideas(ideas: list[Idea]) -> dict[str, list[Idea]]:
     return dict(clusters)
 
 
+def opportunity_map(clusters: dict[str, list[Idea]]) -> dict[str, dict[str, object]]:
+    return {
+        name: {
+            "candidate_count": len(members),
+            "dominant_assumption": {
+                "general": "broad user value",
+                "contrarian": "common approaches are structurally weak",
+                "ambitious": "technical depth creates visible advantage",
+                "demoable": "immediate legibility drives judging utility",
+                "sponsor-native": "native integration strengthens rule and sponsor fit",
+            }.get(name, "unclassified opportunity"),
+            "evidence_ids": sorted({str(item) for idea in members for item in idea.evidence_ids}),
+        }
+        for name, members in clusters.items()
+    }
+
+
 ROLE_WEIGHTS = {
     "product_judge": {"user_value": 1.5, "differentiation": 1.2, "demoability": 1.0},
     "technical_judge": {"feasibility": 1.5, "rule_fit": 1.2, "evidence_strength": 1.0},
@@ -102,6 +119,30 @@ def evaluate_top_ideas(mission_id: UUID, ideas: list[Idea]) -> list[Evaluation]:
                 )
             )
     return evaluations
+
+
+def deep_candidate_analysis(
+    ideas: list[Idea], evaluations: list[Evaluation]
+) -> list[dict[str, object]]:
+    results: list[dict[str, object]] = []
+    for idea in ideas:
+        panel = [item for item in evaluations if item.evaluator_role.endswith(str(idea.id))]
+        mean = sum(sum(item.scores.values()) / len(item.scores) for item in panel) / len(panel)
+        weakest = min(idea.dimensions, key=idea.dimensions.get)
+        results.append(
+            {
+                "idea_id": str(idea.id),
+                "title": idea.title,
+                "panel_score": round(mean, 3),
+                "riskiest_dimension": weakest,
+                "riskiest_score": idea.dimensions[weakest],
+                "prototype_question": (
+                    f"Can {idea.title} prove {weakest.replace('_', ' ')} in one executable path?"
+                ),
+                "evidence_ids": [str(item) for item in idea.evidence_ids],
+            }
+        )
+    return sorted(results, key=lambda item: item["panel_score"], reverse=True)
 
 
 def select_strategy(

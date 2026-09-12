@@ -44,6 +44,8 @@ the URL-to-PRD path before the deeper backlog is added.
   improvement tasks, demo/pitch tournaments, compliance gate, and submission pack.
 - Mission-confined file/shell/Git tools use argument vectors without shell
   expansion. Generated work is committed and the commit is recorded as an event.
+- Install/run documentation is executed as a gate, mission export includes an
+  artifact/hash bundle, and the doctor performs a safe Agent Index client smoke.
 
 ## External readiness still required
 

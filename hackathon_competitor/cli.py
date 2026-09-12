@@ -5,13 +5,15 @@ import json
 import os
 import shutil
 import stat
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from uuid import UUID
 
-from .orchestrator import MissionOrchestrator
+from .exporter import export_mission_bundle
 from .models import MissionState
+from .orchestrator import MissionOrchestrator
 from .pipeline import complete_v0, mission_status, run_vertical_slice
 from .rule_updates import refresh_official_rules
 from .storage import Database, MIGRATIONS
@@ -44,6 +46,15 @@ def doctor(home: Path | None = None) -> tuple[dict[str, dict[str, object]], bool
         checks["state_directory"] = {"ok": True, "path": str(root)}
     except OSError as exc:
         checks["state_directory"] = {"ok": False, "error": str(exc)}
+
+    workspace_root = root / "missions"
+    try:
+        workspace_root.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=workspace_root, delete=True):
+            pass
+        checks["workspace"] = {"ok": True, "path": str(workspace_root)}
+    except OSError as exc:
+        checks["workspace"] = {"ok": False, "error": str(exc)}
 
     database = Database(root / "state.db")
     try:
@@ -81,6 +92,33 @@ def doctor(home: Path | None = None) -> tuple[dict[str, dict[str, object]], bool
         Path("/etc/s6-overlay/s6-rc.d/agent-index/run"),
     ]
     checks["agent_index_service"] = {"ok": any(path.is_file() for path in service_candidates)}
+    client = Path("/opt/plow/agent-index-client.py")
+    if client.is_file():
+        smoke_environment = os.environ.copy()
+        smoke_environment["HOME"] = str(root)
+        smoke_environment["HERMES_HOME"] = str(root)
+        try:
+            result = subprocess.run(
+                [sys.executable, str(client), "status"],
+                capture_output=True,
+                text=True,
+                timeout=20,
+                check=False,
+                env=smoke_environment,
+            )
+            checks["agent_index_client_smoke"] = {
+                "ok": result.returncode in {0, 3},
+                "available": True,
+                "status": "registered" if result.returncode == 0 else "not_registered",
+            }
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            checks["agent_index_client_smoke"] = {
+                "ok": False,
+                "available": True,
+                "error_type": type(exc).__name__,
+            }
+    else:
+        checks["agent_index_client_smoke"] = {"ok": True, "available": False}
 
     credential_candidates = [repo_root / "plow-credentials", Path("/var/lib/plow/credentials")]
     credential = next((path for path in credential_candidates if path.exists()), None)
@@ -107,9 +145,12 @@ def build_parser() -> argparse.ArgumentParser:
     create = mission_commands.add_parser("create")
     create.add_argument("--url", required=True)
     create.add_argument("--workspace", default=".")
-    for name in ("show", "resume", "tasks", "export"):
+    for name in ("show", "resume", "tasks"):
         sub = mission_commands.add_parser(name)
         sub.add_argument("mission_id", type=UUID)
+    export = mission_commands.add_parser("export")
+    export.add_argument("mission_id", type=UUID)
+    export.add_argument("--bundle", type=Path)
     refresh = mission_commands.add_parser("refresh-rules")
     refresh.add_argument("mission_id", type=UUID)
     refresh.add_argument("--url", required=True)
@@ -167,7 +208,11 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
     elif args.mission_command == "export":
-        print(json.dumps(app.database.export_mission(mission.id), indent=2))
+        if args.bundle:
+            path = export_mission_bundle(app.database, mission.id, args.bundle)
+            print(json.dumps({"mission": str(mission.id), "bundle": str(path)}, indent=2))
+        else:
+            print(json.dumps(app.database.export_mission(mission.id), indent=2))
     return 0
 
 

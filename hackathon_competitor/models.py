@@ -189,6 +189,16 @@ class SourceRecord(Contract):
     status: str = "available"
 
 
+class CompetitionMemory(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    category: str
+    content: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    evidence_ids: list[UUID] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=utcnow)
+
+
 class Decision(Contract):
     id: UUID = Field(default_factory=uuid4)
     mission_id: UUID

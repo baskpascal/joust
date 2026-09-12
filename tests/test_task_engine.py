@@ -1,8 +1,9 @@
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
 
-from hackathon_competitor.models import Mission, Task, TaskStatus
+from hackathon_competitor.models import Mission, Task, TaskStatus, utcnow
 from hackathon_competitor.storage import Database
 from hackathon_competitor.task_engine import DependencyError, TaskEngine
 
@@ -89,3 +90,20 @@ def test_retry_backoff_prevents_immediate_hot_loop(tmp_path):
     failed = engine.fail(task.id, "transient", retryable=True)
     assert failed.retry_after is not None
     assert engine.refresh_ready(mission.id) == []
+
+
+def test_deadline_crossing_during_task_is_audited(tmp_path):
+    database, mission, engine = setup_engine(tmp_path)
+    task = Task(mission_id=mission.id, type="work", capability="work")
+    engine.add_tasks([task])
+    engine.refresh_ready(mission.id)
+    running = engine.claim(task.id)
+    running.started_at = utcnow() - timedelta(hours=2)
+    database.save_task(running)
+    mission.deadline_at = utcnow() - timedelta(hours=1)
+    database.save_mission(mission)
+    engine.succeed(task.id)
+    assert any(
+        event["event_type"] == "DEADLINE_CROSSED_DURING_TASK"
+        for event in database.events(mission.id)
+    )

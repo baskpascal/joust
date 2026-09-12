@@ -73,7 +73,10 @@ def test_url_to_evidence_strategy_and_prd_survives_restart(tmp_path):
     assert status["deadline"] == "2026-10-01T17:00:00+00:00"
     assert status["tasks_succeeded"] == 6
     assert status["evidence_count"] >= 3
-    assert len(status["artifacts"]) == 10
+    assert len(status["artifacts"]) == 12
+    assert {"opportunity_map", "deep_candidate_analysis"}.issubset(
+        {artifact.kind for artifact in artifacts}
+    )
     assert status["tool_calls"] == 5
     assert status["llm_calls"] == 0
 
@@ -110,8 +113,12 @@ def test_resume_completes_v0_without_external_submission(tmp_path):
     status = mission_status(app, completed)
     assert status["next_ready_tasks"] == ["real_official_source_rehearsal"]
     experiments = database.list_experiments(completed.id)
-    assert len(experiments) == 1
-    assert experiments[0].result["passed"] is True
+    assert len(experiments) == 2
+    assert all(experiment.result["passed"] is True for experiment in experiments)
+    memories = database.list_competition_memory(category="validated_strategy_pattern")
+    assert len(memories) == 1
+    assert memories[0].mission_id == completed.id
+    assert "never as a replacement" in memories[0].content
     assert any(event["event_type"] == "TOOL_COMMIT" for event in database.events(completed.id))
     assert (
         "Tournament winner"

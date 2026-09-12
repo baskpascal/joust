@@ -6,7 +6,7 @@ FROM public.ecr.aws/e1h7x4a2/plow-cloud-agents:base-8710797b6409c77df560c6198407
 COPY --chmod=0644 runtime/persona.md /opt/hermes/plow-seed/persona.md
 COPY --chmod=0644 LICENSE NOTICE /usr/share/doc/galahad/
 
-COPY --chmod=0644 pyproject.toml LICENSE /opt/galahad/
+COPY --chmod=0644 pyproject.toml LICENSE README.md compose.yml Dockerfile /opt/galahad/
 COPY hackathon_competitor/ /opt/galahad/hackathon_competitor/
 ENV PYTHONPATH=/opt/galahad
 

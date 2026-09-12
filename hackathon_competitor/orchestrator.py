@@ -35,6 +35,7 @@ class MissionOrchestrator:
             "MISSION_CREATED",
             {"title": mission.title, "source_count": len(source_inputs)},
         )
+        self.database.record_metric(mission.id, "mission_started", 1.0)
         return mission
 
     def resume_mission(self, mission_id: UUID) -> Mission:

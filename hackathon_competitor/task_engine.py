@@ -118,12 +118,29 @@ class TaskEngine:
         task = self.database.get_task(task_id)
         if task.status != TaskStatus.RUNNING:
             raise DependencyError(f"task {task.id} is not running")
+        finished_at = utcnow()
+        mission = self.database.get_mission(task.mission_id)
+        if (
+            mission.deadline_at is not None
+            and task.started_at is not None
+            and task.started_at <= mission.deadline_at < finished_at
+        ):
+            self.database.append_event(
+                task.mission_id,
+                "DEADLINE_CROSSED_DURING_TASK",
+                {
+                    "task_id": str(task.id),
+                    "deadline": mission.deadline_at.isoformat(),
+                    "finished_at": finished_at.isoformat(),
+                },
+            )
         task.status = TaskStatus.SUCCEEDED
-        task.finished_at = utcnow()
+        task.finished_at = finished_at
         task.error = None
         task.retry_after = None
         self.database.save_task(task)
         self.database.append_event(task.mission_id, "TASK_SUCCEEDED", {"task_id": str(task.id)})
+        self.database.record_metric(task.mission_id, "tasks_completed", 1.0)
         return task
 
     def fail(self, task_id: UUID, error: str, retryable: bool = True) -> Task:
@@ -146,6 +163,9 @@ class TaskEngine:
             "TASK_FAILED",
             {"task_id": str(task.id), "retryable": can_retry, "error": error},
         )
+        self.database.record_metric(task.mission_id, "task_failures", 1.0)
+        if can_retry:
+            self.database.record_metric(task.mission_id, "retries", 1.0)
         return task
 
     def recover_running(self, mission_id: UUID) -> list[Task]:
