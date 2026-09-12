@@ -49,6 +49,8 @@ def test_default_registry_exposes_the_sdd_capability_surface(tmp_path):
     registry = default_registry()
     names = {name for group in INITIAL_CAPABILITIES.values() for name in group}
     assert set(registry.names()) == names
+    assert len(names) == 48
+    assert {"screenshot_plan", "video_script", "final_checklist"} <= names
     database = Database(tmp_path / "state.db")
     database.migrate()
     mission = Mission(title="Test", objective="Test", workspace_path=str(tmp_path))

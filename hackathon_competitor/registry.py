@@ -59,6 +59,9 @@ INITIAL_CAPABILITIES: dict[str, tuple[str, ...]] = {
         "submission_copy",
         "demo_tournament",
         "pitch_tournament",
+        "screenshot_plan",
+        "video_script",
+        "final_checklist",
     ),
 }
 
