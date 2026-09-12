@@ -1,8 +1,7 @@
 # Agent Index publication packet
 
-This file prepares public metadata without performing the external publication
-step. Publishing a story, repository, image, video, or install URL requires the
-owner's explicit confirmation.
+This file records the public metadata and publication evidence for the released
+Agent Index entry.
 
 ## Current entry
 
@@ -13,11 +12,12 @@ owner's explicit confirmation.
 - Community listing: live
 - Usage reporting: live
 - Verified: unavailable until 2026-09-14
-- Proposed public repository: `https://github.com/baskpascal/galahad`
-- Proposed default branch: `main`
-- Proposed description: `Evidence-first Hermes agent that helps teams research, build, red-team, and package hackathon entries.`
-- Proposed topics: `ai-agent`, `hackathon`, `hermes`, `plow`, `python`
+- Public repository: `https://github.com/baskpascal/galahad`
+- Default branch: `main`
+- Description: `Evidence-first Hermes agent that helps teams research, build, red-team, and package hackathon entries.`
+- Topics: `ai-agent`, `hackathon`, `hermes`, `plow`, `python`
 - Validated local source bundle: `dist/galahad-public.zip`
+- Install URL: `https://github.com/baskpascal/galahad#readme`
 - One-click install URL: pending Plow-team setup
 - Demo media: pending
 
@@ -34,22 +34,19 @@ owner's explicit confirmation.
   critical prohibition. The mission remained persisted in `BLOCKED` with the
   exact quality finding and no downstream work marked ready. That rehearsal
   exposed and led to fixes in live HTML extraction, container package
-  permissions, and runtime diagnostics. The rebuilt agent passed 71 tests, its
+  permissions, and runtime diagnostics. The rebuilt agent passed 74 tests, its
   live doctor returned healthy, and its supervised usage report returned HTTP
   200.
 
 ## Publication command shape
 
-Use the pinned client with `--agent galahad-hackathon`,
-`--story live-source-safety`, the title and body above, and
-`--tag Engineering`. Do not place the Plow credential or Agent Index key in the
-command; the client uses the existing private registration state.
+The repository, metadata, install URL, and story were published on 2026-09-12.
+The rendered public page confirmed the GitHub install link and the Engineering
+use case. Do not place the Plow credential or Agent Index key in source or
+publication commands.
 
 ## Remaining public assets
 
-1. Create the public `baskpascal/galahad` repository and push the current HEAD
-   to `main` (the target does not exist as of 2026-09-12).
-2. Ask the Plow team for the one-click deployment URL when that program opens.
-3. Add the resulting repository and install URLs to the public entry.
-4. Capture a real mission walkthrough and add screenshots or a short demo.
-5. Request Verified from the public agent page on or after 2026-09-14.
+1. Ask the Plow team for the one-click deployment URL when that program opens.
+2. Capture a real mission walkthrough and add screenshots or a short demo.
+3. Request Verified from the public agent page on or after 2026-09-14.

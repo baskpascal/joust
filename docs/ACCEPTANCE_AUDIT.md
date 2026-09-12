@@ -22,7 +22,8 @@ runtime evidence nor client registration proves a public Verified listing.
 | Public distribution bundle | Committed-tree ZIP passed secret/path checks, clean Python install, CLI smoke, and Docker build | PASS (local artifact) |
 | Agent Index client pinned and integrity checked | `vendor/client.pin`, Docker build checksum step | PASS |
 | Agent Index reporter supervised | Live status registered; supervised usage report returned HTTP 200 for two rows | PASS (live runtime) |
-| Public Agent Index entry | Rendered `/agent-index/galahad-hackathon` page showed Galahad, one active user, and 119K tokens | PASS (public community listing) |
+| Public Agent Index entry | Rendered `/agent-index/galahad-hackathon` page showed Galahad, GitHub install link, one active user, 119K tokens, and the Engineering story | PASS (public community listing) |
+| Public repository publication | `https://github.com/baskpascal/galahad`, public `main`, linked from the Agent Index entry | PASS (public) |
 | Chosen `AGENT_ID` wiring | Explicit compose env, reporter, and doctor check | PASS (local) |
 | Verified listing | Organizer eligibility surface, expected to open 2026-09-14 | EXTERNAL / NOT YET AVAILABLE |
 | Real-user activation trial | Fresh-session reply identified as Galahad and reached delivery state `delivered` | PASS (live owner trial) |

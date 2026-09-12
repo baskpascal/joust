@@ -151,3 +151,11 @@ The publication rehearsal was repeated from a fresh bare remote with
 `core.autocrlf=true`: `HEAD` cloned as default branch `main`, the pin contained
 zero carriage returns, and the Docker image built successfully from that clean
 clone.
+
+The public release was then published to
+`https://github.com/baskpascal/galahad` on `main`. Agent Index metadata was
+updated with that repository and the README install URL, and story
+`live-source-safety` was published with the `Engineering` tag. A fresh rendered
+page verified the public GitHub install link, one active user, 119K tokens, and
+the published use case. Verified status remains unavailable until 2026-09-14;
+one-click Plow deployment and demo media remain external follow-ups.
