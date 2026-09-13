@@ -27,6 +27,8 @@ class GitWorkspace:
                 [
                     "git",
                     "-c",
+                    "core.editor=true",
+                    "-c",
                     "user.name=Galahad Mission Agent",
                     "-c",
                     "user.email=galahad@localhost",

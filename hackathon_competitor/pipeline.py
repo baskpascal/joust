@@ -54,6 +54,7 @@ from .models import (
     Task,
 )
 from .orchestrator import MissionOrchestrator
+from .project_review import review_project_change
 from .quality_gates import rules_gate, strategy_gate, submission_gate
 from .workspace import GitWorkspace
 
@@ -408,6 +409,11 @@ def mission_status(orchestrator: MissionOrchestrator, mission: Mission) -> dict:
         for event in orchestrator.database.events(mission.id)
         if event["event_type"] == "PROJECT_COMPLIANCE_EVALUATED"
     ]
+    project_reviews = [
+        event["payload"]
+        for event in orchestrator.database.events(mission.id)
+        if event["event_type"] == "PROJECT_REVIEW_COMPLETED"
+    ]
     metric_totals: dict[str, float] = {}
     for metric in orchestrator.database.metrics(mission.id):
         name = str(metric["metric"])
@@ -436,6 +442,7 @@ def mission_status(orchestrator: MissionOrchestrator, mission: Mission) -> dict:
         "build_runs": len(orchestrator.database.list_build_runs(mission.id)),
         "change_sets": len(orchestrator.database.list_change_sets(mission.id)),
         "project_compliance": project_compliance[-1] if project_compliance else None,
+        "project_review": project_reviews[-1] if project_reviews else None,
     }
 
 
@@ -473,6 +480,23 @@ def build_project_for_mission(
         implementer,
         max_repairs=max_repairs,
     )
+    review = review_project_change(
+        target,
+        change_set,
+        orchestrator.database.list_build_runs(mission.id),
+    )
+    orchestrator.database.append_event(
+        mission.id,
+        "PROJECT_REVIEW_COMPLETED",
+        review,
+    )
+    if review["blocking_findings"]:
+        change_set.status = "review_failed"
+        orchestrator.database.save_change_set(change_set)
+        raise RuntimeError(
+            "project review blocked the change set: "
+            + "; ".join(str(item) for item in review["blocking_findings"])
+        )
     try:
         spec = orchestrator.database.get_spec_for_mission(mission.id)
     except KeyError:
