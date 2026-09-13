@@ -11,13 +11,19 @@ import tempfile
 from pathlib import Path
 from uuid import UUID
 
-from .build_loop import CommandImplementer, project_environment
+from .build_loop import CommandImplementer, HermesImplementer, project_environment
 from .distribution import build_public_bundle
 from .exporter import export_mission_bundle
 from .github import GitHubCliAdapter
-from .models import MissionState, ProjectMode, ProjectTarget
+from .models import EntrantProfile, MissionState, ProjectMode, ProjectTarget
 from .orchestrator import MissionOrchestrator
-from .pipeline import build_project_for_mission, complete_v0, mission_status, run_vertical_slice
+from .pipeline import (
+    build_project_for_mission,
+    complete_v0,
+    mission_status,
+    prepare_project_submission,
+    run_vertical_slice,
+)
 from .registry import default_registry
 from .rule_updates import refresh_official_rules
 from .storage import MIGRATIONS, Database
@@ -192,6 +198,14 @@ def build_parser() -> argparse.ArgumentParser:
     refresh = mission_commands.add_parser("refresh-rules")
     refresh.add_argument("mission_id", type=UUID)
     refresh.add_argument("--url", required=True)
+    entrant = mission_commands.add_parser("attach-entrant")
+    entrant.add_argument("mission_id", type=UUID)
+    entrant.add_argument("--display-name", required=True)
+    entrant.add_argument("--attribution-name")
+    entrant.add_argument("--github-identity")
+    entrant.add_argument("--discord-identity")
+    entrant.add_argument("--team-member", action="append", default=[])
+    entrant.add_argument("--default-public-attribution")
     attach = mission_commands.add_parser("attach-project")
     attach.add_argument("mission_id", type=UUID)
     attach.add_argument("--path", required=True)
@@ -201,14 +215,20 @@ def build_parser() -> argparse.ArgumentParser:
         default=ProjectMode.EXISTING_REPO.value,
     )
     attach.add_argument("--repo")
+    attach.add_argument("--repo-owner")
+    attach.add_argument("--repo-name")
     attach.add_argument("--default-branch", default="main")
     attach.add_argument(
         "--install-command", action="append", default=[], metavar="JSON_ARGV",
         help='repeatable JSON argv, e.g. ["python","-m","pip","install","-e", "."]',
     )
     attach.add_argument("--build-command", action="append", default=[], metavar="JSON_ARGV")
+    attach.add_argument("--dev-command", action="append", default=[], metavar="JSON_ARGV")
     attach.add_argument("--test-command", action="append", default=[], metavar="JSON_ARGV")
+    attach.add_argument("--lint-command", action="append", default=[], metavar="JSON_ARGV")
     attach.add_argument("--run-command", action="append", default=[], metavar="JSON_ARGV")
+    attach.add_argument("--deployment-requirement")
+    attach.add_argument("--deploy-target")
     attach.add_argument(
         "--environment-name",
         action="append",
@@ -218,9 +238,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     build = mission_commands.add_parser("build-project")
     build.add_argument("mission_id", type=UUID)
-    build.add_argument("--implementation-command", required=True, metavar="JSON_ARGV")
+    implementer = build.add_mutually_exclusive_group(required=True)
+    implementer.add_argument("--implementation-command", metavar="JSON_ARGV")
+    implementer.add_argument("--hermes", action="store_true")
+    build.add_argument("--hermes-model")
+    build.add_argument("--hermes-reasoning")
     build.add_argument("--spec")
     build.add_argument("--max-repairs", type=int, default=0)
+    prepare = mission_commands.add_parser("prepare-project-submission")
+    prepare.add_argument("mission_id", type=UUID)
 
     db = commands.add_parser("db")
     db_commands = db.add_subparsers(dest="db_command", required=True)
@@ -258,22 +284,46 @@ def main(argv: list[str] | None = None) -> int:
             mode=ProjectMode(args.mode),
             local_path=str(Path(args.path).resolve()),
             repository_url=args.repo,
+            repository_owner=args.repo_owner,
+            repository_name=args.repo_name,
             default_branch=args.default_branch,
             install_commands=_parse_command_vectors(args.install_command),
+            dev_commands=_parse_command_vectors(args.dev_command),
             build_commands=_parse_command_vectors(args.build_command),
             test_commands=_parse_command_vectors(args.test_command),
+            lint_commands=_parse_command_vectors(args.lint_command),
             run_commands=_parse_command_vectors(args.run_command),
+            deployment_requirement=args.deployment_requirement,
+            deploy_target=args.deploy_target,
             environment_allowlist=list(args.environment_name),
         )
         app.attach_project_target(target)
         print(json.dumps(target.model_dump(mode="json"), indent=2))
         return 0
+    if args.mission_command == "attach-entrant":
+        profile = EntrantProfile(
+            display_name=args.display_name,
+            attribution_name=args.attribution_name,
+            github_identity=args.github_identity,
+            discord_identity=args.discord_identity,
+            team_members=list(args.team_member),
+            default_public_attribution=args.default_public_attribution,
+        )
+        app.attach_entrant_profile(args.mission_id, profile)
+        print(json.dumps(profile.model_dump(mode="json"), indent=2))
+        return 0
     if args.mission_command == "build-project":
         if args.max_repairs < 0:
             raise ValueError("--max-repairs cannot be negative")
         target = app.database.get_project_target_for_mission(args.mission_id)
-        implementation_command = _parse_command_vectors([args.implementation_command])[0]
-        implementer = CommandImplementer(implementation_command)
+        if args.hermes:
+            implementer = HermesImplementer(
+                model=args.hermes_model,
+                reasoning=args.hermes_reasoning,
+            )
+        else:
+            implementation_command = _parse_command_vectors([args.implementation_command])[0]
+            implementer = CommandImplementer(implementation_command)
         specification = args.spec
         if specification and Path(specification).is_file():
             specification = Path(specification).read_text(encoding="utf-8")
@@ -289,6 +339,10 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(json.dumps(change_set.model_dump(mode="json"), indent=2))
         return 0
+    if args.mission_command == "prepare-project-submission":
+        prepared = prepare_project_submission(app, args.mission_id)
+        print(json.dumps(mission_status(app, prepared), indent=2))
+        return 0 if prepared.state == MissionState.READY_FOR_SUBMISSION else 1
     if args.mission_command == "resume":
         resumed = app.resume_mission(args.mission_id)
         mission = (

@@ -3002,3 +3002,7 @@ when the project has not completed the repair loop or when its GitHub state is
 unknown. The original V0 distribution/demo pack is never accepted as a
 substitute when a real `ProjectTarget` is attached; a target-bound submission
 pack must name its repository, branch, commit SHA, and reproduction evidence.
+The `prepare-project-submission` path owns this pack and may enter
+`READY_FOR_SUBMISSION` only after the final target review, known-deadline
+compliance, declared test/demo commands, and their clean-clone counterparts
+all pass.

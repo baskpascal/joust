@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .models import (
@@ -154,7 +155,12 @@ def inspect_project_target(
             # as proof of compliance.
             statuses[rule.id] = RuleStatus.UNKNOWN
         elif rule.type == RuleType.DEADLINE:
-            statuses[rule.id] = RuleStatus.UNKNOWN
+            if spec.deadline_at is None:
+                statuses[rule.id] = RuleStatus.UNKNOWN
+            else:
+                statuses[rule.id] = (
+                    RuleStatus.PASS if datetime.now(UTC) < spec.deadline_at else RuleStatus.FAIL
+                )
         else:
             statuses[rule.id] = RuleStatus.UNKNOWN
     return evaluate_compliance(rules_from_spec(spec), statuses)

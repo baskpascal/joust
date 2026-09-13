@@ -6,6 +6,7 @@ import pytest
 from hackathon_competitor.build_loop import (
     BuildLoopError,
     CommandImplementer,
+    HermesImplementer,
     RealBuildLoop,
     project_environment,
     validate_project_commands,
@@ -78,6 +79,9 @@ def test_real_build_loop_commits_runs_tests_and_repairs(tmp_path, monkeypatch):
     assert change_set.status == "validated"
     assert change_set.commit_sha
     assert implementer.repaired
+    persisted_target = database.get_project_target(target.id)
+    assert persisted_target.base_commit_sha
+    assert persisted_target.final_commit_sha == change_set.commit_sha
     runs = database.list_build_runs(mission.id)
     assert len(runs) == 3
     assert {run.phase for run in runs} == {"test", "reproduce_test"}
@@ -150,6 +154,42 @@ def test_command_implementer_includes_validation_failure_in_repair_prompt(tmp_pa
     output = implementer.repair(tmp_path, "Build the app.", "pytest failed")
     assert "pytest failed" in output
     assert "Repair the implementation" in output
+
+
+def test_hermes_implementer_passes_prompt_text_to_one_shot_mode(tmp_path, monkeypatch):
+    implementer = HermesImplementer(
+        executable="hermes-test",
+        model="provider/model",
+        reasoning="high",
+        environment={"MODEL_RUNTIME": "available"},
+    )
+    captured = {}
+
+    def fake_run(_shell, argv, *, timeout_seconds):
+        captured["argv"] = argv
+        captured["timeout"] = timeout_seconds
+        return "implemented"
+
+    monkeypatch.setattr(
+        "hackathon_competitor.build_loop.LocalShellTool.run",
+        fake_run,
+    )
+
+    output = implementer.implement(tmp_path, "Build the entry")
+
+    assert output == "implemented"
+    assert captured["argv"][:7] == [
+        "hermes-test",
+        "--in",
+        str(tmp_path.resolve()),
+        "--model",
+        "provider/model",
+        "--reasoning",
+        "high",
+    ]
+    assert captured["argv"][-2] == "-z"
+    assert "Build the entry" in captured["argv"][-1]
+    assert captured["timeout"] == 900
 
 
 def test_project_environment_filters_credentials_and_allows_safe_names(monkeypatch):

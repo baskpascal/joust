@@ -32,6 +32,9 @@ python -m hackathon_competitor.cli mission attach-project <mission-id> \
 python -m hackathon_competitor.cli mission build-project <mission-id> \
   --implementation-command '["codex","exec","--full-auto"]' \
   --max-repairs 0
+python -m hackathon_competitor.cli mission build-project <mission-id> \
+  --hermes --max-repairs 1
+python -m hackathon_competitor.cli mission prepare-project-submission <mission-id>
 python -m hackathon_competitor.cli doctor
 ```
 
@@ -44,6 +47,15 @@ non-secret environment; use repeatable `--environment-name NAME` only for an
 explicitly approved, non-sensitive variable. It never pushes or opens a pull
 request; use the approval-bound GitHub publication service for those external
 actions.
+
+`--hermes` uses Hermes one-shot mode as the trusted coding process. Model
+credentials are available only to Hermes; target install/lint/build/test/run
+commands continue to receive the reduced non-secret project environment.
+
+After a validated target build, `prepare-project-submission` generates a pack
+whose repository, branch, commit SHA, diff hash, and reproduction evidence are
+all bound to that target. The V0 Galahad demo pack cannot stand in for this
+target-bound pack.
 
 Use `HACKATHON_COMPETITOR_HOME` to override the default local state directory.
 

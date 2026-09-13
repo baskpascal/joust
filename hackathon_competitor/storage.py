@@ -11,12 +11,17 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from .models import (
+    ActionExecution,
     Approval,
     Artifact,
     BuildRun,
     ChangeSet,
+    CompetitionCycle,
     CompetitionMemory,
+    CompetitionObservation,
+    CompetitionRule,
     Decision,
+    EntrantProfile,
     Evaluation,
     Evidence,
     Experiment,
@@ -151,6 +156,46 @@ MIGRATIONS: tuple[str, ...] = (
         id TEXT PRIMARY KEY, mission_id TEXT NOT NULL, project_target_id TEXT NOT NULL,
         status TEXT NOT NULL, payload TEXT NOT NULL
     );
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS entrant_profiles (
+        id TEXT PRIMARY KEY, payload TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS competition_rules (
+        id TEXT PRIMARY KEY, mission_id TEXT NOT NULL, status TEXT NOT NULL,
+        observed_at TEXT NOT NULL, payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_competition_rules_mission
+      ON competition_rules(mission_id, observed_at);
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS competition_cycles (
+        id TEXT PRIMARY KEY, mission_id TEXT NOT NULL, sequence INTEGER NOT NULL,
+        stage TEXT NOT NULL, payload TEXT NOT NULL,
+        UNIQUE(mission_id, sequence)
+    );
+    CREATE INDEX IF NOT EXISTS idx_competition_cycles_mission
+      ON competition_cycles(mission_id, sequence);
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS competition_observations (
+        id TEXT PRIMARY KEY, mission_id TEXT NOT NULL, cycle_id TEXT NOT NULL,
+        observed_at TEXT NOT NULL, payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_competition_observations_mission
+      ON competition_observations(mission_id, observed_at);
+    CREATE INDEX IF NOT EXISTS idx_competition_observations_cycle
+      ON competition_observations(cycle_id);
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS action_executions (
+        id TEXT PRIMARY KEY, mission_id TEXT NOT NULL, cycle_id TEXT NOT NULL,
+        status TEXT NOT NULL, started_at TEXT NOT NULL, payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_action_executions_mission
+      ON action_executions(mission_id, started_at);
+    CREATE INDEX IF NOT EXISTS idx_action_executions_cycle
+      ON action_executions(cycle_id);
     """,
 )
 
@@ -356,6 +401,80 @@ class Database:
             mission_id=memory.mission_id,
             category=memory.category,
         )
+
+    def save_entrant_profile(self, profile: EntrantProfile) -> None:
+        self._save("entrant_profiles", profile)
+
+    def get_entrant_profile(self, profile_id: UUID | str) -> EntrantProfile:
+        return self._get("entrant_profiles", profile_id, EntrantProfile)
+
+    def list_entrant_profiles(self) -> list[EntrantProfile]:
+        return self._list("entrant_profiles", EntrantProfile)
+
+    def attach_entrant_profile(
+        self, mission_id: UUID | str, profile_id: UUID | str
+    ) -> Mission:
+        mission = self.get_mission(mission_id)
+        profile = self.get_entrant_profile(profile_id)
+        mission.entrant_profile_id = profile.id
+        self.save_mission(mission)
+        return mission
+
+    def save_competition_rule(self, rule: CompetitionRule) -> None:
+        self._save(
+            "competition_rules",
+            rule,
+            mission_id=rule.mission_id,
+            status=rule.status.value,
+            observed_at=rule.observed_at.isoformat(),
+        )
+
+    def list_competition_rules(self, mission_id: UUID | str) -> list[CompetitionRule]:
+        return self._list_for_mission("competition_rules", mission_id, CompetitionRule)
+
+    def save_competition_cycle(self, cycle: CompetitionCycle) -> None:
+        self._save(
+            "competition_cycles",
+            cycle,
+            mission_id=cycle.mission_id,
+            sequence=cycle.sequence,
+            stage=cycle.stage.value,
+        )
+
+    def get_competition_cycle(self, cycle_id: UUID | str) -> CompetitionCycle:
+        return self._get("competition_cycles", cycle_id, CompetitionCycle)
+
+    def list_competition_cycles(self, mission_id: UUID | str) -> list[CompetitionCycle]:
+        return self._list_for_mission("competition_cycles", mission_id, CompetitionCycle)
+
+    def save_competition_observation(self, observation: CompetitionObservation) -> None:
+        self._save(
+            "competition_observations",
+            observation,
+            mission_id=observation.mission_id,
+            cycle_id=observation.cycle_id,
+            observed_at=observation.observed_at.isoformat(),
+        )
+
+    def list_competition_observations(
+        self, mission_id: UUID | str
+    ) -> list[CompetitionObservation]:
+        return self._list_for_mission(
+            "competition_observations", mission_id, CompetitionObservation
+        )
+
+    def save_action_execution(self, execution: ActionExecution) -> None:
+        self._save(
+            "action_executions",
+            execution,
+            mission_id=execution.mission_id,
+            cycle_id=execution.cycle_id,
+            status=execution.status.value,
+            started_at=execution.started_at.isoformat(),
+        )
+
+    def list_action_executions(self, mission_id: UUID | str) -> list[ActionExecution]:
+        return self._list_for_mission("action_executions", mission_id, ActionExecution)
 
     def save_project_target(self, target: ProjectTarget) -> None:
         self._save(
@@ -567,6 +686,27 @@ class Database:
                 item.model_dump(mode="json")
                 for item in self.list_competition_memory()
                 if item.mission_id == mission.id
+            ],
+            "entrant_profile": (
+                self.get_entrant_profile(mission.entrant_profile_id).model_dump(mode="json")
+                if mission.entrant_profile_id
+                else None
+            ),
+            "competition_rules": [
+                item.model_dump(mode="json")
+                for item in self.list_competition_rules(mission.id)
+            ],
+            "competition_cycles": [
+                item.model_dump(mode="json")
+                for item in self.list_competition_cycles(mission.id)
+            ],
+            "competition_observations": [
+                item.model_dump(mode="json")
+                for item in self.list_competition_observations(mission.id)
+            ],
+            "action_executions": [
+                item.model_dump(mode="json")
+                for item in self.list_action_executions(mission.id)
             ],
             "project_targets": [
                 item.model_dump(mode="json") for item in self.list_project_targets(mission.id)

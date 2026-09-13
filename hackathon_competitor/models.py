@@ -38,6 +38,58 @@ class MissionState(StrEnum):
     CANCELLED = "CANCELLED"
 
 
+class MissionStatus(StrEnum):
+    ACTIVE = "ACTIVE"
+    COMPLETED = "COMPLETED"
+    EXPIRED = "EXPIRED"
+    STOPPED_BY_USER = "STOPPED_BY_USER"
+    IRRECOVERABLY_BLOCKED = "IRRECOVERABLY_BLOCKED"
+
+
+class CompetitionType(StrEnum):
+    BUILD = "BUILD"
+    AGENT_USAGE = "AGENT_USAGE"
+    DATA_SCIENCE = "DATA_SCIENCE"
+    OPTIMIZATION = "OPTIMIZATION"
+    SECURITY = "SECURITY"
+    GAME = "GAME"
+    BENCHMARK = "BENCHMARK"
+    GENERIC = "GENERIC"
+
+
+class CompetitionRuleStatus(StrEnum):
+    ACTIVE = "ACTIVE"
+    SUPERSEDED = "SUPERSEDED"
+    CONFLICTED = "CONFLICTED"
+    UNKNOWN = "UNKNOWN"
+
+
+class CompeteStage(StrEnum):
+    OBSERVE = "OBSERVE"
+    ASSESS = "ASSESS"
+    STRATEGIZE = "STRATEGIZE"
+    EXECUTE = "EXECUTE"
+    VERIFY = "VERIFY"
+    MEASURE = "MEASURE"
+    ADAPT = "ADAPT"
+
+
+class CompetitionActionType(StrEnum):
+    BUILD_PROJECT = "BUILD_PROJECT"
+    RESEARCH = "RESEARCH"
+    TEST_PROJECT = "TEST_PROJECT"
+    PREPARE_SUBMISSION = "PREPARE_SUBMISSION"
+    PUBLISH = "PUBLISH"
+    DEPLOY = "DEPLOY"
+    CUSTOM = "CUSTOM"
+
+
+class ActionExecutionStatus(StrEnum):
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+
+
 class ProjectMode(StrEnum):
     EXISTING_REPO = "existing_repo"
     NEW_REPO = "new_repo"
@@ -115,6 +167,7 @@ class Mission(Contract):
     id: UUID = Field(default_factory=uuid4)
     title: str
     state: MissionState = MissionState.CREATED
+    status: MissionStatus = MissionStatus.ACTIVE
     objective: str
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
@@ -122,9 +175,31 @@ class Mission(Contract):
     timezone: str | None = None
     source_inputs: list[str] = Field(default_factory=list)
     hackathon_spec_id: UUID | None = None
+    competition_id: UUID | None = None
+    entrant_profile_id: UUID | None = None
     selected_strategy_id: UUID | None = None
+    active_strategy_id: UUID | None = None
     project_target_id: UUID | None = None
+    submission_id: UUID | None = None
+    current_bottleneck: str | None = None
+    current_best_action: str | None = None
+    mission_score: float | None = Field(default=None, ge=0.0)
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    blockers: list[str] = Field(default_factory=list)
+    unresolved_questions: list[str] = Field(default_factory=list)
+    evidence_ids: list[UUID] = Field(default_factory=list)
     workspace_path: str
+
+
+class EntrantProfile(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    display_name: str
+    attribution_name: str | None = None
+    github_identity: str | None = None
+    discord_identity: str | None = None
+    platform_identities: dict[str, str] = Field(default_factory=dict)
+    team_members: list[str] = Field(default_factory=list)
+    default_public_attribution: str | None = None
 
 
 class ProjectTarget(Contract):
@@ -135,15 +210,22 @@ class ProjectTarget(Contract):
     mode: ProjectMode
     local_path: str
     repository_url: str | None = None
+    repository_owner: str | None = None
+    repository_name: str | None = None
     default_branch: str = "main"
     working_branch: str | None = None
     language: str | None = None
     framework: str | None = None
     install_commands: list[list[str]] = Field(default_factory=list)
+    dev_commands: list[list[str]] = Field(default_factory=list)
     build_commands: list[list[str]] = Field(default_factory=list)
     test_commands: list[list[str]] = Field(default_factory=list)
+    lint_commands: list[list[str]] = Field(default_factory=list)
     run_commands: list[list[str]] = Field(default_factory=list)
+    deployment_requirement: str | None = None
     deploy_target: str | None = None
+    base_commit_sha: str | None = None
+    final_commit_sha: str | None = None
     # Optional names explicitly approved for the target's local build process.
     # The default environment is intentionally reduced to a small, non-secret
     # base set by ``build_loop.project_environment``.
@@ -196,19 +278,133 @@ class HackathonSpec(Contract):
     name: str
     organizer: str | None = None
     canonical_url: str | None = None
+    competition_type: CompetitionType = CompetitionType.GENERIC
+    start_at: datetime | None = None
+    build_deadline_at: datetime | None = None
+    submission_deadline_at: datetime | None = None
+    final_snapshot_at: datetime | None = None
+    result_at: datetime | None = None
     deadline_at: datetime | None = None
     deadline_explicitly_unknown: bool = False
     judging_mode: str | None = None
+    leaderboard_model: str | None = None
     judging_criteria: list[Criterion] = Field(default_factory=list)
+    scoring_rules: list[str] = Field(default_factory=list)
     required_technologies: list[str] = Field(default_factory=list)
+    mandatory_integrations: list[str] = Field(default_factory=list)
     allowed_technologies: list[str] = Field(default_factory=list)
     prohibited_actions: list[str] = Field(default_factory=list)
     submission_requirements: list[Requirement] = Field(default_factory=list)
     eligibility_requirements: list[Requirement] = Field(default_factory=list)
     sponsor_resources: list[Resource] = Field(default_factory=list)
+    submission_platform: str | None = None
+    rule_sources: list[str] = Field(default_factory=list)
+    uncertainty: list[str] = Field(default_factory=list)
     rules_locked: bool = False
     version: int = Field(default=1, ge=1)
     evidence_ids: list[UUID] = Field(default_factory=list)
+
+
+class CompetitionRule(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    source_id: UUID | None = None
+    observed_at: datetime = Field(default_factory=utcnow)
+    effective_at: datetime | None = None
+    category: str
+    statement: str
+    normalized_constraint: str
+    authority: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    supersedes_rule_id: UUID | None = None
+    status: CompetitionRuleStatus = CompetitionRuleStatus.ACTIVE
+
+
+class CompetitionSpec(HackathonSpec):
+    """Joust-facing name for the backward-compatible competition contract."""
+
+
+class ActionCandidate(Contract):
+    name: str
+    description: str
+    action_type: CompetitionActionType = CompetitionActionType.CUSTOM
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    expected_outcome_improvement: float = Field(ge=0.0)
+    time_cost: float = Field(gt=0.0)
+    technical_risk: float = Field(ge=0.0)
+    regression_probability: float = Field(ge=0.0, le=1.0)
+
+    @property
+    def utility(self) -> float:
+        denominator = self.time_cost + self.technical_risk + self.regression_probability
+        return self.expected_outcome_improvement / denominator
+
+
+class CompetitionCycle(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    sequence: int = Field(ge=1)
+    stage: CompeteStage = CompeteStage.OBSERVE
+    observation: str | None = None
+    observation_evidence_ids: list[UUID] = Field(default_factory=list)
+    bottleneck: str | None = None
+    candidate_actions: list[ActionCandidate] = Field(default_factory=list)
+    selected_action: ActionCandidate | None = None
+    execution_result: str | None = None
+    execution_succeeded: bool | None = None
+    verification_finding: str | None = None
+    verification_evidence_ids: list[UUID] = Field(default_factory=list)
+    verified: bool | None = None
+    metric_before: float | None = None
+    metric_after: float | None = None
+    measured_delta: float | None = None
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
+    completed_at: datetime | None = None
+
+
+class CompetitionObservation(Contract):
+    """A durable observation of competition and project state for one cycle."""
+
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    cycle_id: UUID
+    observed_at: datetime = Field(default_factory=utcnow)
+    deadline_at: datetime | None = None
+    deadline_state: str = "unknown"
+    active_rule_ids: list[UUID] = Field(default_factory=list)
+    project_target_id: UUID | None = None
+    repository_exists: bool = False
+    repository_revision: str | None = None
+    repository_dirty: bool | None = None
+    latest_change_status: str | None = None
+    build_summary: dict[str, int] = Field(default_factory=dict)
+    github_checks: list[dict[str, Any]] = Field(default_factory=list)
+    deployment_health: dict[str, Any] | None = None
+    submission_state: str | None = None
+    score_signals: dict[str, float] = Field(default_factory=dict)
+    findings: list[str] = Field(default_factory=list)
+    uncertainties: list[str] = Field(default_factory=list)
+    evidence_ids: list[UUID] = Field(default_factory=list)
+
+
+class ActionResult(Contract):
+    summary: str
+    details: dict[str, Any] = Field(default_factory=dict)
+    change_set_id: UUID | None = None
+    evidence_ids: list[UUID] = Field(default_factory=list)
+
+
+class ActionExecution(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    cycle_id: UUID
+    action: ActionCandidate
+    status: ActionExecutionStatus = ActionExecutionStatus.RUNNING
+    result: ActionResult | None = None
+    error: str | None = None
+    started_at: datetime = Field(default_factory=utcnow)
+    finished_at: datetime | None = None
 
 
 class Task(Contract):

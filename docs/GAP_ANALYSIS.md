@@ -73,13 +73,12 @@ The current evidence boundary is:
 | Build failure and red-team repair | Bounded repair loop retries command failures and blocking findings; final evidence is scoped to the repaired commit | PASS (local contract) |
 | Credential/command boundary | Explicit argv, reduced environment, sensitive-name rejection, and command-argument validation are covered by local tests | PASS (local contract) |
 | GitHub project connection | Typed `gh` adapter supports lookup, read-only clone/bootstrap, branches, push, PR, and checks; publication is approval-bound | PARTIAL (live clone/push/PR not exercised) |
-| Coding agent integration | `CommandImplementer` and CLI handoff contract are executable; the E2E uses a deterministic command | PARTIAL (no model-backed Hermes coding session yet) |
-| Target-bound submission pack | V0 readiness now blocks when a real target is attached; a real target can be validated but its submission copy is not yet automatically bound to target SHA | GAP (guarded) |
+| Coding agent integration | Dedicated `HermesImplementer` plus a live Joust cycle created and validated a three-file Python project with 16 generated tests and clean-clone reproduction | PASS (live model-backed local E2E) |
+| Target-bound submission pack | `prepare-project-submission` generates repository/branch/SHA/diff-bound artifacts and requires final review, compliance, tests, demo, and clean-clone evidence | PASS (local E2E) |
 | One-click Plow deploy, demo media, Verified | External organizer/Plow steps, not represented by local code | EXTERNAL / PENDING |
 
-The two partial rows are deliberate authority boundaries, not hidden claims:
+The remaining partial rows are deliberate authority boundaries, not hidden claims:
 the local build can prove a commit and reproducibility without pretending that a
-remote GitHub write or a model-backed coding session happened. The next
-implementation milestone is the target-bound submission flow and a real
-Hermes coding-agent adapter; only then can the full project-to-submission path
-be marked complete.
+remote GitHub write happened. The next implementation milestone is live,
+approval-bound GitHub execution and continued observation; only then can the
+remote execution path be marked complete.

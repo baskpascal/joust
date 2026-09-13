@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from hackathon_competitor.compliance import inspect_project_target
@@ -70,3 +71,24 @@ def test_project_inspector_does_not_use_agent_license(tmp_path):
     )
     report = inspect_project_target(spec, target)
     assert report.rules[0].status.value == "fail"
+
+
+def test_project_inspector_evaluates_known_deadline(tmp_path):
+    mission_id = uuid4()
+    project = tmp_path / "project"
+    project.mkdir()
+    target = ProjectTarget(
+        mission_id=mission_id,
+        mode=ProjectMode.LOCAL_ONLY,
+        local_path=str(project),
+    )
+    future = HackathonSpec(
+        mission_id=mission_id,
+        name="Future",
+        deadline_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    past = future.model_copy(
+        update={"deadline_at": datetime.now(UTC) - timedelta(hours=1)}
+    )
+    assert inspect_project_target(future, target).rules[-1].status.value == "pass"
+    assert inspect_project_target(past, target).rules[-1].status.value == "fail"

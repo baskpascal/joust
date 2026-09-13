@@ -51,3 +51,15 @@ test command before the change set is considered validated. A dirty existing
 workspace is refused rather than overwritten. GitHub push, pull-request,
 deploy, and merge remain separate approval-gated actions; the local build loop
 does not perform them implicitly.
+
+## ADR-007 — Joust is the next architecture, not an implicit public rename
+
+The user supplied a new Joust SDD whose available attachment ends at section
+14. Sections 1–13 supersede the product direction where they are more specific:
+the system is a persistent competition agent organized around control,
+execution, and observation planes and a continuing compete loop.
+
+The deployed Agent Index identity remains Galahad until an explicit external
+rebrand decision is made. Internal contracts are extended compatibly first;
+the repository, agent id, and published profile are not silently renamed. The
+missing portion of the truncated SDD is not inferred.

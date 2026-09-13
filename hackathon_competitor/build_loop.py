@@ -140,6 +140,60 @@ class CommandImplementer:
         ).implement(repair_specification)
 
 
+class HermesImplementer:
+    """Use Hermes one-shot mode as the trusted model-backed coding process.
+
+    The Hermes process receives its runtime inference environment. Project
+    install/lint/build/test commands still run through ``project_environment``
+    and therefore never inherit those credentials.
+    """
+
+    def __init__(
+        self,
+        *,
+        executable: str = "/opt/hermes/bin/hermes",
+        model: str | None = None,
+        reasoning: str | None = None,
+        environment: Mapping[str, str] | None = None,
+    ):
+        self.executable = executable
+        self.model = model
+        self.reasoning = reasoning
+        self.environment = dict(environment) if environment is not None else os.environ.copy()
+
+    def _run(self, project_root: Path, prompt: str) -> str:
+        argv = [self.executable, "--in", str(project_root.resolve())]
+        if self.model:
+            argv.extend(["--model", self.model])
+        if self.reasoning:
+            argv.extend(["--reasoning", self.reasoning])
+        argv.extend(["-z", prompt])
+        return LocalShellTool(project_root, environment=self.environment).run(
+            argv,
+            timeout_seconds=900,
+        )
+
+    def implement(
+        self,
+        project_root: Path,
+        specification: str,
+        failure: str | None = None,
+    ) -> str:
+        prompt = (
+            "You are the implementation executor for a competition project. "
+            "Work directly in the current project directory. Implement the requested "
+            "slice completely, including tests. Inspect existing files first, make the "
+            "smallest coherent changes, and do not publish or push anything.\n\n"
+            f"SPECIFICATION:\n{specification}"
+        )
+        if failure:
+            prompt += f"\n\nPRIOR FAILURE:\n{failure}"
+        return self._run(project_root, prompt)
+
+    def repair(self, project_root: Path, specification: str, failure: str) -> str:
+        return self.implement(project_root, specification, failure=failure)
+
+
 class RealBuildLoop:
     """Build a mission-owned project, record a change set, and prove reproducibility."""
 
@@ -304,6 +358,7 @@ class RealBuildLoop:
             (root / ".galahad").mkdir(parents=True, exist_ok=True)
             (root / ".galahad" / ".keep").write_text("", encoding="utf-8")
             base_sha = git_workspace.checkpoint("Initialize competition project workspace")
+        target.base_commit_sha = base_sha
         branch = target.working_branch or f"galahad/{target.mission_id}"
         target.working_branch = branch
         self.database.save_project_target(target)
@@ -316,13 +371,14 @@ class RealBuildLoop:
 
         commands = [
             *(('install', command) for command in target.install_commands),
+            *(('lint', command) for command in target.lint_commands),
             *(('build', command) for command in target.build_commands),
             *(('test', command) for command in target.test_commands),
             *(('run', command) for command in target.run_commands),
         ]
         if not commands:
             raise BuildLoopError(
-                "project target must declare an install, build, test, or run command"
+                "project target must declare an install, lint, build, test, or run command"
             )
         validate_project_commands([command for _, command in commands])
 
@@ -369,6 +425,8 @@ class RealBuildLoop:
                     )
                     blockers = [str(item) for item in review["blocking_findings"]]
                     if not blockers:
+                        target.final_commit_sha = commit_sha
+                        self.database.save_project_target(target)
                         self.database.append_event(
                             target.mission_id,
                             "PROJECT_BUILD_VALIDATED",

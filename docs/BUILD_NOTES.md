@@ -124,7 +124,7 @@ subdirectory. Doctor now checks the non-secret presence of the runtime marker
 without reading it and runs the official client smoke check against the actual
 Hermes home.
 
-The final rebuilt-image `doctor` returned healthy with migration v5, all six
+The final rebuilt-image `doctor` returned healthy with migration v6, all six
 skills, Plow tools available, the stable agent id present, Agent Index status
 `registered`, and the credential present at mode `0600`. The supervised report
 again returned HTTP 200 for 119,363 tokens across two rows.
@@ -180,14 +180,65 @@ absence alone.
 Project execution now also has an environment boundary: build, test, run, and
 coding-agent subprocesses inherit only a small platform-safe base plus an
 explicit non-sensitive allowlist. Credential-shaped names are rejected before
-execution. The local suite is at 94 tests after adding a red-team repair
+execution. The local suite was at 99 tests after adding a red-team repair
 contract that prevents failed historical attempts from contaminating final
 commit evidence, a target-bound submission readiness gate, and command
 credential/repair-budget validation.
+
+The real-project path now has its own submission writer and CLI command. It
+binds every generated pack to the target repository, mission branch, commit
+SHA, diff hash, and recorded build/reproduction runs. A fresh integration test
+advanced a built target from `VALIDATING` through compliance to
+`READY_FOR_SUBMISSION`; a known future deadline passed and an expired deadline
+failed.
 
 The post-change end-to-end smoke drove the public CLI through a fresh mission,
 attached a temporary `new_repo` target, ran a file-based implementation
 command, committed the mission branch, and passed the declared test both in
 the working tree and in a clean clone. The rebuilt image's `doctor` is healthy
-with database migration 5. The reproducible public bundle contains 112 files
+with database migration 6. The reproducible public bundle contains 112 files
 ; run `cli bundle` to print its current SHA-256.
+
+## 2026-09-13 — Joust architecture delta
+
+The available Joust SDD attachment was read in full; it contains 679 lines and
+ends at the incomplete heading `# 14`. Sections 1–13 were mapped in
+`JOUST_ARCHITECTURE_DELTA.md` without inventing the missing text. Compatible
+contracts now separate terminal `MissionStatus` from phase, add the richer
+`CompetitionSpec`, persist `EntrantProfile` and versioned `CompetitionRule`,
+trigger strategy reassessment on critical supersession, and complete the
+required `ProjectTarget` identity/command/deployment/SHA fields. Migration 6
+adds the new profile and rule stores.
+
+Migration 7 adds durable competition cycles. `CompeteLoop` now enforces and
+persists the seven Joust stages, deterministic action selection, evidence-bound
+verification, measured deltas, repeated cycles, and terminal mission status.
+The suite contains 102 collected tests. This is controller evidence only: live
+observation adapters, Hermes model-backed target construction, and authenticated
+GitHub mission writes remain explicit acceptance gaps.
+
+Migrations 8 and 9 add durable competition observations and action executions.
+The observation plane captures deadline, rules, local Git state, build/change
+state, score signals, GitHub checks, and deployment health through read-only
+ports. The action dispatcher records the selected action and routes
+`BUILD_PROJECT` through `RealBuildLoop` idempotently. The suite now contains 106
+tests. Competition-page/announcement adapters, non-build executors, live Hermes
+construction, and authenticated GitHub writes remain unproven.
+
+## 2026-09-13 — Live Hermes construction evidence
+
+Image `galahad-agent:joust-live` was rebuilt at
+`sha256:fa958838162fecabdff72722b7d5f4dd2d4693fef504678aba1ee09239fe0516`.
+Container `doctor` was healthy at database migration 9 and the Agent Index
+reporter returned HTTP 200. After using the s6-managed Plow inference
+environment, a Hermes one-shot returned `HERMES_READY`.
+
+The isolated live-smoke mission
+`4881b861-a3a6-41e9-8f2d-0ed150c49f76` selected and durably dispatched a
+`BUILD_PROJECT` action to `HermesImplementer`. Hermes created `README.md`,
+`entry.py`, and `test_entry.py`; Joust committed
+`46e82c4adf5799baf211e847b03c1e2f862cfe23`. Sixteen generated unit/CLI tests
+passed in the target, and the database records passing `test` and
+`reproduce_test` runs at that same SHA. The first competition cycle completed
+and sequence 2 began at `OBSERVE`, proving that a successful build does not
+terminate the mission. No GitHub push, PR, deployment, or submission occurred.

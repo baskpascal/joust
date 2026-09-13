@@ -5,7 +5,7 @@ from pathlib import Path
 from uuid import UUID
 
 from .capability import CapabilityRegistry, MissionContext
-from .models import Mission, MissionState, ProjectTarget
+from .models import EntrantProfile, Mission, MissionState, ProjectTarget
 from .storage import Database, transition_mission
 from .task_engine import TaskEngine
 
@@ -69,6 +69,21 @@ class MissionOrchestrator:
             },
         )
         return target
+
+    def attach_entrant_profile(self, mission_id: UUID, profile: EntrantProfile) -> EntrantProfile:
+        mission = self.database.get_mission(mission_id)
+        self.database.save_entrant_profile(profile)
+        mission.entrant_profile_id = profile.id
+        self.database.save_mission(mission)
+        self.database.append_event(
+            mission.id,
+            "ENTRANT_PROFILE_ATTACHED",
+            {
+                "entrant_profile_id": str(profile.id),
+                "display_name": profile.display_name,
+            },
+        )
+        return profile
 
     def transition_state(self, mission: Mission, target: MissionState) -> Mission:
         return transition_mission(self.database, mission, target)

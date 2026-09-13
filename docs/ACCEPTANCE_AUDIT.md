@@ -41,7 +41,14 @@ runtime evidence nor client registration proves a public Verified listing.
 | Red-team blocker repair | `test_real_build_loop.py` proves a secret finding blocks the first commit, invokes repair, scopes evidence to the final commit, and validates the repaired result | PASS (local contract) |
 | Target-bound readiness gate | `test_compliance.py` proves the V0 demo pack blocks when a real target is attached but not validated/bound to its commit | PASS (local contract) |
 | Command and repair safety | `test_real_build_loop.py` proves negative repair budgets and credential-shaped command arguments are rejected; terminal failure status is persisted | PASS (local contract) |
-| Unit/integration/E2E/secret/license quality | 94 tests, Ruff, `uv lock --check`, diff check, MIT license | PASS |
+| Target-bound submission E2E | `test_project_submission.py` proves a validated target produces repo/branch/SHA/diff-bound artifacts and reaches readiness only with clean-clone test/demo evidence | PASS (local E2E) |
+| Known-deadline compliance | `test_project_compliance.py` proves future deadlines pass and expired deadlines fail | PASS (local contract) |
+| Persistent competition controller | `test_compete_loop.py` proves ordered seven-stage cycles, evidence requirements, measured deltas, repetition, and terminal status | PASS (local contract) |
+| Observation plane | `test_observation_plane.py` proves deadline/rule/Git/build/change/check/deployment/score capture into durable evidence and cycle advancement | PASS (adapter contract; no live remote observation) |
+| Competition action dispatch | `test_competition_actions.py` proves idempotent durable dispatch of a selected `BUILD_PROJECT` action through `RealBuildLoop`, including failure recording | PASS (local E2E) |
+| Live Hermes project construction | Mission `4881b861-a3a6-41e9-8f2d-0ed150c49f76` dispatched Hermes, created `README.md`, `entry.py`, and `test_entry.py`, committed `46e82c4adf5799baf211e847b03c1e2f862cfe23`, passed 16 generated tests, and recorded passing `test` plus `reproduce_test` runs | PASS (live model-backed local E2E) |
+| Joust contract foundation | `test_joust_contracts.py` proves status/phase separation defaults, typed competition metadata, persisted entrant attribution, rule supersession, and strategy-reassessment events | PASS (local contract) |
+| Unit/integration/E2E/secret/license quality | 107 tests, Ruff, `uv lock --check`, diff check, MIT license | PASS |
 
 ## External handoff
 

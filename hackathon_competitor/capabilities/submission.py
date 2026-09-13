@@ -1,6 +1,17 @@
 from __future__ import annotations
 
-from ..models import ComplianceReport, Decision, HackathonSpec, Idea
+from collections.abc import Iterable
+from pathlib import Path
+
+from ..models import (
+    BuildRun,
+    ChangeSet,
+    ComplianceReport,
+    Decision,
+    HackathonSpec,
+    Idea,
+    ProjectTarget,
+)
 
 
 def _tournament(kind: str) -> tuple[str, list[tuple[str, float]]]:
@@ -146,6 +157,118 @@ red-team, repair, demo, and submission — with durable state and human control.
 - [x] Claims mapped to implementation evidence.
 - [ ] Real-user trial completed.
 - [ ] Agent Index page verified by the organizer.
+- [ ] Human explicitly confirms final submission.
+""",
+        ),
+    }
+
+
+def project_submission_documents(
+    spec: HackathonSpec,
+    selected: Idea,
+    decision: Decision,
+    compliance: ComplianceReport,
+    target: ProjectTarget,
+    change_set: ChangeSet,
+    build_runs: Iterable[BuildRun],
+) -> dict[str, tuple[str, str]]:
+    """Render a submission pack that names the real project commit.
+
+    The V0 ``submission_documents`` function describes Galahad's distribution
+    demo. This writer is deliberately separate so a target project cannot be
+    represented by the agent repository's evidence by accident.
+    """
+
+    runs = list(build_runs)
+    command_lines = []
+    for run in runs:
+        public_command = " ".join(
+            f"<absolute>/{Path(argument).name}" if Path(argument).is_absolute() else argument
+            for argument in run.command
+        )
+        command_lines.append(
+            f"- `{run.phase}`: `{public_command}` — "
+            f"{'PASS' if run.passed else 'FAIL'}"
+        )
+    commands = "\n".join(command_lines) or "- No build evidence recorded."
+    repository = target.repository_url or "(local-only target)"
+    blockers = "\n".join(
+        f"- [{'x' if rule.status.value == 'pass' else ' '}] {rule.text} ({rule.status.value})"
+        for rule in compliance.rules
+    )
+    return {
+        "README.md": (
+            "project_submission_readme",
+            f"""# {selected.title}
+
+{selected.summary}
+
+## Validated project
+
+- Repository: `{repository}`
+- Branch: `{target.working_branch}`
+- Validated commit: `{change_set.commit_sha}`
+- Diff hash: `{change_set.diff_hash}`
+
+This pack describes the competition project produced by Galahad. The commit
+and reproduction evidence above refer to the target repository, not the
+Galahad distribution repository.
+
+## Build evidence
+
+{commands}
+""",
+        ),
+        "submission-short.txt": (
+            "project_submission_short",
+            f"{selected.title}: a validated competition project at {change_set.commit_sha} with reproducible build evidence.",
+        ),
+        "submission-long.md": (
+            "project_submission_long",
+            f"""# Submission description
+
+{selected.summary}
+
+The implementation was produced on `{target.working_branch}` and validated at
+commit `{change_set.commit_sha}`. Its diff hash is `{change_set.diff_hash}`.
+The checks were repeated from a clean clone before this pack was generated.
+""",
+        ),
+        "demo-script.md": (
+            "project_demo_script",
+            f"""# Project demo
+
+1. Check out `{target.repository_url or '(the local target)'}` at commit `{change_set.commit_sha}`.
+2. Run the declared install/build commands.
+3. Run the declared test and demo commands.
+4. Show the user journey and the rule/compliance report.
+
+The selected direction is **{selected.title}**. Do not show behavior outside
+the validated commit.
+""",
+        ),
+        "claims-map.md": (
+            "project_claims_map",
+            f"""# Claims map
+
+| Claim | Evidence |
+|---|---|
+| The target project exists | `{repository}` |
+| The implementation is reviewable | commit `{change_set.commit_sha}`; diff `{change_set.diff_hash}` |
+| The checks are reproducible | clean-clone `reproduce_*` BuildRuns |
+| The direction follows the mission decision | `{decision.id}` with {len(decision.evidence_ids)} evidence references |
+""",
+        ),
+        "compliance.md": ("project_compliance", f"# Compliance\n\n{blockers}\n"),
+        "final-checklist.md": (
+            "project_final_checklist",
+            f"""# Final checklist
+
+- [x] Target repository identified: `{repository}`
+- [x] Mission branch recorded: `{target.working_branch}`
+- [x] Validated commit recorded: `{change_set.commit_sha}`
+- [x] Clean-clone reproduction recorded.
+- [{'x' if compliance.ready else ' '}] Blocker rules pass.
 - [ ] Human explicitly confirms final submission.
 """,
         ),
