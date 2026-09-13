@@ -167,3 +167,9 @@ run an explicit argv-based implementation command, record `ChangeSet` and
 from a clean clone. The GitHub CLI adapter and publication service are covered
 by contract tests; push and pull-request creation remain approval-bound and no
 new live remote write was performed.
+
+Project compliance now runs against the attached target rather than Galahad's
+own distribution repository. License, technology, repository, and demo checks
+are evidence-based; behavioral prohibitions remain `UNKNOWN` until an explicit
+audit artifact proves them, so the submission gate cannot claim compliance from
+absence alone.

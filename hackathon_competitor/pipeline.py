@@ -39,7 +39,7 @@ from .capabilities.strategy import (
     select_strategy,
 )
 from .capabilities.submission import submission_documents
-from .compliance import evaluate_compliance, rules_from_spec
+from .compliance import evaluate_compliance, inspect_project_target, rules_from_spec
 from .install_validation import validate_install_run_documentation
 from .models import (
     Artifact,
@@ -403,6 +403,11 @@ def mission_status(orchestrator: MissionOrchestrator, mission: Mission) -> dict:
         for event in orchestrator.database.events(mission.id)
         if event["event_type"] == "QUALITY_GATE_FAILED"
     ]
+    project_compliance = [
+        event["payload"]
+        for event in orchestrator.database.events(mission.id)
+        if event["event_type"] == "PROJECT_COMPLIANCE_EVALUATED"
+    ]
     metric_totals: dict[str, float] = {}
     for metric in orchestrator.database.metrics(mission.id):
         name = str(metric["metric"])
@@ -430,6 +435,7 @@ def mission_status(orchestrator: MissionOrchestrator, mission: Mission) -> dict:
         "project_target": str(mission.project_target_id) if mission.project_target_id else None,
         "build_runs": len(orchestrator.database.list_build_runs(mission.id)),
         "change_sets": len(orchestrator.database.list_change_sets(mission.id)),
+        "project_compliance": project_compliance[-1] if project_compliance else None,
     }
 
 
@@ -467,6 +473,25 @@ def build_project_for_mission(
         implementer,
         max_repairs=max_repairs,
     )
+    try:
+        spec = orchestrator.database.get_spec_for_mission(mission.id)
+    except KeyError:
+        spec = None
+    if spec is not None:
+        report = inspect_project_target(
+            spec,
+            target,
+            build_runs=orchestrator.database.list_build_runs(mission.id),
+        )
+        orchestrator.database.append_event(
+            mission.id,
+            "PROJECT_COMPLIANCE_EVALUATED",
+            {
+                "ready": report.ready,
+                "blocker_failures": report.blocker_failures,
+                "blocker_unknowns": report.blocker_unknowns,
+            },
+        )
     refreshed = orchestrator.database.get_mission(mission.id)
     if refreshed.state == MissionState.BUILDING:
         orchestrator.transition_state(refreshed, MissionState.VALIDATING)

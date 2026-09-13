@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
+from pathlib import Path
+
 from .models import (
+    BuildRun,
     ComplianceReport,
     HackathonSpec,
+    ProjectTarget,
     Rule,
     RuleSeverity,
     RuleStatus,
@@ -93,3 +98,63 @@ def evaluate_compliance(rules: list[Rule], statuses: dict[str, RuleStatus]) -> C
         blocker_unknowns=unknowns,
         ready=not failures and not unknowns,
     )
+
+
+def inspect_project_target(
+    spec: HackathonSpec,
+    target: ProjectTarget,
+    *,
+    build_runs: Iterable[BuildRun] = (),
+) -> ComplianceReport:
+    """Evaluate rules against the mission project, never against Galahad itself."""
+
+    root = Path(target.local_path).resolve()
+    runs = list(build_runs)
+    passed_phases = {run.phase for run in runs if run.passed}
+    statuses: dict[str, RuleStatus] = {}
+    for rule in rules_from_spec(spec):
+        text = rule.text.lower()
+        if rule.type == RuleType.LICENSING:
+            license_path = root / "LICENSE"
+            statuses[rule.id] = (
+                RuleStatus.PASS
+                if license_path.is_file()
+                and license_path.read_text(encoding="utf-8", errors="replace")
+                .lstrip()
+                .startswith("MIT License")
+                else RuleStatus.FAIL
+            )
+        elif rule.type == RuleType.REQUIRED_TECHNOLOGY:
+            language = (target.language or "").lower()
+            framework = (target.framework or "").lower()
+            has_python = any(root.rglob("*.py")) if root.is_dir() else False
+            statuses[rule.id] = (
+                RuleStatus.PASS
+                if "python" in text and ("python" in language or has_python)
+                else RuleStatus.PASS
+                if framework and framework in text
+                else RuleStatus.UNKNOWN
+            )
+        elif rule.type == RuleType.SUBMISSION:
+            if "repository" in text or "source code" in text:
+                statuses[rule.id] = (
+                    RuleStatus.PASS
+                    if target.repository_url or (root / ".git").is_dir()
+                    else RuleStatus.UNKNOWN
+                )
+            elif "demo" in text or "video" in text:
+                statuses[rule.id] = (
+                    RuleStatus.PASS if "run" in passed_phases else RuleStatus.UNKNOWN
+                )
+            else:
+                statuses[rule.id] = RuleStatus.UNKNOWN
+        elif rule.type == RuleType.PROHIBITED:
+            # A prohibition is a behavioral claim. Without an explicit audit
+            # artifact, stay conservative instead of treating source absence
+            # as proof of compliance.
+            statuses[rule.id] = RuleStatus.UNKNOWN
+        elif rule.type == RuleType.DEADLINE:
+            statuses[rule.id] = RuleStatus.UNKNOWN
+        else:
+            statuses[rule.id] = RuleStatus.UNKNOWN
+    return evaluate_compliance(rules_from_spec(spec), statuses)
