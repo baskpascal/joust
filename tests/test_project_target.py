@@ -70,5 +70,6 @@ def test_real_build_path_records_project_status(tmp_path):
     assert change_set.status == "validated"
     status = mission_status(app, database.get_mission(mission.id))
     assert status["state"] == MissionState.VALIDATING.value
+    assert status["project_review"]["passed"] is True
     assert status["project_target"] == str(target.id)
     assert status["build_runs"] == 2

@@ -5,7 +5,6 @@ from pathlib import Path
 
 from .models import BuildRun, ChangeSet, ProjectTarget
 
-
 _SECRET_PATTERNS = (
     re.compile(r"PLOW_AGENT_TOKEN\s*[:=]", re.IGNORECASE),
     re.compile(r"(?:sk|ghp|github_pat)_[A-Za-z0-9_\-]{20,}"),
