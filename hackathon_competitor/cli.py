@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 from uuid import UUID
 
+from .build_loop import CommandImplementer
 from .distribution import build_public_bundle
 from .exporter import export_mission_bundle
 from .models import MissionState, ProjectMode, ProjectTarget
@@ -19,7 +20,6 @@ from .pipeline import build_project_for_mission, complete_v0, mission_status, ru
 from .registry import default_registry
 from .rule_updates import refresh_official_rules
 from .storage import MIGRATIONS, Database
-from .tool_gateway import CodingAgentCommandTool
 
 
 def default_home() -> Path:
@@ -210,7 +210,7 @@ def build_parser() -> argparse.ArgumentParser:
     attach.add_argument("--run-command", action="append", default=[], metavar="JSON_ARGV")
     build = mission_commands.add_parser("build-project")
     build.add_argument("mission_id", type=UUID)
-    build.add_argument("--implementation-command", nargs="+", required=True)
+    build.add_argument("--implementation-command", required=True, metavar="JSON_ARGV")
     build.add_argument("--spec")
     build.add_argument("--max-repairs", type=int, default=0)
 
@@ -258,7 +258,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.mission_command == "build-project":
         target = app.database.get_project_target_for_mission(args.mission_id)
-        implementer = CodingAgentCommandTool(target.local_path, args.implementation_command)
+        implementation_command = _parse_command_vectors([args.implementation_command])[0]
+        implementer = CommandImplementer(implementation_command)
         specification = args.spec
         if specification and Path(specification).is_file():
             specification = Path(specification).read_text(encoding="utf-8")

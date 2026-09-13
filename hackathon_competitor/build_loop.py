@@ -9,7 +9,7 @@ from typing import Protocol
 
 from .models import BuildRun, ChangeSet, ProjectTarget, RepositorySnapshot
 from .storage import Database
-from .tool_gateway import LocalGitTool, LocalShellTool
+from .tool_gateway import CodingAgentCommandTool, LocalGitTool, LocalShellTool
 from .workspace import GitWorkspace
 
 
@@ -23,6 +23,18 @@ class Implementer(Protocol):
 
 class RepairableImplementer(Implementer, Protocol):
     def repair(self, project_root: Path, specification: str, failure: str) -> str: ...
+
+
+class CommandImplementer:
+    """Adapt a file-based coding-agent command to the build-loop port."""
+
+    def __init__(self, command_prefix: list[str]):
+        if not command_prefix:
+            raise ValueError("implementation command cannot be empty")
+        self.command_prefix = list(command_prefix)
+
+    def implement(self, project_root: Path, specification: str, failure: str | None = None) -> str:
+        return CodingAgentCommandTool(project_root, self.command_prefix).implement(specification)
 
 
 class RealBuildLoop:

@@ -30,7 +30,7 @@ python -m hackathon_competitor.cli mission attach-project <mission-id> \
   --path <project-dir> --mode existing_repo \
   --test-command '["python","-m","pytest","-q"]'
 python -m hackathon_competitor.cli mission build-project <mission-id> \
-  --implementation-command <coding-agent-command> \
+  --implementation-command '["codex","exec","--full-auto"]' \
   --max-repairs 0
 python -m hackathon_competitor.cli doctor
 ```
