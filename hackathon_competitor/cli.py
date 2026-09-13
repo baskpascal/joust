@@ -269,6 +269,8 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(target.model_dump(mode="json"), indent=2))
         return 0
     if args.mission_command == "build-project":
+        if args.max_repairs < 0:
+            raise ValueError("--max-repairs cannot be negative")
         target = app.database.get_project_target_for_mission(args.mission_id)
         implementation_command = _parse_command_vectors([args.implementation_command])[0]
         implementer = CommandImplementer(implementation_command)

@@ -2951,7 +2951,9 @@ Project commands and the configured coding-agent command receive a reduced
 environment containing only platform basics (for example `PATH`, temp and
 home directories) plus the explicit allowlist. Names that look like tokens,
 passwords, API keys, credentials, or private keys are rejected. Plow and
-GitHub credentials therefore remain outside the target build boundary.
+GitHub credentials therefore remain outside the target build boundary. The
+loop also rejects credential-shaped command arguments before they can enter
+durable `BuildRun` logs.
 
 The target is persisted independently from `HackathonSpec`. A mission may
 research one competition while building in a different repository, and the

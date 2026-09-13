@@ -71,6 +71,7 @@ The current evidence boundary is:
 | Runtime, Plow ownership, MIT hygiene, pinned Agent Index client | Docker build, image contract tests, healthy `doctor`, pinned `vendor/client.pin`, and public entry | PASS (local/live where noted) |
 | Real target project, not only Galahad's demo | `ProjectTarget`, mission branch, explicit argv commands, `ChangeSet`, `BuildRun`, actual diff review, and clean-clone reproduction | PASS (local E2E) |
 | Build failure and red-team repair | Bounded repair loop retries command failures and blocking findings; final evidence is scoped to the repaired commit | PASS (local contract) |
+| Credential/command boundary | Explicit argv, reduced environment, sensitive-name rejection, and command-argument validation are covered by local tests | PASS (local contract) |
 | GitHub project connection | Typed `gh` adapter supports lookup, read-only clone/bootstrap, branches, push, PR, and checks; publication is approval-bound | PARTIAL (live clone/push/PR not exercised) |
 | Coding agent integration | `CommandImplementer` and CLI handoff contract are executable; the E2E uses a deterministic command | PARTIAL (no model-backed Hermes coding session yet) |
 | Target-bound submission pack | V0 readiness now blocks when a real target is attached; a real target can be validated but its submission copy is not yet automatically bound to target SHA | GAP (guarded) |

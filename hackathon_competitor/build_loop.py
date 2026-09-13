@@ -49,6 +49,19 @@ _SENSITIVE_ENV_MARKERS = (
     "CREDENTIAL",
     "PRIVATE_KEY",
 )
+_SENSITIVE_COMMAND_MARKERS = (
+    "PLOW_AGENT_TOKEN",
+    "GITHUB_TOKEN",
+    "GH_TOKEN",
+    "API_KEY",
+    "PASSWORD",
+    "SECRET",
+    "CREDENTIAL",
+    "PRIVATE_KEY",
+    "ghp_",
+    "github_pat_",
+    "sk-",
+)
 
 
 def project_environment(allowlist: Sequence[str] = ()) -> dict[str, str]:
@@ -68,6 +81,18 @@ def project_environment(allowlist: Sequence[str] = ()) -> dict[str, str]:
             raise ValueError(f"refusing sensitive environment variable: {name}")
     selected = set(_SAFE_ENVIRONMENT_KEYS) | set(names)
     return {name: value for name, value in os.environ.items() if name in selected}
+
+
+def validate_project_commands(commands: Sequence[Sequence[str]]) -> None:
+    """Reject command vectors that would persist an obvious credential."""
+
+    for argv in commands:
+        if not argv or any(not isinstance(argument, str) or not argument for argument in argv):
+            raise ValueError("project commands must be non-empty argv vectors")
+        for argument in argv:
+            upper = argument.upper()
+            if any(marker.upper() in upper for marker in _SENSITIVE_COMMAND_MARKERS):
+                raise ValueError("project command contains a credential-shaped argument")
 
 
 class ProjectBootstrap(Protocol):
@@ -256,6 +281,8 @@ class RealBuildLoop:
         *,
         max_repairs: int = 1,
     ) -> ChangeSet:
+        if max_repairs < 0:
+            raise ValueError("max_repairs cannot be negative")
         root = Path(target.local_path).resolve()
         environment = project_environment(target.environment_allowlist)
         if not root.exists() and target.mode.value == "existing_repo" and target.repository_url:
@@ -297,6 +324,7 @@ class RealBuildLoop:
             raise BuildLoopError(
                 "project target must declare an install, build, test, or run command"
             )
+        validate_project_commands([command for _, command in commands])
 
         set_environment = getattr(implementer, "set_environment", None)
         if callable(set_environment):
@@ -361,6 +389,10 @@ class RealBuildLoop:
                 raise BuildLoopError(f"project validation failed after {attempt + 1} attempt(s): {failure}")
             repair = getattr(implementer, "repair", None)
             if not callable(repair):
+                change_set.status = (
+                    "review_failed" if failure.startswith("project review blocked") else "failed_validation"
+                )
+                self.database.save_change_set(change_set)
                 raise BuildLoopError("project validation failed and implementer has no repair method")
             repair(root, specification, failure)
             commit_sha = git_workspace.checkpoint("Repair competition project validation failure")

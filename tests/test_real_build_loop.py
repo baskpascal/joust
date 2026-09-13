@@ -8,6 +8,7 @@ from hackathon_competitor.build_loop import (
     CommandImplementer,
     RealBuildLoop,
     project_environment,
+    validate_project_commands,
 )
 from hackathon_competitor.models import Mission, ProjectMode, ProjectTarget
 from hackathon_competitor.storage import Database
@@ -159,6 +160,13 @@ def test_project_environment_filters_credentials_and_allows_safe_names(monkeypat
     assert "PLOW_AGENT_TOKEN" not in environment
     with pytest.raises(ValueError, match="sensitive"):
         project_environment(["PROJECT_API_KEY"])
+
+
+def test_project_commands_reject_credential_shaped_arguments():
+    with pytest.raises(ValueError, match="credential"):
+        validate_project_commands([["python", "-c", "print(GITHUB_TOKEN)"]])
+    with pytest.raises(ValueError, match="non-empty"):
+        validate_project_commands([["python", ""]])
 
 
 class FakeBootstrap:
