@@ -186,4 +186,4 @@ command, committed the mission branch, and passed the declared test both in
 the working tree and in a clean clone. The rebuilt image's `doctor` is healthy
 with database migration 5. The reproducible public bundle contains 112 files
 and has SHA-256
-`50e8d51d26e139d5b6a391e0874acd55c1c9c46da35bda81375252114a61844d`.
+`f3179f8d51759fcc75b981fb534f9fa5e8db11b7d12a588c93b8a449f8e64c7b`.
