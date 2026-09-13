@@ -26,8 +26,21 @@ python -m hackathon_competitor.cli mission create --url tests/fixtures/hackathon
 python -m hackathon_competitor.cli mission resume <mission-id>
 python -m hackathon_competitor.cli mission show <mission-id>
 python -m hackathon_competitor.cli mission refresh-rules <mission-id> --url <official-url>
+python -m hackathon_competitor.cli mission attach-project <mission-id> \
+  --path <project-dir> --mode existing_repo \
+  --test-command '["python","-m","pytest","-q"]'
+python -m hackathon_competitor.cli mission build-project <mission-id> \
+  --implementation-command <coding-agent-command> \
+  --max-repairs 0
 python -m hackathon_competitor.cli doctor
 ```
+
+`attach-project` keeps the competition source and the project repository as
+separate mission objects. Build, test, and install commands are explicit JSON
+argv lists; they are executed without shell expansion. `build-project` runs a
+mission branch, records the implementation commit and build logs, and repeats
+the checks from a clean clone. It never pushes or opens a pull request; use the
+approval-bound GitHub publication service for those external actions.
 
 Use `HACKATHON_COMPETITOR_HOME` to override the default local state directory.
 

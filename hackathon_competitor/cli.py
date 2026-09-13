@@ -13,12 +13,13 @@ from uuid import UUID
 
 from .distribution import build_public_bundle
 from .exporter import export_mission_bundle
-from .models import MissionState
+from .models import MissionState, ProjectMode, ProjectTarget
 from .orchestrator import MissionOrchestrator
-from .pipeline import complete_v0, mission_status, run_vertical_slice
+from .pipeline import build_project_for_mission, complete_v0, mission_status, run_vertical_slice
 from .registry import default_registry
 from .rule_updates import refresh_official_rules
 from .storage import MIGRATIONS, Database
+from .tool_gateway import CodingAgentCommandTool
 
 
 def default_home() -> Path:
@@ -47,6 +48,23 @@ def _runtime_marker_present(path: Path) -> bool:
         return path.is_file() and path.stat().st_size > 0
     except OSError:
         return False
+
+
+def _parse_command_vectors(values: list[str]) -> list[list[str]]:
+    commands: list[list[str]] = []
+    for value in values:
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"command must be a JSON argv list: {value!r}") from exc
+        if (
+            not isinstance(parsed, list)
+            or not parsed
+            or any(not isinstance(argument, str) or not argument for argument in parsed)
+        ):
+            raise ValueError("command must be a non-empty JSON list of non-empty strings")
+        commands.append(parsed)
+    return commands
 
 
 def doctor(home: Path | None = None) -> tuple[dict[str, dict[str, object]], bool]:
@@ -173,6 +191,28 @@ def build_parser() -> argparse.ArgumentParser:
     refresh = mission_commands.add_parser("refresh-rules")
     refresh.add_argument("mission_id", type=UUID)
     refresh.add_argument("--url", required=True)
+    attach = mission_commands.add_parser("attach-project")
+    attach.add_argument("mission_id", type=UUID)
+    attach.add_argument("--path", required=True)
+    attach.add_argument(
+        "--mode",
+        choices=[mode.value for mode in ProjectMode],
+        default=ProjectMode.EXISTING_REPO.value,
+    )
+    attach.add_argument("--repo")
+    attach.add_argument("--default-branch", default="main")
+    attach.add_argument(
+        "--install-command", action="append", default=[], metavar="JSON_ARGV",
+        help='repeatable JSON argv, e.g. ["python","-m","pip","install","-e", "."]',
+    )
+    attach.add_argument("--build-command", action="append", default=[], metavar="JSON_ARGV")
+    attach.add_argument("--test-command", action="append", default=[], metavar="JSON_ARGV")
+    attach.add_argument("--run-command", action="append", default=[], metavar="JSON_ARGV")
+    build = mission_commands.add_parser("build-project")
+    build.add_argument("mission_id", type=UUID)
+    build.add_argument("--implementation-command", nargs="+", required=True)
+    build.add_argument("--spec")
+    build.add_argument("--max-repairs", type=int, default=0)
 
     db = commands.add_parser("db")
     db_commands = db.add_subparsers(dest="db_command", required=True)
@@ -200,6 +240,36 @@ def main(argv: list[str] | None = None) -> int:
     if args.mission_command == "create":
         mission = run_vertical_slice(app, args.url, workspace_path=args.workspace)
         print(json.dumps(mission_status(app, mission), indent=2))
+        return 0
+    if args.mission_command == "attach-project":
+        target = ProjectTarget(
+            mission_id=args.mission_id,
+            mode=ProjectMode(args.mode),
+            local_path=str(Path(args.path).resolve()),
+            repository_url=args.repo,
+            default_branch=args.default_branch,
+            install_commands=_parse_command_vectors(args.install_command),
+            build_commands=_parse_command_vectors(args.build_command),
+            test_commands=_parse_command_vectors(args.test_command),
+            run_commands=_parse_command_vectors(args.run_command),
+        )
+        app.attach_project_target(target)
+        print(json.dumps(target.model_dump(mode="json"), indent=2))
+        return 0
+    if args.mission_command == "build-project":
+        target = app.database.get_project_target_for_mission(args.mission_id)
+        implementer = CodingAgentCommandTool(target.local_path, args.implementation_command)
+        specification = args.spec
+        if specification and Path(specification).is_file():
+            specification = Path(specification).read_text(encoding="utf-8")
+        change_set = build_project_for_mission(
+            app,
+            args.mission_id,
+            implementer,
+            specification=specification,
+            max_repairs=args.max_repairs,
+        )
+        print(json.dumps(change_set.model_dump(mode="json"), indent=2))
         return 0
     if args.mission_command == "resume":
         resumed = app.resume_mission(args.mission_id)

@@ -464,6 +464,9 @@ def build_project_for_mission(
         implementer,
         max_repairs=max_repairs,
     )
+    refreshed = orchestrator.database.get_mission(mission.id)
+    if refreshed.state == MissionState.BUILDING:
+        orchestrator.transition_state(refreshed, MissionState.VALIDATING)
     return change_set
 
 

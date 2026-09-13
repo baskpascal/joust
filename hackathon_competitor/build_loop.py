@@ -180,6 +180,14 @@ class RealBuildLoop:
                 git.create_branch(branch, target.default_branch)
         self._snapshot(target, git, dirty=False)
 
+        commands = [
+            *(('install', command) for command in target.install_commands),
+            *(('build', command) for command in target.build_commands),
+            *(('test', command) for command in target.test_commands),
+        ]
+        if not commands:
+            raise BuildLoopError("project target must declare an install, build, or test command")
+
         implementer.implement(root, specification)
         commit_sha = git_workspace.checkpoint("Implement competition project slice")
         diff = git.commit_diff(commit_sha)
@@ -193,11 +201,6 @@ class RealBuildLoop:
             status="committed",
         )
         self.database.save_change_set(change_set)
-        commands = [
-            *(('install', command) for command in target.install_commands),
-            *(('build', command) for command in target.build_commands),
-            *(('test', command) for command in target.test_commands),
-        ]
         for attempt in range(max_repairs + 1):
             passed, failure = self._run_commands(target, commands, git)
             if passed:

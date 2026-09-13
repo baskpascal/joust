@@ -75,3 +75,15 @@ def test_real_build_loop_refuses_dirty_workspace(tmp_path):
     database.save_project_target(target)
     with pytest.raises(BuildLoopError, match="dirty"):
         RealBuildLoop(database, tmp_path / "artifacts").run(target, "spec", FakeImplementer())
+
+
+def test_real_build_loop_requires_project_validation_commands(tmp_path):
+    database, mission = _mission(tmp_path)
+    target = ProjectTarget(
+        mission_id=mission.id,
+        mode=ProjectMode.NEW_REPO,
+        local_path=str(tmp_path / "project"),
+    )
+    database.save_project_target(target)
+    with pytest.raises(BuildLoopError, match="declare"):
+        RealBuildLoop(database, tmp_path / "artifacts").run(target, "spec", FakeImplementer())
