@@ -167,7 +167,17 @@ class LocalGitTool:
         output = self.shell.run(
             ["git", "status", "--short", "--porcelain=v1"], timeout_seconds=15
         )
-        return [line[3:] for line in output.splitlines() if len(line) >= 4]
+        # LocalShellTool combines stdout/stderr; ignore trace/warning lines and
+        # retain only porcelain records (two status bytes followed by a space).
+        valid = set(" MADRCU?!")
+        return [
+            line[3:]
+            for line in output.splitlines()
+            if len(line) >= 4
+            and line[2] == " "
+            and line[0] in valid
+            and line[1] in valid
+        ]
 
     def commit_diff(self, commit_sha: str) -> str:
         return self.shell.run(

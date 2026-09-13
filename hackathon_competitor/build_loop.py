@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import tempfile
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -8,7 +9,7 @@ from typing import Protocol
 
 from .models import BuildRun, ChangeSet, ProjectTarget, RepositorySnapshot
 from .storage import Database
-from .tool_gateway import LocalGitTool
+from .tool_gateway import LocalGitTool, LocalShellTool
 from .workspace import GitWorkspace
 
 
@@ -90,6 +91,64 @@ class RealBuildLoop:
                 return False, failure
         return True, ""
 
+    def _reproduce(
+        self,
+        target: ProjectTarget,
+        commit_sha: str,
+        commands: Sequence[tuple[str, list[str]]],
+    ) -> None:
+        """Run the validated commit from a clean clone, never the working tree."""
+
+        source = Path(target.local_path).resolve()
+        with tempfile.TemporaryDirectory(prefix="galahad-reproduce-") as temporary:
+            clone = Path(temporary) / "project"
+            shell = LocalShellTool(clone)
+            shell.run(["git", "clone", "--no-local", str(source), str(clone)], timeout_seconds=60)
+            shell.run(["git", "checkout", "--detach", commit_sha], timeout_seconds=30)
+            for phase, argv in commands:
+                started = datetime.now(UTC)
+                output = ""
+                passed = False
+                error = None
+                exit_code = 0
+                try:
+                    output = shell.run(argv, timeout_seconds=300)
+                    passed = True
+                except (RuntimeError, TimeoutError) as exc:
+                    error = str(exc)
+                    exit_code = 1
+                log_path = (
+                    self.artifact_root
+                    / str(target.mission_id)
+                    / "build"
+                    / f"reproduce-{phase}.log"
+                )
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+                log_path.write_text(output or error or "", encoding="utf-8")
+                run = BuildRun(
+                    mission_id=target.mission_id,
+                    project_target_id=target.id,
+                    commit_sha=commit_sha,
+                    command=list(argv),
+                    phase=f"reproduce_{phase}",
+                    exit_code=exit_code,
+                    log_path=str(log_path),
+                    passed=passed,
+                    started_at=started,
+                    finished_at=datetime.now(UTC),
+                    error=error,
+                )
+                self.database.save_build_run(run)
+                self.database.append_event(
+                    target.mission_id,
+                    "BUILD_REPRODUCTION_RECORDED",
+                    {"build_run_id": str(run.id), "phase": phase, "passed": passed},
+                )
+                if not passed:
+                    raise BuildLoopError(
+                        f"clean-clone reproduction failed in {phase}: {error or 'unknown error'}"
+                    )
+
     def run(
         self,
         target: ProjectTarget,
@@ -103,11 +162,8 @@ class RealBuildLoop:
         git_workspace = GitWorkspace(root)
         git_workspace.initialize(default_branch=target.default_branch)
         git = LocalGitTool(root)
-        status = git.status()
-        if "\n" in status:
-            porcelain = git.shell.run(["git", "status", "--porcelain"], timeout_seconds=15).strip()
-            if porcelain:
-                raise BuildLoopError("project workspace is dirty; refusing to overwrite user changes")
+        if git.changed_files():
+            raise BuildLoopError("project workspace is dirty; refusing to overwrite user changes")
         try:
             base_sha = git.current_revision()
         except RuntimeError:
@@ -145,6 +201,7 @@ class RealBuildLoop:
         for attempt in range(max_repairs + 1):
             passed, failure = self._run_commands(target, commands, git)
             if passed:
+                self._reproduce(target, commit_sha, commands)
                 change_set.status = "validated"
                 self.database.save_change_set(change_set)
                 self.database.append_event(

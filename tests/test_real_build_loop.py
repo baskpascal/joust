@@ -54,8 +54,10 @@ def test_real_build_loop_commits_runs_tests_and_repairs(tmp_path):
     assert change_set.status == "validated"
     assert change_set.commit_sha
     assert implementer.repaired
-    assert len(database.list_build_runs(mission.id)) == 2
-    assert all(run.passed for run in database.list_build_runs(mission.id)[-1:])
+    runs = database.list_build_runs(mission.id)
+    assert len(runs) == 3
+    assert {run.phase for run in runs} == {"test", "reproduce_test"}
+    assert all(run.passed for run in runs[-2:])
     assert any(event["event_type"] == "PROJECT_BUILD_VALIDATED" for event in database.events(mission.id))
 
 
