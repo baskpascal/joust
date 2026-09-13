@@ -34,6 +34,22 @@ class FakeImplementer:
         return "repaired"
 
 
+class SecretRepairImplementer:
+    def __init__(self):
+        self.repaired = False
+
+    def implement(self, project_root: Path, specification: str, failure=None) -> str:
+        (project_root / "app.py").write_text(
+            "PLOW_AGENT_TOKEN='must be removed'\n", encoding="utf-8"
+        )
+        return "implemented"
+
+    def repair(self, project_root: Path, specification: str, failure: str) -> str:
+        self.repaired = True
+        (project_root / "app.py").write_text("print('safe')\n", encoding="utf-8")
+        return "repaired"
+
+
 def _mission(tmp_path):
     database = Database(tmp_path / "state.db")
     database.migrate()
@@ -94,6 +110,32 @@ def test_real_build_loop_requires_project_validation_commands(tmp_path):
     database.save_project_target(target)
     with pytest.raises(BuildLoopError, match="declare"):
         RealBuildLoop(database, tmp_path / "artifacts").run(target, "spec", FakeImplementer())
+
+
+def test_real_build_loop_repairs_red_team_blocker(tmp_path):
+    database, mission = _mission(tmp_path)
+    target = ProjectTarget(
+        mission_id=mission.id,
+        mode=ProjectMode.NEW_REPO,
+        local_path=str(tmp_path / "project"),
+        test_commands=[[sys.executable, "-c", "print('ok')"]],
+    )
+    database.save_project_target(target)
+    implementer = SecretRepairImplementer()
+
+    change_set = RealBuildLoop(database, tmp_path / "artifacts").run(
+        target, "Build a safe project.", implementer
+    )
+
+    assert change_set.status == "validated"
+    assert implementer.repaired
+    assert "PLOW_AGENT_TOKEN" not in (Path(target.local_path) / "app.py").read_text()
+    reviews = [
+        event for event in database.events(mission.id) if event["event_type"] == "PROJECT_REVIEW_COMPLETED"
+    ]
+    assert len(reviews) == 2
+    assert reviews[0]["payload"]["blocking_findings"]
+    assert reviews[1]["payload"]["blocking_findings"] == []
 
 
 def test_command_implementer_includes_validation_failure_in_repair_prompt(tmp_path):

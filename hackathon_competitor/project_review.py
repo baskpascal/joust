@@ -44,7 +44,12 @@ def review_project_change(
         findings.append("no changed test file was found")
     if not any(Path(item).name.lower() == "readme.md" for item in changed):
         findings.append("no changed README was found")
-    test_runs = [run for run in build_runs if run.phase in {"test", "reproduce_test"}]
+    # A repair loop intentionally preserves failed historical attempts. Review
+    # evidence for the final change set must be scoped to its commit, otherwise
+    # an earlier failing attempt would keep a later validated commit blocked.
+    final_runs = [run for run in build_runs if run.commit_sha == change_set.commit_sha]
+    evidence_runs = final_runs or build_runs
+    test_runs = [run for run in evidence_runs if run.phase in {"test", "reproduce_test"}]
     if not test_runs or not all(run.passed for run in test_runs):
         blockers.append("project test evidence is missing or failed")
     if change_set.status != "validated":

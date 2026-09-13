@@ -177,8 +177,9 @@ absence alone.
 Project execution now also has an environment boundary: build, test, run, and
 coding-agent subprocesses inherit only a small platform-safe base plus an
 explicit non-sensitive allowlist. Credential-shaped names are rejected before
-execution. The local suite is at 90 tests after this security contract was
-added.
+execution. The local suite is at 91 tests after adding a red-team repair
+contract that prevents failed historical attempts from contaminating final
+commit evidence.
 
 The post-change end-to-end smoke drove the public CLI through a fresh mission,
 attached a temporary `new_repo` target, ran a file-based implementation

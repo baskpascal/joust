@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Protocol
 
 from .models import BuildRun, ChangeSet, ProjectTarget, RepositorySnapshot
+from .project_review import review_project_change
 from .storage import Database
 from .tool_gateway import CodingAgentCommandTool, LocalGitTool, LocalShellTool
 from .workspace import GitWorkspace
@@ -316,17 +317,46 @@ class RealBuildLoop:
         for attempt in range(max_repairs + 1):
             passed, failure = self._run_commands(target, commands, git)
             if passed:
-                self._reproduce(target, commit_sha, commands, environment=environment)
-                change_set.status = "validated"
-                self.database.save_change_set(change_set)
-                self.database.append_event(
-                    target.mission_id,
-                    "PROJECT_BUILD_VALIDATED",
-                    {"change_set_id": str(change_set.id), "commit_sha": commit_sha, "attempt": attempt + 1},
-                )
-                return change_set
+                try:
+                    self._reproduce(target, commit_sha, commands, environment=environment)
+                except BuildLoopError as exc:
+                    passed = False
+                    failure = str(exc)
+                else:
+                    # Mark the commit validated only long enough to let the
+                    # review inspect the actual changed files and evidence.
+                    # A blocker sends the same bounded repair loop around
+                    # again; it is never silently downgraded to a warning.
+                    change_set.status = "validated"
+                    self.database.save_change_set(change_set)
+                    review = review_project_change(
+                        target,
+                        change_set,
+                        self.database.list_build_runs(target.mission_id),
+                    )
+                    self.database.append_event(
+                        target.mission_id,
+                        "PROJECT_REVIEW_COMPLETED",
+                        review,
+                    )
+                    blockers = [str(item) for item in review["blocking_findings"]]
+                    if not blockers:
+                        self.database.append_event(
+                            target.mission_id,
+                            "PROJECT_BUILD_VALIDATED",
+                            {
+                                "change_set_id": str(change_set.id),
+                                "commit_sha": commit_sha,
+                                "attempt": attempt + 1,
+                            },
+                        )
+                        return change_set
+                    passed = False
+                    failure = "project review blocked the change set: " + "; ".join(blockers)
             if attempt >= max_repairs:
-                change_set.status = "failed_validation"
+                change_set.status = (
+                    "review_failed" if failure.startswith("project review blocked") else "failed_validation"
+                )
                 self.database.save_change_set(change_set)
                 raise BuildLoopError(f"project validation failed after {attempt + 1} attempt(s): {failure}")
             repair = getattr(implementer, "repair", None)
@@ -335,6 +365,8 @@ class RealBuildLoop:
             repair(root, specification, failure)
             commit_sha = git_workspace.checkpoint("Repair competition project validation failure")
             change_set.commit_sha = commit_sha
+            diff = git.commit_diff(commit_sha)
+            change_set.diff_hash = hashlib.sha256(diff.encode()).hexdigest()
             change_set.files = sorted(
                 set(change_set.files) | set(git.commit_changed_files(commit_sha))
             )
