@@ -37,8 +37,10 @@ class FakeShell:
         raise AssertionError(argv)
 
 
-def test_github_adapter_keeps_repository_and_publish_operations_structured():
-    adapter = GitHubCliAdapter(".")
+def test_github_adapter_keeps_repository_and_publish_operations_structured(tmp_path):
+    target_root = (tmp_path / "target-checkout").resolve()
+    adapter = GitHubCliAdapter(str(target_root))
+    assert adapter.shell.root == target_root
     shell = FakeShell()
     adapter.shell = shell
 

@@ -283,7 +283,9 @@ def main(argv: list[str] | None = None) -> int:
             implementer,
             specification=specification,
             max_repairs=args.max_repairs,
-            github=GitHubCliAdapter(str(Path(target.local_path).resolve().parent)),
+            # Git operations (including an approval-bound push) must run
+            # inside the target checkout, not its parent directory.
+            github=GitHubCliAdapter(str(Path(target.local_path).resolve())),
         )
         print(json.dumps(change_set.model_dump(mode="json"), indent=2))
         return 0
