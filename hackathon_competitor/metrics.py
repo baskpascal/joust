@@ -8,6 +8,7 @@ from uuid import UUID
 
 from .competition_intelligence import CompetitionIntelligence
 from .models import PlowMetricsSnapshot, utcnow
+from .metrics_strategy import CompetitionMetricsAnalyzer, apply_metrics_decision
 
 
 class MetricsUnavailable(RuntimeError):
@@ -161,6 +162,10 @@ class PlowMetricsIngestor:
         reader = reader or self.reader
         if reader is None:
             raise ValueError("Plow metrics ingestion requires a reader")
+        try:
+            prior_state = self.intelligence.database.get_current_competition_state(mission_id)
+        except KeyError:
+            prior_state = None
         snapshot = reader.snapshot()
         raw = json.dumps(
             {"sources": reader.raw_sources, "snapshot": snapshot.model_dump(mode="json")},
@@ -207,4 +212,24 @@ class PlowMetricsIngestor:
             extractor="plow-agent-index-structured-api",
             extractor_version="1",
         )
-        return self.intelligence.reconcile(mission_id), snapshot
+        state = self.intelligence.reconcile(mission_id)
+        previous = None
+        if prior_state is not None and snapshot.agent_id in prior_state.leaderboard:
+            prior = prior_state.leaderboard[snapshot.agent_id]
+            previous = PlowMetricsSnapshot(
+                agent_id=snapshot.agent_id,
+                rank=prior.get("rank"),
+                users=prior.get("users"),
+                successful_installs=prior.get("successful_installs"),
+                token_usage=prior.get("token_usage"),
+                active_days=(
+                    int(prior_state.metrics["active_days"])
+                    if "active_days" in prior_state.metrics
+                    else None
+                ),
+                verified=bool(prior_state.metrics.get("verified", 0)),
+                captured_at=prior_state.reconciled_at,
+            )
+        interpretation = CompetitionMetricsAnalyzer().analyze(snapshot, previous)
+        apply_metrics_decision(self.intelligence.database, mission_id, interpretation)
+        return state, snapshot

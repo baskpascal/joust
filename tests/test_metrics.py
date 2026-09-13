@@ -5,7 +5,8 @@ import pytest
 from hackathon_competitor.compete_loop import CompeteLoop
 from hackathon_competitor.competition_intelligence import CompetitionIntelligence
 from hackathon_competitor.metrics import MetricsUnavailable, PlowMetricsIngestor, PlowMetricsReader
-from hackathon_competitor.models import Mission
+from hackathon_competitor.metrics_strategy import CompetitionMetricsAnalyzer
+from hackathon_competitor.models import Mission, PlowMetricsSnapshot
 from hackathon_competitor.observation import CompetitionObserver
 from hackathon_competitor.storage import Database
 
@@ -105,6 +106,11 @@ def test_metrics_ingestion_links_raw_api_payload_to_current_state(tmp_path):
     observation = database.list_source_observations(mission.id)[0]
     assert all(signal.source_evidence_id == observation.evidence_id for signal in signals)
     assert "v1/usage?agent_id=galahad-hackathon" in observation.raw_text
+    loaded = database.get_mission(mission.id)
+    assert loaded.current_bottleneck == "Agent Index eligibility: Joust is not Verified"
+    assert loaded.current_best_action == (
+        "Prepare an approval-bound Agent Index verification request"
+    )
 
 
 def test_observer_ingests_metrics_before_capturing_score_signals(tmp_path):
@@ -137,3 +143,32 @@ def test_missing_dynamic_usage_is_failure_not_zero():
         PlowMetricsReader(
             "galahad-hackathon", base_url="https://index.test", http=FakeHttp(responses)
         ).snapshot()
+
+
+def test_rank_loss_and_competitor_growth_select_acquisition_not_retention():
+    previous = PlowMetricsSnapshot(
+        agent_id="joust",
+        rank=4,
+        users=28,
+        successful_installs=21,
+        token_usage=100_000,
+        active_days=5,
+        verified=True,
+    )
+    current = PlowMetricsSnapshot(
+        agent_id="joust",
+        rank=7,
+        users=31,
+        successful_installs=24,
+        token_usage=102_000,
+        active_days=6,
+        verified=True,
+    )
+
+    result = CompetitionMetricsAnalyzer().analyze(current, previous, competitor_growth_rate=0.28)
+
+    assert result.delta.rank_change == -3
+    assert result.delta.successful_installs_delta == 3
+    assert result.delta.token_growth_rate == pytest.approx(0.02)
+    assert result.bottleneck == "Acquisition velocity is below competitor growth"
+    assert "does not identify retention" in result.rationale

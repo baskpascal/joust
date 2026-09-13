@@ -50,7 +50,7 @@
   successful retry resets backoff without losing the last successful observation.
   Verify: `python -m pytest tests/test_monitoring.py`
 
-- [ ] **5. Feed metric deltas into strategy**
+- [x] **5. Feed metric deltas into strategy**
   Spec ref: `Joust SDD > 3. Design Principle; 4. Measure and Adapt`
   What to build: Compare snapshots and expose own/competitor velocity so the
   planner can distinguish acquisition, activation, retention, and usage
@@ -109,7 +109,7 @@
 
 - [x] Raw evidence becomes versioned rules/signals.
 - [x] Public competition metrics are ingested.
-- [ ] Metrics change mission decisions.
+- [x] Metrics change mission decisions.
 - [x] Monitor primitives provide fingerprint, lease, backoff, and last-success state.
 - [ ] Hermes cron runs safely.
 - [ ] GitHub runtime is authenticated.

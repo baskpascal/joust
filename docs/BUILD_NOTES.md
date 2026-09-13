@@ -1,5 +1,22 @@
 # Build notes
 
+## 2026-09-13 — Competition Closed Loop: metrics change decisions
+
+`CompetitionMetricsAnalyzer` now turns consecutive snapshots into rank, user,
+successful-install, token, token-growth, and acquisition-growth deltas. Its
+ordering is explicit: eligibility first, then acquisition versus competitor
+velocity, then stalled successful installs, then post-install usage. A test for
+the proposed example (`rank 4 -> 7`, installs `+3`, tokens `+2%`, competitor
+growth `+28%`) selects acquisition velocity and explicitly states that the
+evidence does not identify retention as the bottleneck.
+
+The live mission was refreshed at `2026-09-13T23:26:07.755879Z`. Its persisted
+decision now reads `Agent Index eligibility: Joust is not Verified`, with next
+action `Prepare an approval-bound Agent Index verification request`. No
+verification request was sent: the analyzer proposes the action, while the
+external-action approval boundary remains intact. The refreshed competition
+state is version 2.
+
 ## 2026-09-13 — Competition Closed Loop: live Agent Index metrics
 
 The public Agent Index page was inspected read-only. Its own JavaScript uses

@@ -440,6 +440,23 @@ class PlowMetricsSnapshot(Contract):
     captured_at: datetime = Field(default_factory=utcnow)
 
 
+class CompetitionMetricsDelta(Contract):
+    rank_change: int | None = None
+    users_delta: int | None = None
+    successful_installs_delta: int | None = None
+    token_usage_delta: int | None = None
+    token_growth_rate: float | None = None
+    acquisition_growth_rate: float | None = None
+    competitor_growth_rate: float | None = None
+
+
+class CompetitionMetricInterpretation(Contract):
+    bottleneck: str
+    next_best_action: str
+    rationale: str
+    delta: CompetitionMetricsDelta
+
+
 class CurrentCompetitionState(Contract):
     id: UUID = Field(default_factory=uuid4)
     mission_id: UUID
