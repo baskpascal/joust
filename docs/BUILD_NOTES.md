@@ -12,7 +12,7 @@
   repository copy includes that extension (SHA-256
   `f646a65677a57ad6f0c004244fd68f1c80b477fd3610b977e3dbbf34aed0eae3`).
 - Converted the workspace from a temporary base clone into a downstream
-  Galahad variant; generic Plow/Hermes runtime files were removed because they
+  Joust variant; generic Plow/Hermes runtime files were removed because they
   are upstream-owned.
 - Added MIT licensing, secret hygiene, a pinned official Agent Index client,
   SHA-256 verification, `s6` supervision, explicit `AGENT_ID`, persona, and six
@@ -39,7 +39,7 @@ Verification:
 - `pytest -q tests/` — 67 passed (including five deadline parameter cases).
 - `ruff check hackathon_competitor tests` and `ruff format --check` — passed.
 - `git diff --check` — passed (Windows line-ending notices only).
-- `docker compose config --quiet` with `AGENT_ID=galahad` — passed.
+- `docker compose config --quiet` with `AGENT_ID=joust` — passed.
 - Git Bash `bash -n image/s6-overlay/s6-rc.d/agent-index/run` — passed.
 - Downloaded official client hash —
   `633ad3bc24a51d6b7dcfaae319983ab174d9853a525237d99cac64878452560c`,
@@ -86,7 +86,7 @@ separate Plow Latch MCP endpoint was returning HTTP 503 during this run, while
 Plow Chat and email remained connected.
 
 The branded-response retest passed: queued owner messages were processed after
-the permission repair, the response identified itself as Galahad, and delivery
+the permission repair, the response identified itself as Joust, and delivery
 reached `delivered`. The temporary silence was caused by a root-run diagnostic
 invoking Hermes' generic `_secure_dir()` default, which changed the shared
 root-owned home to `0700`. The image now exports `HERMES_HOME_MODE=3770`, matching
@@ -112,14 +112,14 @@ run stored six evidence records and returned `BLOCKED` with only the truthful
 finding `critical prohibitions are missing`.
 
 The first shipped-image rehearsal then exposed a packaging permission defect:
-Docker had created `/opt/galahad` as `0644`, so the unprivileged Hermes user
+Docker had created `/opt/joust` as `0644`, so the unprivileged Hermes user
 could not traverse it to import the mission package. The image now normalizes
 all package directories to `0755` and files to `0644`; the image contract test
 pins the directory rule.
 
 The rebuilt-image `doctor` also revealed two diagnostic namespace mismatches:
 the Plow MCP URL is injected through the root-owned `s6` environment directory,
-and Agent Index identity lives in `HERMES_HOME`, not Galahad's application-state
+and Agent Index identity lives in `HERMES_HOME`, not Joust's application-state
 subdirectory. Doctor now checks the non-secret presence of the runtime marker
 without reading it and runs the official client smoke check against the actual
 Hermes home.
@@ -140,7 +140,7 @@ that carriage returns would corrupt the pinned client path.
 The authenticated Plow/Latch MCP health probe was repeated after the public
 bundle work. The route itself responded, but authenticated `initialize` still
 returned HTTP 503, confirming that the remaining Latch gap is upstream/device
-availability rather than Galahad credentials or HTTP routing. Plow Chat and
+availability rather than Joust credentials or HTTP routing. Plow Chat and
 Agent Index reporting remain healthy.
 
 A local bare-remote publication rehearsal proved the intended `HEAD -> main`
@@ -156,7 +156,7 @@ zero carriage returns, and the Docker image built successfully from that clean
 clone.
 
 The public release was then published to
-`https://github.com/baskpascal/galahad` on `main`. Agent Index metadata was
+`https://github.com/baskpascal/joust` on `main`. Agent Index metadata was
 updated with that repository and the README install URL, and story
 `live-source-safety` was published with the `Engineering` tag. A fresh rendered
 page verified the public GitHub install link, one active user, 119K tokens, and
@@ -171,7 +171,7 @@ from a clean clone. The GitHub CLI adapter and publication service are covered
 by contract tests; push and pull-request creation remain approval-bound and no
 new live remote write was performed.
 
-Project compliance now runs against the attached target rather than Galahad's
+Project compliance now runs against the attached target rather than Joust's
 own distribution repository. License, technology, repository, and demo checks
 are evidence-based; behavioral prohibitions remain `UNKNOWN` until an explicit
 audit artifact proves them, so the submission gate cannot claim compliance from
@@ -227,7 +227,7 @@ construction, and authenticated GitHub writes remain unproven.
 
 ## 2026-09-13 — Live Hermes construction evidence
 
-The committed tree was rebuilt as `galahad-agent:real-build` at
+The committed tree was rebuilt as `joust-agent:real-build` at
 `sha256:6cd0e4df0484313b553d9019b1b7589b41cbdaf53df4a2a1c698a446355463df`.
 Container `doctor` was healthy at database migration 9 and the Agent Index
 reporter returned HTTP 200. After using the s6-managed Plow inference
@@ -242,3 +242,37 @@ passed in the target, and the database records passing `test` and
 `reproduce_test` runs at that same SHA. The first competition cycle completed
 and sequence 2 began at `OBSERVE`, proving that a successful build does not
 terminate the mission. No GitHub push, PR, deployment, or submission occurred.
+
+## 2026-09-13 — Live persistent competition mission
+
+Mission `5a26f83b-61cd-426c-ba02-878dc8c9cc38` was attached to an explicit
+checkout and advanced through multiple durable compete cycles. The first retry
+resumed at `ASSESS` without duplicating its observation. Live planning exposed
+high provider variance, so the planner now runs in safe mode with project
+rules/tools disabled, low-context input, a 60-second bound, recent-cycle memory,
+and an audited deterministic fallback.
+
+The first completed cycle exposed an evidence-integrity defect: `CUSTOM` had
+claimed completion for a research-shaped action without doing research. A real
+`RESEARCH` executor now fetches bounded official URLs, persists excerpts, and
+fails if no readable text exists. The HTML parser now excludes script, style,
+noscript, and template content. A subsequent live cycle captured visible Agent
+Index copy about Verified eligibility while retaining the dynamic leaderboard
+as unavailable rather than inventing rank or usage.
+
+The deterministic planner fallback then selected local verification because no
+build evidence existed. Six target `BuildRun` records passed: environment
+creation, dependency installation, and tests in the working checkout, followed
+by the same three phases in a clean clone. The implementation correctly
+produced no diff, but the old review contract treated that as a blocker and
+began an unnecessary repair. The repair process was stopped before it changed
+the checkout. `ChangeSet` now has an explicit `verification_only` mode, and a
+restarted runner closes an orphaned `RUNNING` execution with a durable
+interruption event instead of hanging or duplicating it.
+
+GitHub check observation now uses `gh api` rather than the unsupported
+`gh pr checks --json` flag in the pinned CLI. The live container is not
+authenticated to GitHub, so remote checks remain an explicit uncertainty. No
+push, PR, deployment, submission, account mutation, or Verified request was
+performed. The complete local suite now collects 127 tests and passes with
+Ruff and `git diff --check` (line-ending notices only).

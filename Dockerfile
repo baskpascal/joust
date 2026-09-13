@@ -1,20 +1,26 @@
-# Galahad is a Plow Hermes variant. Generic runtime behavior stays in the
+# Joust is a Plow Hermes variant. Generic runtime behavior stays in the
 # immutable upstream base; this image owns only its persona, skills, mission
 # package, and supervised Agent Index reporter.
 FROM public.ecr.aws/e1h7x4a2/plow-cloud-agents:base-8710797b6409c77df560c6198407765d138ea617@sha256:b9627febe57e34ec0df373709ad91a27a7fda68093e76d519678cac1012614f9
 
-COPY --chmod=0644 runtime/persona.md /opt/hermes/plow-seed/persona.md
-COPY --chmod=0644 LICENSE NOTICE /usr/share/doc/galahad/
+# GitHub is part of Joust's execution/observation plane. Keep the package
+# version explicit so a rebuild cannot silently change the CLI contract.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends gh=2.46.0-3 \
+ && rm -rf /var/lib/apt/lists/*
 
-COPY --chmod=0644 pyproject.toml LICENSE README.md compose.yml Dockerfile /opt/galahad/
-COPY hackathon_competitor/ /opt/galahad/hackathon_competitor/
-RUN find /opt/galahad -type d -exec chmod 0755 {} + \
- && find /opt/galahad -type f -exec chmod 0644 {} +
+COPY --chmod=0644 runtime/persona.md /opt/hermes/plow-seed/persona.md
+COPY --chmod=0644 LICENSE NOTICE /usr/share/doc/joust/
+
+COPY --chmod=0644 pyproject.toml LICENSE README.md compose.yml Dockerfile /opt/joust/
+COPY hackathon_competitor/ /opt/joust/hackathon_competitor/
+RUN find /opt/joust -type d -exec chmod 0755 {} + \
+ && find /opt/joust -type f -exec chmod 0644 {} +
 # plow-init deliberately leaves the root-owned shared home traversable and
 # writable by the hermes group. Hermes CLI commands call _secure_dir(), so
 # carry that contract into every subprocess instead of letting a root-run
 # diagnostic silently revert the volume to 0700 root:root/root:hermes.
-ENV PYTHONPATH=/opt/galahad \
+ENV PYTHONPATH=/opt/joust \
     HERMES_HOME_MODE=3770
 
 COPY skills/ /opt/hermes/skills/

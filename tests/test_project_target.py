@@ -34,7 +34,9 @@ def test_project_target_is_persisted_and_attached(tmp_path):
     app.attach_project_target(target)
     loaded = database.get_mission(mission.id)
     assert loaded.project_target_id == target.id
-    assert database.get_project_target_for_mission(mission.id).local_path == str(tmp_path / "project")
+    assert database.get_project_target_for_mission(mission.id).local_path == str(
+        tmp_path / "project"
+    )
 
 
 def test_real_build_path_records_project_status(tmp_path):

@@ -60,9 +60,7 @@ class CompetitionObserver:
     ) -> CompetitionObservation:
         cycle = self.database.get_competition_cycle(cycle_id)
         if cycle.stage != CompeteStage.OBSERVE:
-            raise ValueError(
-                f"competition cycle requires OBSERVE, got {cycle.stage.value}"
-            )
+            raise ValueError(f"competition cycle requires OBSERVE, got {cycle.stage.value}")
         mission = self.database.get_mission(cycle.mission_id)
         observed_at = now or utcnow()
         try:
@@ -141,12 +139,12 @@ class CompetitionObserver:
             if self.github is not None and repository and ref:
                 try:
                     observation.github_checks = self.github.checks(repository, ref)
-                except (RuntimeError, ValueError) as exc:
+                except (OSError, RuntimeError, ValueError) as exc:
                     observation.uncertainties.append(f"GitHub checks observation failed: {exc}")
             if self.deployment is not None and target.deploy_target:
                 try:
                     observation.deployment_health = self.deployment.health(target.deploy_target)
-                except (RuntimeError, ValueError) as exc:
+                except (OSError, RuntimeError, ValueError) as exc:
                     observation.uncertainties.append(f"deployment observation failed: {exc}")
 
         self.database.save_competition_observation(observation)

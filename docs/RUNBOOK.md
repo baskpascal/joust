@@ -27,5 +27,5 @@ override the gate with community claims.
 
 ## Submission safety
 
-Galahad may prepare artifacts automatically. Publishing or submitting remains
+Joust may prepare artifacts automatically. Publishing or submitting remains
 a confirmation-gated external action.

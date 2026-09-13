@@ -195,3 +195,39 @@ class CompeteLoop:
         if terminal_status is not None:
             return None
         return self.create_cycle(cycle.mission_id)
+
+    def terminate(
+        self,
+        cycle_id: UUID,
+        *,
+        status: MissionStatus,
+        reason: str,
+    ) -> CompetitionCycle:
+        if status == MissionStatus.ACTIVE:
+            raise CompeteLoopError("ACTIVE is not a terminal status")
+        if not reason.strip():
+            raise CompeteLoopError("termination reason cannot be empty")
+        cycle = self.database.get_competition_cycle(cycle_id)
+        mission = self.database.get_mission(cycle.mission_id)
+        if mission.status != MissionStatus.ACTIVE:
+            if mission.status == status:
+                return cycle
+            raise CompeteLoopError(f"mission is already terminal: {mission.status.value}")
+        mission.status = status
+        mission.current_best_action = None
+        if status == MissionStatus.IRRECOVERABLY_BLOCKED:
+            mission.blockers = [*mission.blockers, reason.strip()]
+        self.database.save_mission(mission)
+        cycle.completed_at = utcnow()
+        cycle.updated_at = cycle.completed_at
+        self.database.save_competition_cycle(cycle)
+        self.database.append_event(
+            cycle.mission_id,
+            "MISSION_TERMINATED",
+            {
+                "cycle_id": str(cycle.id),
+                "status": status.value,
+                "reason": reason.strip(),
+            },
+        )
+        return cycle

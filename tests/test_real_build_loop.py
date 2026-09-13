@@ -13,6 +13,7 @@ from hackathon_competitor.build_loop import (
 )
 from hackathon_competitor.models import Mission, ProjectMode, ProjectTarget
 from hackathon_competitor.storage import Database
+from hackathon_competitor.workspace import GitWorkspace
 
 
 class FakeImplementer:
@@ -52,10 +53,17 @@ class SecretRepairImplementer:
         return "repaired"
 
 
+class NoChangeImplementer:
+    def implement(self, project_root: Path, specification: str, failure=None) -> str:
+        return "already correct"
+
+
 def _mission(tmp_path):
     database = Database(tmp_path / "state.db")
     database.migrate()
-    mission = Mission(title="real build", objective="build", workspace_path=str(tmp_path / "project"))
+    mission = Mission(
+        title="real build", objective="build", workspace_path=str(tmp_path / "project")
+    )
     database.save_mission(mission)
     return database, mission
 
@@ -86,7 +94,9 @@ def test_real_build_loop_commits_runs_tests_and_repairs(tmp_path, monkeypatch):
     assert len(runs) == 3
     assert {run.phase for run in runs} == {"test", "reproduce_test"}
     assert all(run.passed for run in runs[-2:])
-    assert any(event["event_type"] == "PROJECT_BUILD_VALIDATED" for event in database.events(mission.id))
+    assert any(
+        event["event_type"] == "PROJECT_BUILD_VALIDATED" for event in database.events(mission.id)
+    )
 
 
 def test_real_build_loop_refuses_dirty_workspace(tmp_path):
@@ -117,6 +127,34 @@ def test_real_build_loop_requires_project_validation_commands(tmp_path):
         RealBuildLoop(database, tmp_path / "artifacts").run(target, "spec", FakeImplementer())
 
 
+def test_real_build_loop_accepts_verified_no_change_action_when_explicit(tmp_path):
+    database, mission = _mission(tmp_path)
+    root = Path(mission.workspace_path)
+    root.mkdir()
+    (root / "README.md").write_text("ready", encoding="utf-8")
+    base_sha = GitWorkspace(root).checkpoint("Initial project")
+    target = ProjectTarget(
+        mission_id=mission.id,
+        mode=ProjectMode.EXISTING_REPO,
+        local_path=str(root),
+        test_commands=[[sys.executable, "-c", "print('ok')"]],
+    )
+    database.save_project_target(target)
+
+    change_set = RealBuildLoop(database, tmp_path / "artifacts").run(
+        target,
+        "Verify the existing project",
+        NoChangeImplementer(),
+        allow_no_changes=True,
+    )
+
+    assert change_set.status == "validated"
+    assert change_set.verification_only is True
+    assert change_set.files == []
+    assert change_set.commit_sha == base_sha
+    assert database.get_project_target(target.id).final_commit_sha == base_sha
+
+
 def test_real_build_loop_repairs_red_team_blocker(tmp_path):
     database, mission = _mission(tmp_path)
     target = ProjectTarget(
@@ -136,7 +174,9 @@ def test_real_build_loop_repairs_red_team_blocker(tmp_path):
     assert implementer.repaired
     assert "PLOW_AGENT_TOKEN" not in (Path(target.local_path) / "app.py").read_text()
     reviews = [
-        event for event in database.events(mission.id) if event["event_type"] == "PROJECT_REVIEW_COMPLETED"
+        event
+        for event in database.events(mission.id)
+        if event["event_type"] == "PROJECT_REVIEW_COMPLETED"
     ]
     assert len(reviews) == 2
     assert reviews[0]["payload"]["blocking_findings"]
@@ -194,9 +234,9 @@ def test_hermes_implementer_passes_prompt_text_to_one_shot_mode(tmp_path, monkey
 
 def test_project_environment_filters_credentials_and_allows_safe_names(monkeypatch):
     monkeypatch.setenv("PLOW_AGENT_TOKEN", "secret")
-    monkeypatch.setenv("GALAHAD_FIXTURE", "enabled")
-    environment = project_environment(["GALAHAD_FIXTURE"])
-    assert environment["GALAHAD_FIXTURE"] == "enabled"
+    monkeypatch.setenv("JOUST_FIXTURE", "enabled")
+    environment = project_environment(["JOUST_FIXTURE"])
+    assert environment["JOUST_FIXTURE"] == "enabled"
     assert "PLOW_AGENT_TOKEN" not in environment
     with pytest.raises(ValueError, match="sensitive"):
         project_environment(["PROJECT_API_KEY"])
@@ -231,6 +271,7 @@ def test_existing_github_target_bootstraps_missing_checkout(tmp_path):
     )
     database.save_project_target(target)
     bootstrap = FakeBootstrap()
+
     # The implementer creates the Git repository after the read-only clone step.
     class InitializingImplementer(FakeImplementer):
         def implement(self, project_root, specification, failure=None):

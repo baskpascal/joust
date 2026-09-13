@@ -23,10 +23,10 @@ runtime evidence nor client registration proves a public Verified listing.
 | Agent Index client pinned and integrity checked | `vendor/client.pin`, Docker build checksum step | PASS |
 | Agent Index reporter supervised | Live status registered; supervised usage report returned HTTP 200 for two rows | PASS (live runtime) |
 | Public Agent Index entry | Rendered `/agent-index/galahad-hackathon` page showed Galahad, GitHub install link, one active user, 119K tokens, and the Engineering story | PASS (public community listing) |
-| Public repository publication | `https://github.com/baskpascal/galahad`, public `main`, linked from the Agent Index entry | PASS (public) |
+| Public repository publication | `https://github.com/baskpascal/joust`, public `main`, linked from the Agent Index entry | PASS (public) |
 | Chosen `AGENT_ID` wiring | Explicit compose env, reporter, and doctor check | PASS (local) |
 | Verified listing | Organizer eligibility surface, expected to open 2026-09-14 | EXTERNAL / NOT YET AVAILABLE |
-| Real-user activation trial | Fresh-session reply identified as Galahad and reached delivery state `delivered` | PASS (live owner trial) |
+| Real-user activation trial | Fresh-session reply identified as Joust and reached delivery state `delivered` | PASS (live owner trial) |
 | Real official-source intake | Public Agent Index URL produced six evidence records and a persisted, explicit quality blocker instead of inventing missing prohibitions | PASS (safe partial-source behavior) |
 | Real project target contract | Persisted `ProjectTarget`, mission attachment, and status reporting are covered by `test_project_target.py` | PASS (local contract) |
 | Real build / test / repair loop | `test_real_build_loop.py` creates a mission branch, commits generated code, detects a failing test, repairs it, and records validated build runs | PASS (local contract) |
@@ -47,8 +47,14 @@ runtime evidence nor client registration proves a public Verified listing.
 | Observation plane | `test_observation_plane.py` proves deadline/rule/Git/build/change/check/deployment/score capture into durable evidence and cycle advancement | PASS (adapter contract; no live remote observation) |
 | Competition action dispatch | `test_competition_actions.py` proves idempotent durable dispatch of a selected `BUILD_PROJECT` action through `RealBuildLoop`, including failure recording | PASS (local E2E) |
 | Live Hermes project construction | Mission `4881b861-a3a6-41e9-8f2d-0ed150c49f76` dispatched Hermes, created `README.md`, `entry.py`, and `test_entry.py`, committed `46e82c4adf5799baf211e847b03c1e2f862cfe23`, passed 16 generated tests, and recorded passing `test` plus `reproduce_test` runs | PASS (live model-backed local E2E) |
+| Live persistent compete mission | Mission `5a26f83b-61cd-426c-ba02-878dc8c9cc38` completed multiple compete cycles, resumed durable stages, and opened subsequent cycles | PASS (live runtime) |
+| Real competition research | Typed `RESEARCH` captured live official Agent Index pages as visible-text evidence; empty content fails and `CUSTOM` remains no-op only | PASS (live read-only) |
+| Planner timeout resilience | Safe-mode planning is bounded; timeout records a deterministic fallback and selected local verification instead of stalling the mission | PASS (live runtime) |
+| Live target verification | Six install/test and clean-clone reproduction runs passed; the no-diff review defect was found, repair was interrupted, and verification-only support was added | PASS (live commands; corrected contract locally tested) |
+| Interrupted action recovery | Restart closes an orphaned `RUNNING` execution durably and advances the cycle without duplicate execution | PASS (local contract + live recovery) |
+| Structured leaderboard/usage signal | Live page returned dynamic `Loading…`; no rank/install/usage value was inferred | PARTIAL / ADAPTER NEEDED |
 | Joust contract foundation | `test_joust_contracts.py` proves status/phase separation defaults, typed competition metadata, persisted entrant attribution, rule supersession, and strategy-reassessment events | PASS (local contract) |
-| Unit/integration/E2E/secret/license quality | 107 tests, Ruff, `uv lock --check`, diff check, MIT license | PASS |
+| Unit/integration/E2E/secret/license quality | 127 tests, Ruff, diff check, MIT license | PASS |
 
 ## External handoff
 
@@ -56,6 +62,6 @@ The line-scoped `plow-credentials` has been generated with `plow-agents`, a
 stable `AGENT_ID` has been selected, the live compose runtime is up, the branded
 response retest passed, and the public community entry is reporting usage.
 After the Verified program opens, request that status on the Agent Index entry.
-Galahad still will not
+Joust still will not
 accept legal terms, publish, or submit without explicit confirmation immediately
 before that irreversible action.

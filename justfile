@@ -12,4 +12,4 @@ lint:
 
 [doc("Build and validate the public source bundle from committed files.")]
 bundle:
-    uv run --python 3.13 python -m hackathon_competitor.cli bundle --output dist/galahad-public.zip
+    uv run --python 3.13 python -m hackathon_competitor.cli bundle --output dist/joust-public.zip

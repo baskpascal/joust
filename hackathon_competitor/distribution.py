@@ -54,9 +54,7 @@ def validate_public_bundle(bundle: Path) -> dict[str, object]:
             if path.suffix == ".pin" or path.parts[:2] == ("image", "s6-overlay")
         ]
         crlf_files = [
-            str(path)
-            for path in linux_control_files
-            if b"\r" in archive.read(relative[path])
+            str(path) for path in linux_control_files if b"\r" in archive.read(relative[path])
         ]
         if crlf_files:
             raise ValueError(f"Linux control files contain carriage returns: {crlf_files}")
@@ -69,7 +67,7 @@ def build_public_bundle(repo_root: Path, output: Path) -> dict[str, object]:
     output = output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
-        prefix="galahad-public-", suffix=".zip", dir=output.parent, delete=False
+        prefix="joust-public-", suffix=".zip", dir=output.parent, delete=False
     ) as handle:
         temporary = Path(handle.name)
     try:
@@ -80,7 +78,7 @@ def build_public_bundle(repo_root: Path, output: Path) -> dict[str, object]:
                 "core.autocrlf=false",
                 "archive",
                 "--format=zip",
-                "--prefix=galahad/",
+                "--prefix=joust/",
                 f"--output={temporary}",
                 "HEAD",
             ],
@@ -94,6 +92,10 @@ def build_public_bundle(repo_root: Path, output: Path) -> dict[str, object]:
             raise RuntimeError(f"git archive failed: {result.stderr.strip()}")
         summary = validate_public_bundle(temporary)
         temporary.replace(output)
-        return {**summary, "path": str(output), "sha256": hashlib.sha256(output.read_bytes()).hexdigest()}
+        return {
+            **summary,
+            "path": str(output),
+            "sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
+        }
     finally:
         temporary.unlink(missing_ok=True)

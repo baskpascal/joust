@@ -167,19 +167,14 @@ class LocalGitTool:
         return self.shell.run(["git", "diff", "--no-ext-diff"], timeout_seconds=30)
 
     def changed_files(self) -> list[str]:
-        output = self.shell.run(
-            ["git", "status", "--short", "--porcelain=v1"], timeout_seconds=15
-        )
+        output = self.shell.run(["git", "status", "--short", "--porcelain=v1"], timeout_seconds=15)
         # LocalShellTool combines stdout/stderr; ignore trace/warning lines and
         # retain only porcelain records (two status bytes followed by a space).
         valid = set(" MADRCU?!")
         return [
             line[3:]
             for line in output.splitlines()
-            if len(line) >= 4
-            and line[2] == " "
-            and line[0] in valid
-            and line[1] in valid
+            if len(line) >= 4 and line[2] == " " and line[0] in valid and line[1] in valid
         ]
 
     def commit_diff(self, commit_sha: str) -> str:
@@ -221,7 +216,7 @@ class CodingAgentCommandTool:
         self.command_prefix = list(command_prefix)
 
     def implement(self, specification: str) -> str:
-        relative = ".galahad/coding-agent-handoff.md"
+        relative = ".joust/coding-agent-handoff.md"
         self.files.write_text(relative, specification)
         return self.shell.run(
             [*self.command_prefix, relative],

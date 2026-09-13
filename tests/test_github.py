@@ -24,14 +24,25 @@ class FakeShell:
                 {
                     "url": "https://github.com/owner/project/pull/3",
                     "number": 3,
-                    "headRefName": "galahad/mission",
+                    "headRefName": "joust/mission",
                     "baseRefName": "main",
                 }
             )
         if argv[0:2] == ["gh", "api"]:
-            return json.dumps({"ref": "refs/heads/galahad/mission"})
-        if argv[0:3] == ["gh", "pr", "checks"]:
-            return "[]"
+            if "check-runs" in argv[-1]:
+                return json.dumps(
+                    {
+                        "check_runs": [
+                            {
+                                "name": "tests",
+                                "status": "completed",
+                                "conclusion": "success",
+                                "html_url": "https://github.com/owner/project/actions/runs/1",
+                            }
+                        ]
+                    }
+                )
+            return json.dumps({"ref": "refs/heads/joust/mission"})
         if argv[0:2] == ["git", "push"]:
             return "pushed"
         raise AssertionError(argv)
@@ -46,18 +57,26 @@ def test_github_adapter_keeps_repository_and_publish_operations_structured(tmp_p
 
     assert adapter.repository("owner/project")["nameWithOwner"] == "owner/project"
     assert adapter.clone("owner/project", "target") == "cloned"
-    assert adapter.create_branch("owner/project", "galahad/mission", "abc123").endswith(
-        "galahad/mission"
+    assert adapter.create_branch("owner/project", "joust/mission", "abc123").endswith(
+        "joust/mission"
     )
-    assert adapter.push("origin", "galahad/mission") == "pushed"
+    assert adapter.push("origin", "joust/mission") == "pushed"
     pull_request = adapter.create_pull_request(
         "owner/project",
-        head="galahad/mission",
+        head="joust/mission",
         base="main",
         title="Build slice",
-        body="Validated by Galahad",
+        body="Validated by Joust",
     )
     assert pull_request["number"] == 3
-    assert adapter.checks("owner/project", "3") == []
+    assert adapter.checks("owner/project", "abc123") == [
+        {
+            "name": "tests",
+            "state": "success",
+            "link": "https://github.com/owner/project/actions/runs/1",
+        }
+    ]
+    checks_call = next(argv for argv, _ in shell.calls if "check-runs" in argv[-1])
+    assert checks_call[0:4] == ["gh", "api", "-H", "Accept: application/vnd.github+json"]
     assert all(isinstance(argv, list) for argv, _ in shell.calls)
     assert all(timeout > 0 for _, timeout in shell.calls)

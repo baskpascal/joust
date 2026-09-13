@@ -8,6 +8,7 @@ from hackathon_competitor.competition_actions import (
 )
 from hackathon_competitor.models import (
     ActionCandidate,
+    ActionExecution,
     ActionExecutionStatus,
     CompetitionActionType,
     Mission,
@@ -114,3 +115,37 @@ def test_failed_action_is_durable_and_advances_to_verification(tmp_path):
     stored_cycle = database.get_competition_cycle(cycle.id)
     assert stored_cycle.stage.value == "VERIFY"
     assert stored_cycle.execution_succeeded is False
+
+
+def test_running_action_from_interrupted_process_is_closed_durably(tmp_path):
+    database = Database(tmp_path / "state.db")
+    database.migrate()
+    mission = Mission(title="Interrupted", objective="win", workspace_path=str(tmp_path))
+    database.save_mission(mission)
+    action = ActionCandidate(
+        name="Build",
+        description="Verify project",
+        action_type=CompetitionActionType.BUILD_PROJECT,
+        parameters={"specification": "verify"},
+        expected_outcome_improvement=0.5,
+        time_cost=1.0,
+        technical_risk=0.1,
+        regression_probability=0.1,
+    )
+    cycle = _selected_cycle(database, mission, action)
+    running = ActionExecution(
+        mission_id=mission.id,
+        cycle_id=cycle.id,
+        action=action,
+    )
+    database.save_action_execution(running)
+
+    execution = CompetitionActionDispatcher(database, {}).execute_selected(cycle.id)
+
+    assert execution.status == ActionExecutionStatus.FAILED
+    assert "ended before a durable result" in execution.error
+    assert database.get_competition_cycle(cycle.id).stage.value == "VERIFY"
+    assert any(
+        event["event_type"] == "COMPETITION_ACTION_INTERRUPTED"
+        for event in database.events(mission.id)
+    )

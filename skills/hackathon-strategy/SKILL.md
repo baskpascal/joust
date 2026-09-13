@@ -1,6 +1,6 @@
 ---
 name: hackathon-strategy
-description: Generate, compare, challenge, and select evidence-backed product strategies for an active Galahad mission.
+description: Generate, compare, challenge, and select evidence-backed product strategies for an active Joust mission.
 ---
 
 # Hackathon strategy

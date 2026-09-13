@@ -15,7 +15,8 @@ def test_variant_uses_immutable_official_base_and_does_not_vendor_runtime():
     assert not (ROOT / "image/seed/SOUL.md").exists()
     assert (ROOT / "runtime/persona.md").is_file()
     assert "HERMES_HOME_MODE=3770" in dockerfile
-    assert "find /opt/galahad -type d -exec chmod 0755" in dockerfile
+    assert "find /opt/joust -type d -exec chmod 0755" in dockerfile
+    assert "gh=2.46.0-3" in dockerfile
 
 
 def test_linux_control_files_stay_lf_in_windows_clones():
@@ -27,7 +28,7 @@ def test_linux_control_files_stay_lf_in_windows_clones():
 
 def test_variant_persona_owns_the_public_agent_identity():
     persona = (ROOT / "runtime/persona.md").read_text()
-    assert "Your public name is Galahad" in persona
+    assert "Your public name is Joust" in persona
     assert "Never introduce yourself by that label" in persona
 
 

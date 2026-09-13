@@ -12,10 +12,29 @@ from pathlib import Path
 from uuid import UUID
 
 from .build_loop import CommandImplementer, HermesImplementer, project_environment
+from .competition_actions import (
+    CompetitionActionDispatcher,
+    RealBuildActionExecutor,
+    RealResearchActionExecutor,
+)
+from .competition_runner import CompetitionIterationRunner
 from .distribution import build_public_bundle
 from .exporter import export_mission_bundle
 from .github import GitHubCliAdapter
-from .models import EntrantProfile, MissionState, ProjectMode, ProjectTarget
+from .hermes_planner import (
+    HermesCompetitionPlanner,
+    HermesOneShotReasoner,
+    ObservationOnlyExecutor,
+    ReadinessMeasurer,
+)
+from .models import (
+    CompetitionActionType,
+    EntrantProfile,
+    MissionState,
+    ProjectMode,
+    ProjectTarget,
+)
+from .observation import CompetitionObserver
 from .orchestrator import MissionOrchestrator
 from .pipeline import (
     build_project_for_mission,
@@ -36,7 +55,7 @@ def default_home() -> Path:
     runtime_home = Path("/var/lib/hermes")
     if runtime_home.is_dir():
         return runtime_home / "hackathon_competitor"
-    return Path.home() / ".galahad"
+    return Path.home() / ".joust"
 
 
 def runtime(home: Path | None = None) -> MissionOrchestrator:
@@ -180,7 +199,7 @@ def doctor(home: Path | None = None) -> tuple[dict[str, dict[str, object]], bool
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="galahad")
+    parser = argparse.ArgumentParser(prog="joust")
     parser.add_argument("--home", type=Path, help="state directory override")
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -219,7 +238,10 @@ def build_parser() -> argparse.ArgumentParser:
     attach.add_argument("--repo-name")
     attach.add_argument("--default-branch", default="main")
     attach.add_argument(
-        "--install-command", action="append", default=[], metavar="JSON_ARGV",
+        "--install-command",
+        action="append",
+        default=[],
+        metavar="JSON_ARGV",
         help='repeatable JSON argv, e.g. ["python","-m","pip","install","-e", "."]',
     )
     attach.add_argument("--build-command", action="append", default=[], metavar="JSON_ARGV")
@@ -247,13 +269,18 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--max-repairs", type=int, default=0)
     prepare = mission_commands.add_parser("prepare-project-submission")
     prepare.add_argument("mission_id", type=UUID)
+    compete = mission_commands.add_parser("compete-run")
+    compete.add_argument("mission_id", type=UUID)
+    compete.add_argument("--hermes-model")
+    compete.add_argument("--hermes-reasoning")
+    compete.add_argument("--max-repairs", type=int, default=1)
 
     db = commands.add_parser("db")
     db_commands = db.add_subparsers(dest="db_command", required=True)
     db_commands.add_parser("migrate")
     commands.add_parser("doctor")
     bundle = commands.add_parser("bundle")
-    bundle.add_argument("--output", type=Path, default=Path("dist/galahad-public.zip"))
+    bundle.add_argument("--output", type=Path, default=Path("dist/joust-public.zip"))
     return parser
 
 
@@ -343,6 +370,64 @@ def main(argv: list[str] | None = None) -> int:
         prepared = prepare_project_submission(app, args.mission_id)
         print(json.dumps(mission_status(app, prepared), indent=2))
         return 0 if prepared.state == MissionState.READY_FOR_SUBMISSION else 1
+    if args.mission_command == "compete-run":
+        if args.max_repairs < 0:
+            raise ValueError("--max-repairs cannot be negative")
+        mission = app.database.get_mission(args.mission_id)
+        try:
+            target = app.database.get_project_target_for_mission(mission.id)
+        except KeyError:
+            target = None
+        github = (
+            GitHubCliAdapter(str(Path(target.local_path).resolve()))
+            if target is not None and target.repository_url
+            else None
+        )
+        reasoner = HermesOneShotReasoner(
+            target.local_path if target is not None else mission.workspace_path,
+            model=args.hermes_model,
+            reasoning=args.hermes_reasoning,
+        )
+        allowed = {CompetitionActionType.CUSTOM, CompetitionActionType.RESEARCH}
+        executors = {
+            CompetitionActionType.CUSTOM: ObservationOnlyExecutor(),
+            CompetitionActionType.RESEARCH: RealResearchActionExecutor(app.database),
+        }
+        if target is not None:
+            allowed.add(CompetitionActionType.BUILD_PROJECT)
+            executors[CompetitionActionType.BUILD_PROJECT] = RealBuildActionExecutor(
+                app.database,
+                app.artifact_root,
+                HermesImplementer(
+                    model=args.hermes_model,
+                    reasoning=args.hermes_reasoning,
+                ),
+                github=github,
+            )
+        next_cycle = CompetitionIterationRunner(
+            app.database,
+            CompetitionObserver(app.database, github=github),
+            HermesCompetitionPlanner(
+                app.database,
+                reasoner,
+                allowed_action_types=allowed,
+                max_repairs=args.max_repairs,
+            ),
+            CompetitionActionDispatcher(app.database, executors),
+            ReadinessMeasurer(),
+        ).run(mission.id)
+        print(
+            json.dumps(
+                {
+                    "mission": str(mission.id),
+                    "status": app.database.get_mission(mission.id).status.value,
+                    "next_cycle": str(next_cycle.id) if next_cycle else None,
+                    "next_stage": next_cycle.stage.value if next_cycle else None,
+                },
+                indent=2,
+            )
+        )
+        return 0
     if args.mission_command == "resume":
         resumed = app.resume_mission(args.mission_id)
         mission = (

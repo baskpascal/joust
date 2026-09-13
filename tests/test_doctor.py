@@ -4,7 +4,7 @@ from hackathon_competitor.cli import _runtime_marker_present, doctor
 
 
 def test_doctor_reports_required_runtime_surfaces(tmp_path, monkeypatch):
-    monkeypatch.setenv("AGENT_ID", "galahad")
+    monkeypatch.setenv("AGENT_ID", "joust")
     monkeypatch.setenv("PLOW_MCP_URL", "https://relay.invalid/mcp")
     checks, healthy = doctor(tmp_path)
     assert healthy

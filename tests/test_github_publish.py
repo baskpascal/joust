@@ -36,7 +36,7 @@ def _setup(tmp_path):
         mode=ProjectMode.EXISTING_REPO,
         local_path=str(tmp_path / "project"),
         repository_url="owner/project",
-        working_branch="galahad/mission",
+        working_branch="joust/mission",
     )
     change_set = ChangeSet(
         mission_id=mission.id,
@@ -68,7 +68,7 @@ def test_github_publish_requires_matching_explicit_approval(tmp_path):
     assert decided.status == ApprovalStatus.GRANTED
     assert service.push(approval.id, target, change_set, idempotency_key="push-1") == "pushed"
     assert service.push(approval.id, target, change_set, idempotency_key="push-1") == "pushed"
-    assert github.pushes == [("origin", "galahad/mission")]
+    assert github.pushes == [("origin", "joust/mission")]
 
 
 def test_github_publish_rejects_default_branch_and_mismatched_pr(tmp_path):
@@ -79,10 +79,10 @@ def test_github_publish_rejects_default_branch_and_mismatched_pr(tmp_path):
     with pytest.raises(GitHubPublicationError, match="default branch"):
         service.request_push(target, change_set)
 
-    target.working_branch = "galahad/mission"
+    target.working_branch = "joust/mission"
     approval = service.request_pull_request(target, change_set, title="Build slice")
     service.external.approvals.decide(approval.id, granted=True, explicit_confirmation=True)
-    target.working_branch = "galahad/other"
+    target.working_branch = "joust/other"
     with pytest.raises(GitHubPublicationError, match="approval"):
         service.create_pull_request(
             approval.id,

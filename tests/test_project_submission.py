@@ -47,9 +47,7 @@ def _planned_app(tmp_path, *, include_run: bool = True):
         repository_url="owner/project",
         language="Python",
         test_commands=[[sys.executable, "-c", "print('test-ok')"]],
-        run_commands=(
-            [[sys.executable, "-c", "print('demo-ok')"]] if include_run else []
-        ),
+        run_commands=([[sys.executable, "-c", "print('demo-ok')"]] if include_run else []),
     )
     app.attach_project_target(target)
     mission = database.get_mission(mission.id)

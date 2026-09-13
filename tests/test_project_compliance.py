@@ -62,7 +62,9 @@ def test_project_inspector_does_not_use_agent_license(tmp_path):
     spec = HackathonSpec(
         mission_id=mission_id,
         name="TestFest",
-        eligibility_requirements=[Requirement(id="license", text="The project must use the MIT license.")],
+        eligibility_requirements=[
+            Requirement(id="license", text="The project must use the MIT license.")
+        ],
     )
     target = ProjectTarget(
         mission_id=mission_id,
@@ -87,8 +89,6 @@ def test_project_inspector_evaluates_known_deadline(tmp_path):
         name="Future",
         deadline_at=datetime.now(UTC) + timedelta(hours=1),
     )
-    past = future.model_copy(
-        update={"deadline_at": datetime.now(UTC) - timedelta(hours=1)}
-    )
+    past = future.model_copy(update={"deadline_at": datetime.now(UTC) - timedelta(hours=1)})
     assert inspect_project_target(future, target).rules[-1].status.value == "pass"
     assert inspect_project_target(past, target).rules[-1].status.value == "fail"

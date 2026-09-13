@@ -6,18 +6,18 @@ Agent Index entry.
 ## Current entry
 
 - Agent id: `galahad-hackathon`
-- Public name: Galahad
+- Public name: Joust
 - Runtime: Hermes / Plow
 - Page: <https://aiworthusing.com/agent-index/galahad-hackathon>
 - Community listing: live
 - Usage reporting: live
 - Verified: unavailable until 2026-09-14
-- Public repository: `https://github.com/baskpascal/galahad`
+- Public repository: `https://github.com/baskpascal/joust`
 - Default branch: `main`
 - Description: `Evidence-first Hermes agent that helps teams research, build, red-team, and package hackathon entries.`
 - Topics: `ai-agent`, `hackathon`, `hermes`, `plow`, `python`
-- Validated local source bundle: `dist/galahad-public.zip`
-- Install URL: `https://github.com/baskpascal/galahad#readme`
+- Validated local source bundle: `dist/joust-public.zip`
+- Install URL: `https://github.com/baskpascal/joust#readme`
 - One-click install URL: pending Plow-team setup
 - Demo media: pending
 
@@ -28,7 +28,7 @@ Agent Index entry.
 - Tag: `Engineering`
 - Body:
 
-  Lucas asked Galahad to analyze the live Agent Index page. It fetched the
+  Lucas asked Joust to analyze the live Agent Index page. It fetched the
   official source, extracted six evidence records, rejected narrative user
   stories as rule evidence, and stopped safely when the page did not state a
   critical prohibition. The mission remained persisted in `BLOCKED` with the

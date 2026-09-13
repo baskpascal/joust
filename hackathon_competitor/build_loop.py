@@ -100,7 +100,9 @@ class ProjectBootstrap(Protocol):
 
 
 class Implementer(Protocol):
-    def implement(self, project_root: Path, specification: str, failure: str | None = None) -> str: ...
+    def implement(
+        self, project_root: Path, specification: str, failure: str | None = None
+    ) -> str: ...
 
 
 class RepairableImplementer(Implementer, Protocol):
@@ -208,7 +210,9 @@ class RealBuildLoop:
         self.artifact_root = Path(artifact_root)
         self.github = github
 
-    def _snapshot(self, target: ProjectTarget, git: LocalGitTool, *, dirty: bool) -> RepositorySnapshot:
+    def _snapshot(
+        self, target: ProjectTarget, git: LocalGitTool, *, dirty: bool
+    ) -> RepositorySnapshot:
         snapshot = RepositorySnapshot(
             mission_id=target.mission_id,
             project_target_id=target.id,
@@ -278,7 +282,7 @@ class RealBuildLoop:
         """Run the validated commit from a clean clone, never the working tree."""
 
         source = Path(target.local_path).resolve()
-        with tempfile.TemporaryDirectory(prefix="galahad-reproduce-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="joust-reproduce-") as temporary:
             clone = Path(temporary) / "project"
             shell = LocalShellTool(clone, environment=environment)
             shell.run(["git", "clone", "--no-local", str(source), str(clone)], timeout_seconds=60)
@@ -296,10 +300,7 @@ class RealBuildLoop:
                     error = str(exc)
                     exit_code = 1
                 log_path = (
-                    self.artifact_root
-                    / str(target.mission_id)
-                    / "build"
-                    / f"reproduce-{phase}.log"
+                    self.artifact_root / str(target.mission_id) / "build" / f"reproduce-{phase}.log"
                 )
                 log_path.parent.mkdir(parents=True, exist_ok=True)
                 log_path.write_text(output or error or "", encoding="utf-8")
@@ -334,6 +335,7 @@ class RealBuildLoop:
         implementer: Implementer,
         *,
         max_repairs: int = 1,
+        allow_no_changes: bool = False,
     ) -> ChangeSet:
         if max_repairs < 0:
             raise ValueError("max_repairs cannot be negative")
@@ -355,11 +357,11 @@ class RealBuildLoop:
         try:
             base_sha = git.current_revision()
         except RuntimeError:
-            (root / ".galahad").mkdir(parents=True, exist_ok=True)
-            (root / ".galahad" / ".keep").write_text("", encoding="utf-8")
+            (root / ".joust").mkdir(parents=True, exist_ok=True)
+            (root / ".joust" / ".keep").write_text("", encoding="utf-8")
             base_sha = git_workspace.checkpoint("Initialize competition project workspace")
         target.base_commit_sha = base_sha
-        branch = target.working_branch or f"galahad/{target.mission_id}"
+        branch = target.working_branch or f"joust/{target.mission_id}"
         target.working_branch = branch
         self.database.save_project_target(target)
         if git.current_branch() != branch:
@@ -370,11 +372,11 @@ class RealBuildLoop:
         self._snapshot(target, git, dirty=False)
 
         commands = [
-            *(('install', command) for command in target.install_commands),
-            *(('lint', command) for command in target.lint_commands),
-            *(('build', command) for command in target.build_commands),
-            *(('test', command) for command in target.test_commands),
-            *(('run', command) for command in target.run_commands),
+            *(("install", command) for command in target.install_commands),
+            *(("lint", command) for command in target.lint_commands),
+            *(("build", command) for command in target.build_commands),
+            *(("test", command) for command in target.test_commands),
+            *(("run", command) for command in target.run_commands),
         ]
         if not commands:
             raise BuildLoopError(
@@ -386,16 +388,18 @@ class RealBuildLoop:
         if callable(set_environment):
             set_environment(environment)
         implementer.implement(root, specification)
+        has_changes = bool(git.changed_files())
         commit_sha = git_workspace.checkpoint("Implement competition project slice")
-        diff = git.commit_diff(commit_sha)
+        diff = git.commit_diff(commit_sha) if has_changes else ""
         change_set = ChangeSet(
             mission_id=target.mission_id,
             project_target_id=target.id,
             base_sha=base_sha,
             diff_hash=hashlib.sha256(diff.encode()).hexdigest(),
-            files=git.commit_changed_files(commit_sha),
+            files=git.commit_changed_files(commit_sha) if has_changes else [],
             commit_sha=commit_sha,
             status="committed",
+            verification_only=allow_no_changes and not has_changes,
         )
         self.database.save_change_set(change_set)
         for attempt in range(max_repairs + 1):
@@ -441,17 +445,25 @@ class RealBuildLoop:
                     failure = "project review blocked the change set: " + "; ".join(blockers)
             if attempt >= max_repairs:
                 change_set.status = (
-                    "review_failed" if failure.startswith("project review blocked") else "failed_validation"
+                    "review_failed"
+                    if failure.startswith("project review blocked")
+                    else "failed_validation"
                 )
                 self.database.save_change_set(change_set)
-                raise BuildLoopError(f"project validation failed after {attempt + 1} attempt(s): {failure}")
+                raise BuildLoopError(
+                    f"project validation failed after {attempt + 1} attempt(s): {failure}"
+                )
             repair = getattr(implementer, "repair", None)
             if not callable(repair):
                 change_set.status = (
-                    "review_failed" if failure.startswith("project review blocked") else "failed_validation"
+                    "review_failed"
+                    if failure.startswith("project review blocked")
+                    else "failed_validation"
                 )
                 self.database.save_change_set(change_set)
-                raise BuildLoopError("project validation failed and implementer has no repair method")
+                raise BuildLoopError(
+                    "project validation failed and implementer has no repair method"
+                )
             repair(root, specification, failure)
             commit_sha = git_workspace.checkpoint("Repair competition project validation failure")
             change_set.commit_sha = commit_sha

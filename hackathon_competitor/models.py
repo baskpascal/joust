@@ -269,6 +269,7 @@ class ChangeSet(Contract):
     files: list[str] = Field(default_factory=list)
     commit_sha: str | None = None
     status: str = "draft"
+    verification_only: bool = False
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -405,6 +406,25 @@ class ActionExecution(Contract):
     error: str | None = None
     started_at: datetime = Field(default_factory=utcnow)
     finished_at: datetime | None = None
+
+
+class AssessmentPlan(Contract):
+    bottleneck: str
+    candidates: list[ActionCandidate]
+
+
+class Measurement(Contract):
+    before: float
+    after: float
+    metric: str
+
+
+class AdaptationPlan(Contract):
+    next_bottleneck: str | None = None
+    next_best_action: str | None = None
+    mission_score: float | None = Field(default=None, ge=0.0)
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    terminal_status: MissionStatus | None = None
 
 
 class Task(Contract):

@@ -30,6 +30,11 @@ class FakeDeployment:
         return {"target": target, "healthy": True}
 
 
+class MissingGitHub:
+    def checks(self, repository, ref):
+        raise FileNotFoundError("gh is unavailable")
+
+
 def test_observation_plane_captures_real_local_project_state(tmp_path):
     database = Database(tmp_path / "state.db")
     assert database.migrate() == 9
@@ -92,9 +97,9 @@ def test_observation_plane_captures_real_local_project_state(tmp_path):
     github = FakeGitHub()
     cycle = CompeteLoop(database).create_cycle(mission.id)
 
-    observation = CompetitionObserver(
-        database, github=github, deployment=FakeDeployment()
-    ).capture(cycle.id, score_signals={"leaderboard_rank": 4.0})
+    observation = CompetitionObserver(database, github=github, deployment=FakeDeployment()).capture(
+        cycle.id, score_signals={"leaderboard_rank": 4.0}
+    )
 
     assert observation.deadline_state == "upcoming"
     assert observation.repository_revision == commit_sha
@@ -127,3 +132,32 @@ def test_observation_plane_records_missing_target_and_expired_deadline(tmp_path)
     assert observation.deadline_state == "expired"
     assert "competition deadline has elapsed" in observation.findings
     assert "mission has no project target" in observation.uncertainties
+
+
+def test_observation_plane_degrades_missing_optional_github_cli(tmp_path):
+    database = Database(tmp_path / "state.db")
+    database.migrate()
+    project = tmp_path / "entry"
+    project.mkdir()
+    workspace = GitWorkspace(project)
+    workspace.initialize()
+    (project / "README.md").write_text("entry", encoding="utf-8")
+    commit_sha = workspace.checkpoint("Initialize")
+    mission = Mission(title="Observe", objective="compete", workspace_path=str(project))
+    database.save_mission(mission)
+    target = ProjectTarget(
+        mission_id=mission.id,
+        mode=ProjectMode.EXISTING_REPO,
+        local_path=str(project),
+        repository_url="owner/entry",
+        final_commit_sha=commit_sha,
+        test_commands=[["python", "-c", "print('ok')"]],
+    )
+    database.save_project_target(target)
+    database.attach_project_target(mission.id, target.id)
+    cycle = CompeteLoop(database).create_cycle(mission.id)
+
+    observation = CompetitionObserver(database, github=MissingGitHub()).capture(cycle.id)
+
+    assert any("GitHub checks observation failed" in item for item in observation.uncertainties)
+    assert database.get_competition_cycle(cycle.id).stage.value == "ASSESS"

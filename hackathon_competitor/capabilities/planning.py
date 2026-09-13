@@ -122,7 +122,7 @@ mark downstream work stale when upstream facts change.
 
 ## Runtime boundary
 
-Galahad is a variant of the official Plow Hermes image. Plow Chat, Latch,
+Joust is a variant of the official Plow Hermes image. Plow Chat, Latch,
 gateway boot, and generic credentials remain upstream. This repository owns
 only the persona, skills, mission package, tests, and Agent Index service.
 

@@ -1,6 +1,6 @@
-# Galahad
+# Joust
 
-Galahad is an evidence-first Hermes agent that helps a team understand,
+Joust is an evidence-first Hermes agent that helps a team understand,
 research, plan, build, attack, repair, and package a hackathon entry.
 
 Its promise is simple: **give it a hackathon; it tries to win it.**
@@ -8,7 +8,7 @@ Its promise is simple: **give it a hackathon; it tries to win it.**
 ## Architecture
 
 This repository is a Plow agent variant. It builds from the immutable official
-`plow-hermes-agent` image and owns only Galahad's persona, skills, deterministic
+`plow-hermes-agent` image and owns only Joust's persona, skills, deterministic
 mission kernel, tests, docs, and Agent Index reporter. Generic Hermes/Plow
 runtime behavior is not forked here.
 
@@ -54,7 +54,7 @@ commands continue to receive the reduced non-secret project environment.
 
 After a validated target build, `prepare-project-submission` generates a pack
 whose repository, branch, commit SHA, diff hash, and reproduction evidence are
-all bound to that target. The V0 Galahad demo pack cannot stand in for this
+all bound to that target. The V0 Joust demo pack cannot stand in for this
 target-bound pack.
 
 Use `HACKATHON_COMPETITOR_HOME` to override the default local state directory.
@@ -65,7 +65,7 @@ Requirements: Git, Docker, and Docker Compose v2. After cloning the repository,
 an optional standalone image build is:
 
 ```bash
-docker build -t galahad-agent .
+docker build -t joust-agent .
 ```
 
 1. Generate a line-scoped credential locally with the official helper:
@@ -106,7 +106,7 @@ explicitly confirmation-gated actions.
 
 The image includes the official Agent Index client pinned by commit and
 SHA-256 and runs it under `s6` every five minutes. Credentials, prompts,
-mission content, and file paths are not sent by Galahad's reporting service.
+mission content, and file paths are not sent by Joust's reporting service.
 
 See [docs/SDD.md](docs/SDD.md), [docs/DECISIONS.md](docs/DECISIONS.md), and
 [docs/RUNBOOK.md](docs/RUNBOOK.md).
@@ -116,7 +116,7 @@ See [docs/SDD.md](docs/SDD.md), [docs/DECISIONS.md](docs/DECISIONS.md), and
 Create a reproducible ZIP from committed files only:
 
 ```bash
-python -m hackathon_competitor.cli bundle --output dist/galahad-public.zip
+python -m hackathon_competitor.cli bundle --output dist/joust-public.zip
 ```
 
 The command validates required install files, MIT licensing, README markers,

@@ -411,9 +411,7 @@ class Database:
     def list_entrant_profiles(self) -> list[EntrantProfile]:
         return self._list("entrant_profiles", EntrantProfile)
 
-    def attach_entrant_profile(
-        self, mission_id: UUID | str, profile_id: UUID | str
-    ) -> Mission:
+    def attach_entrant_profile(self, mission_id: UUID | str, profile_id: UUID | str) -> Mission:
         mission = self.get_mission(mission_id)
         profile = self.get_entrant_profile(profile_id)
         mission.entrant_profile_id = profile.id
@@ -456,9 +454,7 @@ class Database:
             observed_at=observation.observed_at.isoformat(),
         )
 
-    def list_competition_observations(
-        self, mission_id: UUID | str
-    ) -> list[CompetitionObservation]:
+    def list_competition_observations(self, mission_id: UUID | str) -> list[CompetitionObservation]:
         return self._list_for_mission(
             "competition_observations", mission_id, CompetitionObservation
         )
@@ -693,27 +689,23 @@ class Database:
                 else None
             ),
             "competition_rules": [
-                item.model_dump(mode="json")
-                for item in self.list_competition_rules(mission.id)
+                item.model_dump(mode="json") for item in self.list_competition_rules(mission.id)
             ],
             "competition_cycles": [
-                item.model_dump(mode="json")
-                for item in self.list_competition_cycles(mission.id)
+                item.model_dump(mode="json") for item in self.list_competition_cycles(mission.id)
             ],
             "competition_observations": [
                 item.model_dump(mode="json")
                 for item in self.list_competition_observations(mission.id)
             ],
             "action_executions": [
-                item.model_dump(mode="json")
-                for item in self.list_action_executions(mission.id)
+                item.model_dump(mode="json") for item in self.list_action_executions(mission.id)
             ],
             "project_targets": [
                 item.model_dump(mode="json") for item in self.list_project_targets(mission.id)
             ],
             "repository_snapshots": [
-                item.model_dump(mode="json")
-                for item in self.list_repository_snapshots(mission.id)
+                item.model_dump(mode="json") for item in self.list_repository_snapshots(mission.id)
             ],
             "build_runs": [
                 item.model_dump(mode="json") for item in self.list_build_runs(mission.id)

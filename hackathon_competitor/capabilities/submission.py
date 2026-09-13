@@ -55,7 +55,7 @@ def submission_documents(
 
 ## Why it matters
 
-Galahad connects rules, evidence, strategy, implementation, evaluation,
+Joust connects rules, evidence, strategy, implementation, evaluation,
 repair, demo, and submission artifacts in one restart-safe mission.
 
 ## Install and run
@@ -73,13 +73,13 @@ Index integration.
         ),
         "submission-short.txt": (
             "submission_short",
-            "Galahad turns a hackathon brief into an evidence-backed strategy, tested build, adversarial review, and honest submission pack.",
+            "Joust turns a hackathon brief into an evidence-backed strategy, tested build, adversarial review, and honest submission pack.",
         ),
         "submission-long.md": (
             "submission_long",
             f"""# Submission description
 
-Galahad is a competition lead, not merely an idea generator. For {spec.name},
+Joust is a competition lead, not merely an idea generator. For {spec.name},
 it locks official rules, maps evidence, explores diverse strategies, uses
 independent judges, records a reversible decision, builds a plan, validates an
 executable path, red-teams the result, and packages claims that match evidence.
@@ -113,7 +113,7 @@ Tournament winner: **{pitch_winner}**
 
 {pitch_scores}
 
-**Hook:** Most hackathon copilots generate ideas. Galahad runs the competition.
+**Hook:** Most hackathon copilots generate ideas. Joust runs the competition.
 
 **Differentiation:** It traces official evidence through strategy, build,
 red-team, repair, demo, and submission — with durable state and human control.
@@ -174,7 +174,7 @@ def project_submission_documents(
 ) -> dict[str, tuple[str, str]]:
     """Render a submission pack that names the real project commit.
 
-    The V0 ``submission_documents`` function describes Galahad's distribution
+    The V0 ``submission_documents`` function describes Joust's distribution
     demo. This writer is deliberately separate so a target project cannot be
     represented by the agent repository's evidence by accident.
     """
@@ -187,8 +187,7 @@ def project_submission_documents(
             for argument in run.command
         )
         command_lines.append(
-            f"- `{run.phase}`: `{public_command}` — "
-            f"{'PASS' if run.passed else 'FAIL'}"
+            f"- `{run.phase}`: `{public_command}` — {'PASS' if run.passed else 'FAIL'}"
         )
     commands = "\n".join(command_lines) or "- No build evidence recorded."
     repository = target.repository_url or "(local-only target)"
@@ -210,9 +209,9 @@ def project_submission_documents(
 - Validated commit: `{change_set.commit_sha}`
 - Diff hash: `{change_set.diff_hash}`
 
-This pack describes the competition project produced by Galahad. The commit
+This pack describes the competition project produced by Joust. The commit
 and reproduction evidence above refer to the target repository, not the
-Galahad distribution repository.
+Joust distribution repository.
 
 ## Build evidence
 
@@ -238,7 +237,7 @@ The checks were repeated from a clean clone before this pack was generated.
             "project_demo_script",
             f"""# Project demo
 
-1. Check out `{target.repository_url or '(the local target)'}` at commit `{change_set.commit_sha}`.
+1. Check out `{target.repository_url or "(the local target)"}` at commit `{change_set.commit_sha}`.
 2. Run the declared install/build commands.
 3. Run the declared test and demo commands.
 4. Show the user journey and the rule/compliance report.
@@ -268,7 +267,7 @@ the validated commit.
 - [x] Mission branch recorded: `{target.working_branch}`
 - [x] Validated commit recorded: `{change_set.commit_sha}`
 - [x] Clean-clone reproduction recorded.
-- [{'x' if compliance.ready else ' '}] Blocker rules pass.
+- [{"x" if compliance.ready else " "}] Blocker rules pass.
 - [ ] Human explicitly confirms final submission.
 """,
         ),

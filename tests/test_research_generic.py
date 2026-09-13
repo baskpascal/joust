@@ -39,13 +39,9 @@ def test_realistic_agent_index_copy_yields_rules_without_story_false_positive():
 
     assert len(source.rules) >= 3
     assert any(
-        rule["kind"] == "eligibility" and "verified" in rule["text"]
-        for rule in source.rules
+        rule["kind"] == "eligibility" and "verified" in rule["text"] for rule in source.rules
     )
-    assert any(
-        rule["kind"] == "submission" and "Register" in rule["text"]
-        for rule in source.rules
-    )
+    assert any(rule["kind"] == "submission" and "Register" in rule["text"] for rule in source.rules)
     assert any(
         rule["kind"] == "required-technology" and "agent-index" in rule["text"]
         for rule in source.rules

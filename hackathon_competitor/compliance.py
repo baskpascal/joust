@@ -107,7 +107,7 @@ def inspect_project_target(
     *,
     build_runs: Iterable[BuildRun] = (),
 ) -> ComplianceReport:
-    """Evaluate rules against the mission project, never against Galahad itself."""
+    """Evaluate rules against the mission project, never against Joust itself."""
 
     root = Path(target.local_path).resolve()
     runs = list(build_runs)

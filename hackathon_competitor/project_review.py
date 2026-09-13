@@ -38,11 +38,11 @@ def review_project_change(
             if any(pattern.search(content) for pattern in _SECRET_PATTERNS):
                 blockers.append(f"possible secret in changed file: {relative}")
 
-    if not changed:
+    if not changed and not change_set.verification_only:
         blockers.append("validated change set contains no changed files")
-    if not any(Path(item).name.lower().startswith("test") for item in changed):
+    if changed and not any(Path(item).name.lower().startswith("test") for item in changed):
         findings.append("no changed test file was found")
-    if not any(Path(item).name.lower() == "readme.md" for item in changed):
+    if changed and not any(Path(item).name.lower() == "readme.md" for item in changed):
         findings.append("no changed README was found")
     # A repair loop intentionally preserves failed historical attempts. Review
     # evidence for the final change set must be scoped to its commit, otherwise

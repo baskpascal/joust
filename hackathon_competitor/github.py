@@ -38,7 +38,9 @@ class GitHubCliAdapter:
         return value
 
     def repository(self, repository: str) -> dict[str, Any]:
-        value = self._gh_json(["repo", "view", repository, "--json", "nameWithOwner,defaultBranchRef,url"])
+        value = self._gh_json(
+            ["repo", "view", repository, "--json", "nameWithOwner,defaultBranchRef,url"]
+        )
         if not isinstance(value, dict):
             raise GitHubError("repository lookup returned a non-object")
         return value
@@ -54,7 +56,14 @@ class GitHubCliAdapter:
         if not branch or branch.startswith("-"):
             raise ValueError("invalid GitHub branch")
         result = self._gh_json(
-            ["api", f"repos/{repository}/git/refs", "-f", f"ref=refs/heads/{branch}", "-f", f"sha={base}"]
+            [
+                "api",
+                f"repos/{repository}/git/refs",
+                "-f",
+                f"ref=refs/heads/{branch}",
+                "-f",
+                f"sha={base}",
+            ]
         )
         if not isinstance(result, dict) or not isinstance(result.get("ref"), str):
             raise GitHubError("GitHub did not return the created ref")
@@ -63,7 +72,9 @@ class GitHubCliAdapter:
     def push(self, remote: str, branch: str) -> str:
         if not branch or branch.startswith("-"):
             raise ValueError("invalid push branch")
-        return self.shell.run(["git", "push", remote, f"HEAD:{branch}"], timeout_seconds=120).strip()
+        return self.shell.run(
+            ["git", "push", remote, f"HEAD:{branch}"], timeout_seconds=120
+        ).strip()
 
     def create_pull_request(
         self, repository: str, *, head: str, base: str, title: str, body: str
@@ -91,7 +102,25 @@ class GitHubCliAdapter:
         return value
 
     def checks(self, repository: str, ref: str) -> list[dict[str, Any]]:
-        value = self._gh_json(["pr", "checks", ref, "--repo", repository, "--json", "name,state,link"])
-        if not isinstance(value, list):
-            raise GitHubError("GitHub checks returned a non-list")
-        return value
+        value = self._gh_json(
+            [
+                "api",
+                "-H",
+                "Accept: application/vnd.github+json",
+                f"repos/{repository}/commits/{ref}/check-runs?per_page=100",
+            ]
+        )
+        if not isinstance(value, dict) or not isinstance(value.get("check_runs"), list):
+            raise GitHubError("GitHub checks returned an unsupported response")
+        checks: list[dict[str, Any]] = []
+        for check in value["check_runs"]:
+            if not isinstance(check, dict):
+                continue
+            checks.append(
+                {
+                    "name": check.get("name"),
+                    "state": check.get("conclusion") or check.get("status"),
+                    "link": check.get("html_url"),
+                }
+            )
+        return checks

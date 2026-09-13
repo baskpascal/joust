@@ -567,7 +567,8 @@ def prepare_project_submission(orchestrator: MissionOrchestrator, mission_id) ->
         spec = orchestrator.database.get_spec_for_mission(mission.id)
         decision = orchestrator.database.list_decisions(mission.id)[-1]
         selected = next(
-            idea for idea in orchestrator.database.list_ideas(mission.id)
+            idea
+            for idea in orchestrator.database.list_ideas(mission.id)
             if str(idea.id) == decision.selected_option
         )
     except (KeyError, IndexError, StopIteration) as exc:
@@ -644,9 +645,7 @@ def prepare_project_submission(orchestrator: MissionOrchestrator, mission_id) ->
 
     def phase_reproduced(phase: str) -> bool:
         return any(
-            run.commit_sha == change_set.commit_sha
-            and run.phase == phase
-            and run.passed
+            run.commit_sha == change_set.commit_sha and run.phase == phase and run.passed
             for run in runs
         ) and any(
             run.commit_sha == change_set.commit_sha
@@ -1028,7 +1027,7 @@ def complete_v0(orchestrator: MissionOrchestrator, mission_id) -> Mission:
         ),
         project_target_attached=target_attached,
         project_target_validated=target_validated,
-        # This V0 writer describes Galahad's distribution demo. A real target
+        # This V0 writer describes Joust's distribution demo. A real target
         # needs a separate pack that names its repository, branch, and commit.
         project_submission_bound=not target_attached,
     )

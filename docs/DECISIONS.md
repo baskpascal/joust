@@ -2,7 +2,7 @@
 
 ## ADR-001 — Downstream Plow variant
 
-Galahad builds from the immutable official base tag and digest for
+Joust builds from the immutable official base tag and digest for
 `plow-hermes-agent` commit `8710797b6409c77df560c6198407765d138ea617`.
 Generic boot, chat, Latch, and Hermes behavior remain upstream.
 
@@ -10,7 +10,7 @@ Generic boot, chat, Latch, and Hermes behavior remain upstream.
 
 Use the official `plow-pbc/agent-index-client` at reviewed commit
 `f900ff144076f0a766584b6ec4d0993600779b16`, verify SHA-256 at image build,
-and invoke it from a supervised `s6` longrun. Galahad implements no parallel
+and invoke it from a supervised `s6` longrun. Joust implements no parallel
 registration/reporting protocol.
 
 ## ADR-003 — Deterministic first slice
@@ -31,7 +31,7 @@ surface exposes an authoritative rules API.
 ## ADR-005 — Incomplete live rule sources block visibly
 
 Real event pages often omit deadlines, prohibitions, or machine-readable rule
-markup. Galahad may infer conservative candidates from ordinary HTML, but it
+markup. Joust may infer conservative candidates from ordinary HTML, but it
 must not invent missing hard rules. If the rules quality gate fails, the
   mission is persisted in `BLOCKED`, a `QUALITY_GATE_FAILED` event records the
   specific findings, and status exposes them without making downstream tasks
@@ -40,7 +40,7 @@ must not invent missing hard rules. If the rules quality gate fails, the
 
 ## ADR-006 — Project target is separate from the agent repository
 
-The repository that distributes Galahad is not the project it builds for a
+The repository that distributes Joust is not the project it builds for a
 competition. Each mission may attach one `ProjectTarget` in `existing_repo`,
 `new_repo`, or `local_only` mode. The target records the local path, optional
 GitHub URL, branch policy, and explicit install/build/test commands.
@@ -59,7 +59,7 @@ The user supplied a new Joust SDD whose available attachment ends at section
 the system is a persistent competition agent organized around control,
 execution, and observation planes and a continuing compete loop.
 
-The deployed Agent Index identity remains Galahad until an explicit external
+The deployed Agent Index identity remains Joust until an explicit external
 rebrand decision is made. Internal contracts are extended compatibly first;
 the repository, agent id, and published profile are not silently renamed. The
 missing portion of the truncated SDD is not inferred.

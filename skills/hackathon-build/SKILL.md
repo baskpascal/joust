@@ -1,6 +1,6 @@
 ---
 name: hackathon-build
-description: Turn a selected Galahad strategy into a PRD, architecture, implementation slices, tests, and a verified build.
+description: Turn a selected Joust strategy into a PRD, architecture, implementation slices, tests, and a verified build.
 ---
 
 # Hackathon build
@@ -27,7 +27,7 @@ After `build-project` reaches `VALIDATING`, use
 report, final diff review, declared checks, and clean-clone reproduction pass.
 The resulting pack must name the target repository (or local-only status),
 mission branch, commit SHA, diff hash, and build evidence. Never substitute
-the Galahad distribution/demo pack for a real target pack.
+the Joust distribution/demo pack for a real target pack.
 
 Use the official Plow/Hermes ownership boundaries. Do not patch generic runtime
 behavior in this variant, delete tests to obtain green output, or claim

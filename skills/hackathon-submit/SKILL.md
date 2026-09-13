@@ -1,6 +1,6 @@
 ---
 name: hackathon-submit
-description: Prepare and validate Galahad submission artifacts, demo, pitch, claims, and readiness without silently submitting.
+description: Prepare and validate Joust submission artifacts, demo, pitch, claims, and readiness without silently submitting.
 ---
 
 # Hackathon submission
@@ -12,7 +12,7 @@ claim, required field, license, or install path is unresolved.
 
 For a build-capable mission, the submission pack must point to the validated
 project repository, branch, commit SHA, and reproducible build/test evidence.
-The Galahad distribution repository alone is not proof that the competition
+The Joust distribution repository alone is not proof that the competition
 project was built.
 
 Preparation may proceed automatically. Publishing, accepting rules or legal
