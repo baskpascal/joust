@@ -227,8 +227,8 @@ construction, and authenticated GitHub writes remain unproven.
 
 ## 2026-09-13 — Live Hermes construction evidence
 
-Image `galahad-agent:joust-live` was rebuilt at
-`sha256:fa958838162fecabdff72722b7d5f4dd2d4693fef504678aba1ee09239fe0516`.
+The committed tree was rebuilt as `galahad-agent:real-build` at
+`sha256:6cd0e4df0484313b553d9019b1b7589b41cbdaf53df4a2a1c698a446355463df`.
 Container `doctor` was healthy at database migration 9 and the Agent Index
 reporter returned HTTP 200. After using the s6-managed Plow inference
 environment, a Hermes one-shot returned `HERMES_READY`.
