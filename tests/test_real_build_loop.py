@@ -1,8 +1,9 @@
+import sys
 from pathlib import Path
 
 import pytest
 
-from hackathon_competitor.build_loop import BuildLoopError, RealBuildLoop
+from hackathon_competitor.build_loop import BuildLoopError, CommandImplementer, RealBuildLoop
 from hackathon_competitor.models import Mission, ProjectMode, ProjectTarget
 from hackathon_competitor.storage import Database
 
@@ -87,3 +88,16 @@ def test_real_build_loop_requires_project_validation_commands(tmp_path):
     database.save_project_target(target)
     with pytest.raises(BuildLoopError, match="declare"):
         RealBuildLoop(database, tmp_path / "artifacts").run(target, "spec", FakeImplementer())
+
+
+def test_command_implementer_includes_validation_failure_in_repair_prompt(tmp_path):
+    implementer = CommandImplementer(
+        [
+            sys.executable,
+            "-c",
+            "import pathlib,sys; print(pathlib.Path(sys.argv[1]).read_text())",
+        ]
+    )
+    output = implementer.repair(tmp_path, "Build the app.", "pytest failed")
+    assert "pytest failed" in output
+    assert "Repair the implementation" in output

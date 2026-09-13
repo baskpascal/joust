@@ -36,6 +36,16 @@ class CommandImplementer:
     def implement(self, project_root: Path, specification: str, failure: str | None = None) -> str:
         return CodingAgentCommandTool(project_root, self.command_prefix).implement(specification)
 
+    def repair(self, project_root: Path, specification: str, failure: str) -> str:
+        repair_specification = (
+            f"{specification}\n\nValidation failed with:\n{failure}\n\n"
+            "Repair the implementation in the current workspace, preserve the intended behavior, "
+            "and run the project's declared checks before returning."
+        )
+        return CodingAgentCommandTool(project_root, self.command_prefix).implement(
+            repair_specification
+        )
+
 
 class RealBuildLoop:
     """Build a mission-owned project, record a change set, and prove reproducibility."""
