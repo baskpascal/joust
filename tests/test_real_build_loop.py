@@ -3,7 +3,12 @@ from pathlib import Path
 
 import pytest
 
-from hackathon_competitor.build_loop import BuildLoopError, CommandImplementer, RealBuildLoop
+from hackathon_competitor.build_loop import (
+    BuildLoopError,
+    CommandImplementer,
+    RealBuildLoop,
+    project_environment,
+)
 from hackathon_competitor.models import Mission, ProjectMode, ProjectTarget
 from hackathon_competitor.storage import Database
 
@@ -37,13 +42,14 @@ def _mission(tmp_path):
     return database, mission
 
 
-def test_real_build_loop_commits_runs_tests_and_repairs(tmp_path):
+def test_real_build_loop_commits_runs_tests_and_repairs(tmp_path, monkeypatch):
+    monkeypatch.setenv("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
     database, mission = _mission(tmp_path)
     target = ProjectTarget(
         mission_id=mission.id,
         mode=ProjectMode.NEW_REPO,
         local_path=str(tmp_path / "project"),
-        test_commands=[["python", "-m", "pytest", "-q"]],
+        test_commands=[[sys.executable, "-m", "pytest", "-q"]],
     )
     database.save_project_target(target)
     implementer = FakeImplementer()
@@ -101,6 +107,16 @@ def test_command_implementer_includes_validation_failure_in_repair_prompt(tmp_pa
     output = implementer.repair(tmp_path, "Build the app.", "pytest failed")
     assert "pytest failed" in output
     assert "Repair the implementation" in output
+
+
+def test_project_environment_filters_credentials_and_allows_safe_names(monkeypatch):
+    monkeypatch.setenv("PLOW_AGENT_TOKEN", "secret")
+    monkeypatch.setenv("GALAHAD_FIXTURE", "enabled")
+    environment = project_environment(["GALAHAD_FIXTURE"])
+    assert environment["GALAHAD_FIXTURE"] == "enabled"
+    assert "PLOW_AGENT_TOKEN" not in environment
+    with pytest.raises(ValueError, match="sensitive"):
+        project_environment(["PROJECT_API_KEY"])
 
 
 class FakeBootstrap:

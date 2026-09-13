@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
@@ -15,6 +16,57 @@ from .workspace import GitWorkspace
 
 class BuildLoopError(RuntimeError):
     pass
+
+
+_SAFE_ENVIRONMENT_KEYS = frozenset(
+    {
+        "PATH",
+        "PATHEXT",
+        "SYSTEMROOT",
+        "WINDIR",
+        "TEMP",
+        "TMP",
+        "HOME",
+        "USERPROFILE",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "PROGRAMFILES",
+        "PROGRAMFILES(X86)",
+        "COMSPEC",
+        "LANG",
+        "LC_ALL",
+        # Keep project test discovery deterministic across host installations;
+        # this is a control flag, never a credential.
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    }
+)
+_SENSITIVE_ENV_MARKERS = (
+    "TOKEN",
+    "SECRET",
+    "PASSWORD",
+    "API_KEY",
+    "CREDENTIAL",
+    "PRIVATE_KEY",
+)
+
+
+def project_environment(allowlist: Sequence[str] = ()) -> dict[str, str]:
+    """Return a non-secret subprocess environment for project commands.
+
+    Build commands must not inherit the host's Plow/GitHub credentials. An
+    operator may explicitly approve additional *non-sensitive* names on the
+    project target; names that look like credentials are rejected outright.
+    """
+
+    names = list(allowlist)
+    for name in names:
+        if not isinstance(name, str) or not name or "=" in name:
+            raise ValueError("environment allowlist entries must be non-empty variable names")
+        upper = name.upper()
+        if any(marker in upper for marker in _SENSITIVE_ENV_MARKERS):
+            raise ValueError(f"refusing sensitive environment variable: {name}")
+    selected = set(_SAFE_ENVIRONMENT_KEYS) | set(names)
+    return {name: value for name, value in os.environ.items() if name in selected}
 
 
 class ProjectBootstrap(Protocol):
@@ -32,13 +84,24 @@ class RepairableImplementer(Implementer, Protocol):
 class CommandImplementer:
     """Adapt a file-based coding-agent command to the build-loop port."""
 
-    def __init__(self, command_prefix: list[str]):
+    def __init__(
+        self,
+        command_prefix: list[str],
+        *,
+        environment: Mapping[str, str] | None = None,
+    ):
         if not command_prefix:
             raise ValueError("implementation command cannot be empty")
         self.command_prefix = list(command_prefix)
+        self.environment = dict(environment) if environment is not None else None
+
+    def set_environment(self, environment: Mapping[str, str]) -> None:
+        self.environment = dict(environment)
 
     def implement(self, project_root: Path, specification: str, failure: str | None = None) -> str:
-        return CodingAgentCommandTool(project_root, self.command_prefix).implement(specification)
+        return CodingAgentCommandTool(
+            project_root, self.command_prefix, environment=self.environment
+        ).implement(specification)
 
     def repair(self, project_root: Path, specification: str, failure: str) -> str:
         repair_specification = (
@@ -46,9 +109,9 @@ class CommandImplementer:
             "Repair the implementation in the current workspace, preserve the intended behavior, "
             "and run the project's declared checks before returning."
         )
-        return CodingAgentCommandTool(project_root, self.command_prefix).implement(
-            repair_specification
-        )
+        return CodingAgentCommandTool(
+            project_root, self.command_prefix, environment=self.environment
+        ).implement(repair_specification)
 
 
 class RealBuildLoop:
@@ -129,13 +192,15 @@ class RealBuildLoop:
         target: ProjectTarget,
         commit_sha: str,
         commands: Sequence[tuple[str, list[str]]],
+        *,
+        environment: Mapping[str, str],
     ) -> None:
         """Run the validated commit from a clean clone, never the working tree."""
 
         source = Path(target.local_path).resolve()
         with tempfile.TemporaryDirectory(prefix="galahad-reproduce-") as temporary:
             clone = Path(temporary) / "project"
-            shell = LocalShellTool(clone)
+            shell = LocalShellTool(clone, environment=environment)
             shell.run(["git", "clone", "--no-local", str(source), str(clone)], timeout_seconds=60)
             shell.run(["git", "checkout", "--detach", commit_sha], timeout_seconds=30)
             for phase, argv in commands:
@@ -191,6 +256,7 @@ class RealBuildLoop:
         max_repairs: int = 1,
     ) -> ChangeSet:
         root = Path(target.local_path).resolve()
+        environment = project_environment(target.environment_allowlist)
         if not root.exists() and target.mode.value == "existing_repo" and target.repository_url:
             if self.github is None:
                 raise BuildLoopError(
@@ -199,9 +265,9 @@ class RealBuildLoop:
             root.parent.mkdir(parents=True, exist_ok=True)
             self.github.clone(target.repository_url, str(root))
         root.mkdir(parents=True, exist_ok=True)
-        git_workspace = GitWorkspace(root)
+        git_workspace = GitWorkspace(root, environment=environment)
         git_workspace.initialize(default_branch=target.default_branch)
-        git = LocalGitTool(root)
+        git = LocalGitTool(root, shell=git_workspace.shell)
         if git.changed_files():
             raise BuildLoopError("project workspace is dirty; refusing to overwrite user changes")
         try:
@@ -231,6 +297,9 @@ class RealBuildLoop:
                 "project target must declare an install, build, test, or run command"
             )
 
+        set_environment = getattr(implementer, "set_environment", None)
+        if callable(set_environment):
+            set_environment(environment)
         implementer.implement(root, specification)
         commit_sha = git_workspace.checkpoint("Implement competition project slice")
         diff = git.commit_diff(commit_sha)
@@ -247,7 +316,7 @@ class RealBuildLoop:
         for attempt in range(max_repairs + 1):
             passed, failure = self._run_commands(target, commands, git)
             if passed:
-                self._reproduce(target, commit_sha, commands)
+                self._reproduce(target, commit_sha, commands, environment=environment)
                 change_set.status = "validated"
                 self.database.save_change_set(change_set)
                 self.database.append_event(

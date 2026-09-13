@@ -144,6 +144,10 @@ class ProjectTarget(Contract):
     test_commands: list[list[str]] = Field(default_factory=list)
     run_commands: list[list[str]] = Field(default_factory=list)
     deploy_target: str | None = None
+    # Optional names explicitly approved for the target's local build process.
+    # The default environment is intentionally reduced to a small, non-secret
+    # base set by ``build_loop.project_environment``.
+    environment_allowlist: list[str] = Field(default_factory=list)
 
 
 class RepositorySnapshot(Contract):

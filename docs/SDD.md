@@ -2944,7 +2944,14 @@ Every build-capable mission attaches one `ProjectTarget` containing:
 - optional GitHub repository URL;
 - default branch and mission working branch;
 - explicit install, build, test, run, and deploy commands;
-- language/framework metadata used by planning and validation.
+- language/framework metadata used by planning and validation;
+- an optional allowlist of non-sensitive environment variable names.
+
+Project commands and the configured coding-agent command receive a reduced
+environment containing only platform basics (for example `PATH`, temp and
+home directories) plus the explicit allowlist. Names that look like tokens,
+passwords, API keys, credentials, or private keys are rejected. Plow and
+GitHub credentials therefore remain outside the target build boundary.
 
 The target is persisted independently from `HackathonSpec`. A mission may
 research one competition while building in a different repository, and the

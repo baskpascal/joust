@@ -39,8 +39,11 @@ python -m hackathon_competitor.cli doctor
 separate mission objects. Build, test, and install commands are explicit JSON
 argv lists; they are executed without shell expansion. `build-project` runs a
 mission branch, records the implementation commit and build logs, and repeats
-the checks from a clean clone. It never pushes or opens a pull request; use the
-approval-bound GitHub publication service for those external actions.
+the checks from a clean clone. Project subprocesses receive a reduced
+non-secret environment; use repeatable `--environment-name NAME` only for an
+explicitly approved, non-sensitive variable. It never pushes or opens a pull
+request; use the approval-bound GitHub publication service for those external
+actions.
 
 Use `HACKATHON_COMPETITOR_HOME` to override the default local state directory.
 

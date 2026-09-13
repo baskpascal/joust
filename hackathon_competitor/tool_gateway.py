@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Protocol
@@ -89,9 +90,10 @@ class WorkspaceFileTool:
 class LocalShellTool:
     """Runs an argv vector inside one mission workspace without shell expansion."""
 
-    def __init__(self, root: str | Path):
+    def __init__(self, root: str | Path, *, environment: Mapping[str, str] | None = None):
         self.root = Path(root).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
+        self.environment = dict(environment) if environment is not None else None
 
     policy = OperationPolicy(
         30,
@@ -113,6 +115,7 @@ class LocalShellTool:
                 capture_output=True,
                 text=True,
                 timeout=timeout_seconds,
+                env=self.environment,
             )
         except subprocess.TimeoutExpired as exc:
             raise TimeoutError(f"command exceeded timeout of {timeout_seconds} seconds") from exc
@@ -203,12 +206,18 @@ class CodingAgentCommandTool:
         "review Git diff and restore or amend the checkpoint",
     )
 
-    def __init__(self, root: str | Path, command_prefix: list[str]):
+    def __init__(
+        self,
+        root: str | Path,
+        command_prefix: list[str],
+        *,
+        environment: Mapping[str, str] | None = None,
+    ):
         if not command_prefix:
             raise ValueError("coding agent command prefix cannot be empty")
         self.root = Path(root).resolve()
         self.files = WorkspaceFileTool(self.root)
-        self.shell = LocalShellTool(self.root)
+        self.shell = LocalShellTool(self.root, environment=environment)
         self.command_prefix = list(command_prefix)
 
     def implement(self, specification: str) -> str:

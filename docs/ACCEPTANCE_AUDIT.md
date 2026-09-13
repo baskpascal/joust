@@ -36,7 +36,8 @@ runtime evidence nor client registration proves a public Verified listing.
 | External action safety | `ExternalActionService` requires explicit approval and idempotency | PASS (local gate) |
 | Explicit postmortem and reusable lessons | `record_postmortem`, `POSTMORTEM.md`, `competition_memory` | PASS (local) |
 | Project-target compliance inspection | `test_project_compliance.py` proves target license/technology/repository checks and conservative `UNKNOWN` for unproven prohibitions | PASS (local contract) |
-| Unit/integration/E2E/secret/license quality | 86 tests, Ruff, `uv lock --check`, diff check, MIT license | PASS |
+| Project command environment isolation | `test_tool_gateway.py` and `test_real_build_loop.py` prove credential filtering, safe allowlist handling, and rejection of sensitive names | PASS (local contract) |
+| Unit/integration/E2E/secret/license quality | 90 tests, Ruff, `uv lock --check`, diff check, MIT license | PASS |
 
 ## External handoff
 

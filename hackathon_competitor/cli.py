@@ -11,7 +11,7 @@ import tempfile
 from pathlib import Path
 from uuid import UUID
 
-from .build_loop import CommandImplementer
+from .build_loop import CommandImplementer, project_environment
 from .distribution import build_public_bundle
 from .exporter import export_mission_bundle
 from .github import GitHubCliAdapter
@@ -209,6 +209,13 @@ def build_parser() -> argparse.ArgumentParser:
     attach.add_argument("--build-command", action="append", default=[], metavar="JSON_ARGV")
     attach.add_argument("--test-command", action="append", default=[], metavar="JSON_ARGV")
     attach.add_argument("--run-command", action="append", default=[], metavar="JSON_ARGV")
+    attach.add_argument(
+        "--environment-name",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="repeatable non-sensitive host environment name approved for project commands",
+    )
     build = mission_commands.add_parser("build-project")
     build.add_argument("mission_id", type=UUID)
     build.add_argument("--implementation-command", required=True, metavar="JSON_ARGV")
@@ -243,6 +250,9 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(mission_status(app, mission), indent=2))
         return 0
     if args.mission_command == "attach-project":
+        # Validate the names at attachment time so a credential-shaped name
+        # cannot be persisted as a future build permission.
+        project_environment(args.environment_name)
         target = ProjectTarget(
             mission_id=args.mission_id,
             mode=ProjectMode(args.mode),
@@ -253,6 +263,7 @@ def main(argv: list[str] | None = None) -> int:
             build_commands=_parse_command_vectors(args.build_command),
             test_commands=_parse_command_vectors(args.test_command),
             run_commands=_parse_command_vectors(args.run_command),
+            environment_allowlist=list(args.environment_name),
         )
         app.attach_project_target(target)
         print(json.dumps(target.model_dump(mode="json"), indent=2))
