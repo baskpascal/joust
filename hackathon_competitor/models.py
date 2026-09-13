@@ -38,6 +38,12 @@ class MissionState(StrEnum):
     CANCELLED = "CANCELLED"
 
 
+class ProjectMode(StrEnum):
+    EXISTING_REPO = "existing_repo"
+    NEW_REPO = "new_repo"
+    LOCAL_ONLY = "local_only"
+
+
 class TaskStatus(StrEnum):
     PENDING = "PENDING"
     READY = "READY"
@@ -117,7 +123,67 @@ class Mission(Contract):
     source_inputs: list[str] = Field(default_factory=list)
     hackathon_spec_id: UUID | None = None
     selected_strategy_id: UUID | None = None
+    project_target_id: UUID | None = None
     workspace_path: str
+
+
+class ProjectTarget(Contract):
+    """The concrete codebase a mission is allowed to inspect and change."""
+
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    mode: ProjectMode
+    local_path: str
+    repository_url: str | None = None
+    default_branch: str = "main"
+    working_branch: str | None = None
+    language: str | None = None
+    framework: str | None = None
+    install_commands: list[list[str]] = Field(default_factory=list)
+    build_commands: list[list[str]] = Field(default_factory=list)
+    test_commands: list[list[str]] = Field(default_factory=list)
+    run_commands: list[list[str]] = Field(default_factory=list)
+    deploy_target: str | None = None
+
+
+class RepositorySnapshot(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    project_target_id: UUID
+    repository_url: str | None = None
+    branch: str | None = None
+    commit_sha: str
+    tree_hash: str | None = None
+    dirty: bool = False
+    captured_at: datetime = Field(default_factory=utcnow)
+
+
+class BuildRun(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    project_target_id: UUID
+    commit_sha: str | None = None
+    command: list[str]
+    phase: str
+    exit_code: int | None = None
+    log_path: str | None = None
+    output_artifact_id: UUID | None = None
+    passed: bool = False
+    started_at: datetime = Field(default_factory=utcnow)
+    finished_at: datetime | None = None
+    error: str | None = None
+
+
+class ChangeSet(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    project_target_id: UUID
+    base_sha: str
+    diff_hash: str
+    files: list[str] = Field(default_factory=list)
+    commit_sha: str | None = None
+    status: str = "draft"
+    created_at: datetime = Field(default_factory=utcnow)
 
 
 class HackathonSpec(Contract):

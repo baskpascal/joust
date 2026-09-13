@@ -12,9 +12,9 @@ class GitWorkspace:
         self.root = Path(root).resolve()
         self.shell = LocalShellTool(self.root)
 
-    def initialize(self) -> None:
+    def initialize(self, *, default_branch: str = "main") -> None:
         if not (self.root / ".git").is_dir():
-            self.shell.run(["git", "init"], timeout_seconds=30)
+            self.shell.run(["git", "init", "-b", default_branch], timeout_seconds=30)
 
     def checkpoint(self, message: str) -> str:
         if not message.strip():

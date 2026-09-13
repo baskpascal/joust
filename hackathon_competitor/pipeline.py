@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .artifact_graph import ArtifactGraph
+from .build_loop import Implementer, RealBuildLoop
 from .capabilities.evaluation import implementation_panel, improvement_tasks
 from .capabilities.execution import build_demo_project, validate_demo_project
 from .capabilities.planning import (
@@ -426,7 +427,44 @@ def mission_status(orchestrator: MissionOrchestrator, mission: Mission) -> dict:
         "last_error": failed[-1].error if failed else None,
         "quality_blockers": gate_failures[-1]["findings"] if gate_failures else [],
         "next_ready_tasks": [task.type for task in ready],
+        "project_target": str(mission.project_target_id) if mission.project_target_id else None,
+        "build_runs": len(orchestrator.database.list_build_runs(mission.id)),
+        "change_sets": len(orchestrator.database.list_change_sets(mission.id)),
     }
+
+
+def build_project_for_mission(
+    orchestrator: MissionOrchestrator,
+    mission_id,
+    implementer: Implementer,
+    *,
+    specification: str | None = None,
+    max_repairs: int = 1,
+):
+    """Execute the real project build path for an attached mission target."""
+
+    mission = orchestrator.resume_mission(mission_id)
+    target = orchestrator.database.get_project_target_for_mission(mission.id)
+    if specification is None:
+        plans = [
+            item
+            for item in orchestrator.database.list_artifacts(mission.id)
+            if item.kind == "implementation_plan" and not item.stale
+        ]
+        if not plans:
+            raise RuntimeError("an implementation plan is required before building the project")
+        specification = Path(plans[-1].path).read_text(encoding="utf-8")
+    if mission.state == MissionState.PLANNING:
+        mission = orchestrator.transition_state(mission, MissionState.BUILDING)
+    if mission.state != MissionState.BUILDING:
+        raise RuntimeError(f"project build requires BUILDING state, got {mission.state.value}")
+    change_set = RealBuildLoop(orchestrator.database, orchestrator.artifact_root).run(
+        target,
+        specification,
+        implementer,
+        max_repairs=max_repairs,
+    )
+    return change_set
 
 
 def _save_text_artifact(

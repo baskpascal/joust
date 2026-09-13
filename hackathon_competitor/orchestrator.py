@@ -5,7 +5,7 @@ from pathlib import Path
 from uuid import UUID
 
 from .capability import CapabilityRegistry, MissionContext
-from .models import Mission, MissionState
+from .models import Mission, MissionState, ProjectTarget
 from .storage import Database, transition_mission
 from .task_engine import TaskEngine
 
@@ -51,6 +51,24 @@ class MissionOrchestrator:
         mission = self.database.get_mission(mission_id)
         self.tasks.recover_running(mission.id)
         return self.database.get_mission(mission.id)
+
+    def attach_project_target(self, target: ProjectTarget) -> ProjectTarget:
+        mission = self.database.get_mission(target.mission_id)
+        if not target.local_path:
+            raise ValueError("project target local path cannot be empty")
+        self.database.save_project_target(target)
+        mission.project_target_id = target.id
+        self.database.save_mission(mission)
+        self.database.append_event(
+            mission.id,
+            "PROJECT_TARGET_ATTACHED",
+            {
+                "project_target_id": str(target.id),
+                "repository_url": target.repository_url,
+                "mode": target.mode.value,
+            },
+        )
+        return target
 
     def transition_state(self, mission: Mission, target: MissionState) -> Mission:
         return transition_mission(self.database, mission, target)

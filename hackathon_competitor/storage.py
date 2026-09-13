@@ -13,6 +13,8 @@ from pydantic import BaseModel
 from .models import (
     Approval,
     Artifact,
+    BuildRun,
+    ChangeSet,
     CompetitionMemory,
     Decision,
     Evaluation,
@@ -22,6 +24,8 @@ from .models import (
     Idea,
     Mission,
     MissionState,
+    ProjectTarget,
+    RepositorySnapshot,
     SourceRecord,
     Task,
     utcnow,
@@ -127,6 +131,26 @@ MIGRATIONS: tuple[str, ...] = (
     );
     CREATE INDEX IF NOT EXISTS idx_competition_memory_category
       ON competition_memory(category);
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS project_targets (
+        id TEXT PRIMARY KEY, mission_id TEXT NOT NULL, mode TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_project_targets_mission
+      ON project_targets(mission_id);
+    CREATE TABLE IF NOT EXISTS repository_snapshots (
+        id TEXT PRIMARY KEY, mission_id TEXT NOT NULL, project_target_id TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS build_runs (
+        id TEXT PRIMARY KEY, mission_id TEXT NOT NULL, project_target_id TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS change_sets (
+        id TEXT PRIMARY KEY, mission_id TEXT NOT NULL, project_target_id TEXT NOT NULL,
+        status TEXT NOT NULL, payload TEXT NOT NULL
+    );
     """,
 )
 
@@ -333,6 +357,69 @@ class Database:
             category=memory.category,
         )
 
+    def save_project_target(self, target: ProjectTarget) -> None:
+        self._save(
+            "project_targets",
+            target,
+            mission_id=target.mission_id,
+            mode=target.mode.value,
+        )
+
+    def attach_project_target(self, mission_id: UUID | str, target_id: UUID | str) -> Mission:
+        mission = self.get_mission(mission_id)
+        target = self.get_project_target(target_id)
+        if target.mission_id != mission.id:
+            raise ValueError("project target belongs to a different mission")
+        mission.project_target_id = target.id
+        self.save_mission(mission)
+        return mission
+
+    def get_project_target(self, target_id: UUID | str) -> ProjectTarget:
+        return self._get("project_targets", target_id, ProjectTarget)
+
+    def get_project_target_for_mission(self, mission_id: UUID | str) -> ProjectTarget:
+        items = self._list_for_mission("project_targets", mission_id, ProjectTarget)
+        if not items:
+            raise KeyError(f"no project target for mission: {mission_id}")
+        return items[-1]
+
+    def list_project_targets(self, mission_id: UUID | str) -> list[ProjectTarget]:
+        return self._list_for_mission("project_targets", mission_id, ProjectTarget)
+
+    def save_repository_snapshot(self, snapshot: RepositorySnapshot) -> None:
+        self._save(
+            "repository_snapshots",
+            snapshot,
+            mission_id=snapshot.mission_id,
+            project_target_id=snapshot.project_target_id,
+        )
+
+    def list_repository_snapshots(self, mission_id: UUID | str) -> list[RepositorySnapshot]:
+        return self._list_for_mission("repository_snapshots", mission_id, RepositorySnapshot)
+
+    def save_build_run(self, run: BuildRun) -> None:
+        self._save(
+            "build_runs",
+            run,
+            mission_id=run.mission_id,
+            project_target_id=run.project_target_id,
+        )
+
+    def list_build_runs(self, mission_id: UUID | str) -> list[BuildRun]:
+        return self._list_for_mission("build_runs", mission_id, BuildRun)
+
+    def save_change_set(self, change_set: ChangeSet) -> None:
+        self._save(
+            "change_sets",
+            change_set,
+            mission_id=change_set.mission_id,
+            project_target_id=change_set.project_target_id,
+            status=change_set.status,
+        )
+
+    def list_change_sets(self, mission_id: UUID | str) -> list[ChangeSet]:
+        return self._list_for_mission("change_sets", mission_id, ChangeSet)
+
     def list_competition_memory(self, *, category: str | None = None) -> list[CompetitionMemory]:
         if category is None:
             return self._list("competition_memory", CompetitionMemory, "rowid")
@@ -480,6 +567,19 @@ class Database:
                 item.model_dump(mode="json")
                 for item in self.list_competition_memory()
                 if item.mission_id == mission.id
+            ],
+            "project_targets": [
+                item.model_dump(mode="json") for item in self.list_project_targets(mission.id)
+            ],
+            "repository_snapshots": [
+                item.model_dump(mode="json")
+                for item in self.list_repository_snapshots(mission.id)
+            ],
+            "build_runs": [
+                item.model_dump(mode="json") for item in self.list_build_runs(mission.id)
+            ],
+            "change_sets": [
+                item.model_dump(mode="json") for item in self.list_change_sets(mission.id)
             ],
             "telemetry": self.metrics(mission.id),
             "events": self.events(mission.id),

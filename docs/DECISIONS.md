@@ -33,7 +33,21 @@ surface exposes an authoritative rules API.
 Real event pages often omit deadlines, prohibitions, or machine-readable rule
 markup. Galahad may infer conservative candidates from ordinary HTML, but it
 must not invent missing hard rules. If the rules quality gate fails, the
-mission is persisted in `BLOCKED`, a `QUALITY_GATE_FAILED` event records the
-specific findings, and status exposes them without making downstream tasks
-ready. A missing deadline is recorded as explicitly unknown rather than
-silently treated as known.
+  mission is persisted in `BLOCKED`, a `QUALITY_GATE_FAILED` event records the
+  specific findings, and status exposes them without making downstream tasks
+  ready. A missing deadline is recorded as explicitly unknown rather than
+  silently treated as known.
+
+## ADR-006 — Project target is separate from the agent repository
+
+The repository that distributes Galahad is not the project it builds for a
+competition. Each mission may attach one `ProjectTarget` in `existing_repo`,
+`new_repo`, or `local_only` mode. The target records the local path, optional
+GitHub URL, branch policy, and explicit install/build/test commands.
+
+The real build path uses a mission branch, records a `RepositorySnapshot`,
+captures a `ChangeSet` and `BuildRun` records, and requires a passing build or
+test command before the change set is considered validated. A dirty existing
+workspace is refused rather than overwritten. GitHub push, pull-request,
+deploy, and merge remain separate approval-gated actions; the local build loop
+does not perform them implicitly.

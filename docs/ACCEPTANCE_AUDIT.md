@@ -28,6 +28,9 @@ runtime evidence nor client registration proves a public Verified listing.
 | Verified listing | Organizer eligibility surface, expected to open 2026-09-14 | EXTERNAL / NOT YET AVAILABLE |
 | Real-user activation trial | Fresh-session reply identified as Galahad and reached delivery state `delivered` | PASS (live owner trial) |
 | Real official-source intake | Public Agent Index URL produced six evidence records and a persisted, explicit quality blocker instead of inventing missing prohibitions | PASS (safe partial-source behavior) |
+| Real project target contract | Persisted `ProjectTarget`, mission attachment, and status reporting are covered by `test_project_target.py` | PASS (local contract) |
+| Real build / test / repair loop | `test_real_build_loop.py` creates a mission branch, commits generated code, detects a failing test, repairs it, and records validated build runs | PASS (local contract) |
+| GitHub publication adapter | Typed `GitHubCliAdapter` boundary exists; remote push/PR remains approval-gated and has not been run by the mission pipeline | PARTIAL (adapter contract; no live write) |
 | External action safety | `ExternalActionService` requires explicit approval and idempotency | PASS (local gate) |
 | Explicit postmortem and reusable lessons | `record_postmortem`, `POSTMORTEM.md`, `competition_memory` | PASS (local) |
 | Unit/integration/E2E/secret/license quality | 74 tests, Ruff, `uv lock --check`, diff check, MIT license | PASS |

@@ -36,6 +36,10 @@ class FileTool(Protocol):
 
 class GitTool(Protocol):
     def status(self) -> str: ...
+    def current_revision(self) -> str: ...
+    def create_branch(self, name: str, base: str) -> str: ...
+    def diff(self) -> str: ...
+    def changed_files(self) -> list[str]: ...
 
 
 class CodingAgentTool(Protocol):
@@ -131,6 +135,51 @@ class LocalGitTool:
             ["git", "status", "--short", "--branch"],
             timeout_seconds=15,
         )
+
+    def current_revision(self) -> str:
+        return self.shell.run(["git", "rev-parse", "HEAD"], timeout_seconds=15).strip()
+
+    def create_branch(self, name: str, base: str) -> str:
+        if not name.strip() or name.startswith("-"):
+            raise ValueError("branch name must be non-empty and cannot start with '-'")
+        self.shell.run(["git", "switch", "-c", name, base], timeout_seconds=30)
+        return self.current_revision()
+
+    def current_branch(self) -> str:
+        return self.shell.run(["git", "branch", "--show-current"], timeout_seconds=15).strip()
+
+    def branch_exists(self, name: str) -> bool:
+        if not name or name.startswith("-"):
+            raise ValueError("invalid branch name")
+        output = self.shell.run(["git", "branch", "--list", name], timeout_seconds=15)
+        return bool(output.strip())
+
+    def switch_branch(self, name: str) -> str:
+        if not name or name.startswith("-"):
+            raise ValueError("invalid branch name")
+        self.shell.run(["git", "switch", name], timeout_seconds=30)
+        return self.current_revision()
+
+    def diff(self) -> str:
+        return self.shell.run(["git", "diff", "--no-ext-diff"], timeout_seconds=30)
+
+    def changed_files(self) -> list[str]:
+        output = self.shell.run(
+            ["git", "status", "--short", "--porcelain=v1"], timeout_seconds=15
+        )
+        return [line[3:] for line in output.splitlines() if len(line) >= 4]
+
+    def commit_diff(self, commit_sha: str) -> str:
+        return self.shell.run(
+            ["git", "show", "--format=", "--no-ext-diff", commit_sha], timeout_seconds=30
+        )
+
+    def commit_changed_files(self, commit_sha: str) -> list[str]:
+        output = self.shell.run(
+            ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", commit_sha],
+            timeout_seconds=15,
+        )
+        return [line.strip() for line in output.splitlines() if line.strip()]
 
 
 class CodingAgentCommandTool:
