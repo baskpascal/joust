@@ -440,6 +440,7 @@ def build_project_for_mission(
     *,
     specification: str | None = None,
     max_repairs: int = 1,
+    github=None,
 ):
     """Execute the real project build path for an attached mission target."""
 
@@ -458,7 +459,9 @@ def build_project_for_mission(
         mission = orchestrator.transition_state(mission, MissionState.BUILDING)
     if mission.state != MissionState.BUILDING:
         raise RuntimeError(f"project build requires BUILDING state, got {mission.state.value}")
-    change_set = RealBuildLoop(orchestrator.database, orchestrator.artifact_root).run(
+    change_set = RealBuildLoop(
+        orchestrator.database, orchestrator.artifact_root, github=github
+    ).run(
         target,
         specification,
         implementer,

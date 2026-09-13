@@ -2975,8 +2975,8 @@ changes elsewhere.
 ## 71.3 GitHub boundary
 
 Local Git operations and GitHub operations are separate ports. The GitHub port
-supports repository lookup, branch creation, push, pull-request creation, and
-check retrieval. Push and pull-request creation require an explicit approval
+supports repository lookup, read-only clone/bootstrap, branch creation, push,
+pull-request creation, and check retrieval. Push and pull-request creation require an explicit approval
 bound to the repository, branch, commit/diff hash, and idempotency key. The
 default target is a mission branch; direct pushes to the default branch are not
 allowed by the build loop.

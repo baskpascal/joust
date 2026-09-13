@@ -32,9 +32,10 @@ runtime evidence nor client registration proves a public Verified listing.
 | Real build / test / repair loop | `test_real_build_loop.py` creates a mission branch, commits generated code, detects a failing test, repairs it, and records validated build runs | PASS (local contract) |
 | Clean-clone reproduction | The real build loop executes the validated commit from a fresh temporary clone and records `reproduce_*` runs | PASS (local contract) |
 | GitHub publication adapter | Typed `GitHubCliAdapter` plus approval-bound push/PR service are covered by `test_github.py` and `test_github_publish.py`; no live write was run | PARTIAL (contract; no live write) |
+| GitHub project bootstrap | Existing-repository target can request a read-only `gh repo clone` through the build loop; covered by the missing-checkout test | PASS (local contract) |
 | External action safety | `ExternalActionService` requires explicit approval and idempotency | PASS (local gate) |
 | Explicit postmortem and reusable lessons | `record_postmortem`, `POSTMORTEM.md`, `competition_memory` | PASS (local) |
-| Unit/integration/E2E/secret/license quality | 74 tests, Ruff, `uv lock --check`, diff check, MIT license | PASS |
+| Unit/integration/E2E/secret/license quality | 84 tests, Ruff, `uv lock --check`, diff check, MIT license | PASS |
 
 ## External handoff
 

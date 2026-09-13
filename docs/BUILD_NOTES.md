@@ -159,3 +159,11 @@ updated with that repository and the README install URL, and story
 page verified the public GitHub install link, one active user, 119K tokens, and
 the published use case. Verified status remains unavailable until 2026-09-14;
 one-click Plow deployment and demo media remain external follow-ups.
+
+The next execution slice now separates the competition source from the project
+being built. A mission can persist a `ProjectTarget`, create a mission branch,
+run an explicit argv-based implementation command, record `ChangeSet` and
+`BuildRun` evidence, repair a failing test, and reproduce the validated commit
+from a clean clone. The GitHub CLI adapter and publication service are covered
+by contract tests; push and pull-request creation remain approval-bound and no
+new live remote write was performed.

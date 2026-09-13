@@ -101,3 +101,42 @@ def test_command_implementer_includes_validation_failure_in_repair_prompt(tmp_pa
     output = implementer.repair(tmp_path, "Build the app.", "pytest failed")
     assert "pytest failed" in output
     assert "Repair the implementation" in output
+
+
+class FakeBootstrap:
+    def __init__(self):
+        self.calls = []
+
+    def clone(self, repository: str, destination: str) -> str:
+        self.calls.append((repository, destination))
+        root = Path(destination)
+        root.mkdir(parents=True, exist_ok=True)
+        return "cloned"
+
+
+def test_existing_github_target_bootstraps_missing_checkout(tmp_path):
+    database, mission = _mission(tmp_path)
+    target = ProjectTarget(
+        mission_id=mission.id,
+        mode=ProjectMode.EXISTING_REPO,
+        local_path=str(tmp_path / "remote-project"),
+        repository_url="owner/project",
+        test_commands=[["python", "-c", "print('ok')"]],
+    )
+    database.save_project_target(target)
+    bootstrap = FakeBootstrap()
+    # The implementer creates the Git repository after the read-only clone step.
+    class InitializingImplementer(FakeImplementer):
+        def implement(self, project_root, specification, failure=None):
+            import subprocess
+
+            subprocess.run(["git", "init", "-b", "main"], cwd=project_root, check=True)
+            return super().implement(project_root, specification, failure)
+
+    # A clone adapter is expected to return a real checkout; this fake models
+    # the boundary and lets the test focus on the call contract.
+    change_set = RealBuildLoop(database, tmp_path / "artifacts", github=bootstrap).run(
+        target, "spec", InitializingImplementer(), max_repairs=0
+    )
+    assert change_set.status == "validated"
+    assert bootstrap.calls == [("owner/project", str(Path(target.local_path).resolve()))]

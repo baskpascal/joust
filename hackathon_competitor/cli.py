@@ -14,6 +14,7 @@ from uuid import UUID
 from .build_loop import CommandImplementer
 from .distribution import build_public_bundle
 from .exporter import export_mission_bundle
+from .github import GitHubCliAdapter
 from .models import MissionState, ProjectMode, ProjectTarget
 from .orchestrator import MissionOrchestrator
 from .pipeline import build_project_for_mission, complete_v0, mission_status, run_vertical_slice
@@ -269,6 +270,7 @@ def main(argv: list[str] | None = None) -> int:
             implementer,
             specification=specification,
             max_repairs=args.max_repairs,
+            github=GitHubCliAdapter(str(Path(target.local_path).resolve().parent)),
         )
         print(json.dumps(change_set.model_dump(mode="json"), indent=2))
         return 0

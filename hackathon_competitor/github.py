@@ -12,6 +12,7 @@ class GitHubError(RuntimeError):
 
 class GitHubTool(Protocol):
     def repository(self, repository: str) -> dict[str, Any]: ...
+    def clone(self, repository: str, destination: str) -> str: ...
     def create_branch(self, repository: str, branch: str, base: str) -> str: ...
     def push(self, remote: str, branch: str) -> str: ...
     def create_pull_request(
@@ -41,6 +42,13 @@ class GitHubCliAdapter:
         if not isinstance(value, dict):
             raise GitHubError("repository lookup returned a non-object")
         return value
+
+    def clone(self, repository: str, destination: str) -> str:
+        if not repository.strip() or not destination.strip():
+            raise ValueError("repository and destination are required for clone")
+        return self.shell.run(
+            ["gh", "repo", "clone", repository, destination], timeout_seconds=120
+        ).strip()
 
     def create_branch(self, repository: str, branch: str, base: str) -> str:
         if not branch or branch.startswith("-"):

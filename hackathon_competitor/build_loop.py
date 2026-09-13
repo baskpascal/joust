@@ -17,6 +17,10 @@ class BuildLoopError(RuntimeError):
     pass
 
 
+class ProjectBootstrap(Protocol):
+    def clone(self, repository: str, destination: str) -> str: ...
+
+
 class Implementer(Protocol):
     def implement(self, project_root: Path, specification: str, failure: str | None = None) -> str: ...
 
@@ -50,9 +54,16 @@ class CommandImplementer:
 class RealBuildLoop:
     """Build a mission-owned project, record a change set, and prove reproducibility."""
 
-    def __init__(self, database: Database, artifact_root: str | Path):
+    def __init__(
+        self,
+        database: Database,
+        artifact_root: str | Path,
+        *,
+        github: ProjectBootstrap | None = None,
+    ):
         self.database = database
         self.artifact_root = Path(artifact_root)
+        self.github = github
 
     def _snapshot(self, target: ProjectTarget, git: LocalGitTool, *, dirty: bool) -> RepositorySnapshot:
         snapshot = RepositorySnapshot(
@@ -180,6 +191,13 @@ class RealBuildLoop:
         max_repairs: int = 1,
     ) -> ChangeSet:
         root = Path(target.local_path).resolve()
+        if not root.exists() and target.mode.value == "existing_repo" and target.repository_url:
+            if self.github is None:
+                raise BuildLoopError(
+                    "GitHub checkout is missing; configure a GitHub adapter or provide a local clone"
+                )
+            root.parent.mkdir(parents=True, exist_ok=True)
+            self.github.clone(target.repository_url, str(root))
         root.mkdir(parents=True, exist_ok=True)
         git_workspace = GitWorkspace(root)
         git_workspace.initialize(default_branch=target.default_branch)

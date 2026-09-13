@@ -17,6 +17,8 @@ class FakeShell:
                     "url": "https://github.com/owner/project",
                 }
             )
+        if argv[0:3] == ["gh", "repo", "clone"]:
+            return "cloned"
         if argv[0:2] == ["gh", "pr"] and argv[2] == "create":
             return json.dumps(
                 {
@@ -41,6 +43,7 @@ def test_github_adapter_keeps_repository_and_publish_operations_structured():
     adapter.shell = shell
 
     assert adapter.repository("owner/project")["nameWithOwner"] == "owner/project"
+    assert adapter.clone("owner/project", "target") == "cloned"
     assert adapter.create_branch("owner/project", "galahad/mission", "abc123").endswith(
         "galahad/mission"
     )
