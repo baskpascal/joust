@@ -30,7 +30,7 @@ runtime evidence nor client registration proves a public Verified listing.
 | Real official-source intake | Public Agent Index URL produced six evidence records and a persisted, explicit quality blocker instead of inventing missing prohibitions | PASS (safe partial-source behavior) |
 | Real project target contract | Persisted `ProjectTarget`, mission attachment, and status reporting are covered by `test_project_target.py` | PASS (local contract) |
 | Real build / test / repair loop | `test_real_build_loop.py` creates a mission branch, commits generated code, detects a failing test, repairs it, and records validated build runs | PASS (local contract) |
-| GitHub publication adapter | Typed `GitHubCliAdapter` boundary exists; remote push/PR remains approval-gated and has not been run by the mission pipeline | PARTIAL (adapter contract; no live write) |
+| GitHub publication adapter | Typed `GitHubCliAdapter` plus approval-bound push/PR service are covered by `test_github.py` and `test_github_publish.py`; no live write was run | PARTIAL (contract; no live write) |
 | External action safety | `ExternalActionService` requires explicit approval and idempotency | PASS (local gate) |
 | Explicit postmortem and reusable lessons | `record_postmortem`, `POSTMORTEM.md`, `competition_memory` | PASS (local) |
 | Unit/integration/E2E/secret/license quality | 74 tests, Ruff, `uv lock --check`, diff check, MIT license | PASS |
