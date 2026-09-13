@@ -179,3 +179,11 @@ coding-agent subprocesses inherit only a small platform-safe base plus an
 explicit non-sensitive allowlist. Credential-shaped names are rejected before
 execution. The local suite is at 90 tests after this security contract was
 added.
+
+The post-change end-to-end smoke drove the public CLI through a fresh mission,
+attached a temporary `new_repo` target, ran a file-based implementation
+command, committed the mission branch, and passed the declared test both in
+the working tree and in a clean clone. The rebuilt image's `doctor` is healthy
+with database migration 5. The reproducible public bundle contains 112 files
+and has SHA-256
+`50e8d51d26e139d5b6a391e0874acd55c1c9c46da35bda81375252114a61844d`.

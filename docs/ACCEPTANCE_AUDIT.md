@@ -37,6 +37,7 @@ runtime evidence nor client registration proves a public Verified listing.
 | Explicit postmortem and reusable lessons | `record_postmortem`, `POSTMORTEM.md`, `competition_memory` | PASS (local) |
 | Project-target compliance inspection | `test_project_compliance.py` proves target license/technology/repository checks and conservative `UNKNOWN` for unproven prohibitions | PASS (local contract) |
 | Project command environment isolation | `test_tool_gateway.py` and `test_real_build_loop.py` prove credential filtering, safe allowlist handling, and rejection of sensitive names | PASS (local contract) |
+| CLI real-project smoke | Fresh mission + temporary target through `attach-project` and `build-project` produced a validated mission-branch commit and passed clean-clone reproduction | PASS (local E2E) |
 | Unit/integration/E2E/secret/license quality | 90 tests, Ruff, `uv lock --check`, diff check, MIT license | PASS |
 
 ## External handoff
