@@ -1,5 +1,22 @@
 # Build notes
 
+## 2026-09-13 — Competition Closed Loop: structured competition state
+
+Database migration 11 adds durable raw `SourceObservation`, extraction,
+structured-signal, and versioned current-state records. The new competition
+intelligence reducer accepts evidence-linked `RuleObservation`, `MetricSignal`,
+`DeadlineSignal`, and `LeaderboardSignal` contracts. Reconciliation applies the
+documented authority hierarchy and recency: a newer organizer announcement can
+supersede official rules, while a third-party contradiction is retained as
+`CONFLICTED` without replacing active state.
+
+The observation plane now reads the reconciled deadline, active rules, metrics,
+and leaderboard values. Tests model the supplied judging update and prove that
+`TOP_10_HUMAN_REVIEW` becomes superseded by `LEADERBOARD_ONLY`, the September 23
+snapshot is typed, and the `galahad-hackathon` leaderboard signal remains linked
+to raw evidence. This slice does not claim live Agent Index metric ingestion;
+that is the next checklist item.
+
 ## 2026-09-13 — Competition Closed Loop: reliable identity and monitor gate
 
 The MVP closure plan is now tracked in `docs/COMPETITION_CLOSED_LOOP.md` as ten

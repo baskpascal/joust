@@ -20,7 +20,7 @@
   a different id fails explicitly.
   Verify: `python -m pytest tests/test_storage.py tests/test_doctor.py`
 
-- [ ] **2. Convert observations into versioned competition state**
+- [x] **2. Convert observations into versioned competition state**
   Spec ref: `Joust SDD > 10. Competition Spec; 11. Rule Engine`
   What to build: Implement `SourceObservation -> Extraction -> StructuredSignal
   -> Reconciliation -> CurrentCompetitionState` for rules, metrics, deadlines,
@@ -107,7 +107,7 @@
 
 ## Milestone definition of done
 
-- [ ] Raw evidence becomes versioned rules/signals.
+- [x] Raw evidence becomes versioned rules/signals.
 - [ ] Public competition metrics are ingested.
 - [ ] Metrics change mission decisions.
 - [x] Monitor primitives provide fingerprint, lease, backoff, and last-success state.

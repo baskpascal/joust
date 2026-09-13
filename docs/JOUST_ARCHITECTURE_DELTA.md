@@ -40,6 +40,7 @@ expired, user-stopped, or irrecoverably blocked.
 | Mission status vs phase | `MissionStatus` is separate from the backward-compatible phase field and terminal status prevents creation of another competition cycle | PRESENT (contract) |
 | CompetitionSpec | Backward-compatible `CompetitionSpec` now includes type, multiple deadlines, scoring, integrations, platform, leaderboard model, sources, and uncertainty | PRESENT (contract; extraction partial) |
 | Versioned CompetitionRule | Persisted lifecycle supports active/superseded/conflicted/unknown and critical supersession emits `STRATEGY_REASSESSMENT_REQUIRED` | PRESENT (contract; observation wiring partial) |
+| Structured competition state | `SourceObservation -> Extraction -> StructuredSignal -> Reconciliation -> CurrentCompetitionState` persists evidence-linked rule, metric, deadline, and leaderboard signals; authority and recency choose active values while conflicts remain visible | PRESENT (contract and deterministic fixtures; live metrics pending) |
 | EntrantProfile | Persisted reusable profile with GitHub/Discord/platform identities, mission attachment, export, and CLI entrypoint | PRESENT |
 | ProjectTarget fields | Owner/name, dev/lint commands, deployment requirement/target, and base/final commit SHA extend the existing mandatory target boundary | PRESENT |
 | GitHub live action | Adapter and approval/idempotency contracts exist; authenticated remote clone/push/PR has not been exercised for a mission | PARTIAL / EXTERNAL |

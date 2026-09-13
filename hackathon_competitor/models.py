@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -96,6 +96,13 @@ class MonitorOutcome(StrEnum):
     FAILED = "FAILED"
     LEASED_OUT = "LEASED_OUT"
     BACKING_OFF = "BACKING_OFF"
+
+
+class StructuredSignalType(StrEnum):
+    RULE = "RULE"
+    METRIC = "METRIC"
+    DEADLINE = "DEADLINE"
+    LEADERBOARD = "LEADERBOARD"
 
 
 class ProjectMode(StrEnum):
@@ -358,6 +365,81 @@ class CompetitionRule(Contract):
     confidence: float = Field(ge=0.0, le=1.0)
     supersedes_rule_id: UUID | None = None
     status: CompetitionRuleStatus = CompetitionRuleStatus.ACTIVE
+
+
+class SourceObservation(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    source_uri: str
+    authority: str
+    observed_at: datetime = Field(default_factory=utcnow)
+    raw_text: str
+    content_hash: str
+    evidence_id: UUID
+
+
+class Extraction(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    source_observation_id: UUID
+    extractor: str
+    extractor_version: str
+    extracted_at: datetime = Field(default_factory=utcnow)
+    signal_ids: list[UUID] = Field(default_factory=list)
+
+
+class StructuredSignal(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    extraction_id: UUID
+    source_observation_id: UUID
+    source_evidence_id: UUID
+    signal_type: StructuredSignalType
+    observed_at: datetime = Field(default_factory=utcnow)
+    authority: str
+    confidence: float = Field(ge=0.0, le=1.0)
+
+
+class RuleObservation(StructuredSignal):
+    signal_type: Literal[StructuredSignalType.RULE] = StructuredSignalType.RULE
+    category: str
+    statement: str
+    normalized_constraint: str
+
+
+class MetricSignal(StructuredSignal):
+    signal_type: Literal[StructuredSignalType.METRIC] = StructuredSignalType.METRIC
+    metric: str
+    value: float
+    unit: str | None = None
+
+
+class DeadlineSignal(StructuredSignal):
+    signal_type: Literal[StructuredSignalType.DEADLINE] = StructuredSignalType.DEADLINE
+    deadline_type: str
+    deadline_at: datetime
+
+
+class LeaderboardSignal(StructuredSignal):
+    signal_type: Literal[StructuredSignalType.LEADERBOARD] = StructuredSignalType.LEADERBOARD
+    agent_id: str
+    rank: int | None = Field(default=None, ge=1)
+    users: int | None = Field(default=None, ge=0)
+    successful_installs: int | None = Field(default=None, ge=0)
+    token_usage: int | None = Field(default=None, ge=0)
+
+
+class CurrentCompetitionState(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    version: int = Field(ge=1)
+    reconciled_at: datetime = Field(default_factory=utcnow)
+    active_rule_ids: list[UUID] = Field(default_factory=list)
+    signal_ids: list[UUID] = Field(default_factory=list)
+    metrics: dict[str, float] = Field(default_factory=dict)
+    deadlines: dict[str, datetime] = Field(default_factory=dict)
+    leaderboard: dict[str, dict[str, int | None]] = Field(default_factory=dict)
+    conflicts: list[str] = Field(default_factory=list)
 
 
 class CompetitionSpec(HackathonSpec):

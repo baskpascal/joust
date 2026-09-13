@@ -51,6 +51,20 @@ class CompetitionObserver:
             or mission.deadline_at
         )
 
+    @staticmethod
+    def _state_deadline(state) -> datetime | None:
+        if state is None:
+            return None
+        for key in (
+            "FINAL_SNAPSHOT",
+            "SUBMISSION_DEADLINE",
+            "BUILD_DEADLINE",
+            "DEADLINE",
+        ):
+            if key in state.deadlines:
+                return state.deadlines[key]
+        return None
+
     def collect(
         self,
         cycle_id: UUID,
@@ -67,16 +81,31 @@ class CompetitionObserver:
             spec = self.database.get_spec_for_mission(mission.id)
         except KeyError:
             spec = None
-        deadline = self._deadline(spec, mission)
+        try:
+            competition_state = self.database.get_current_competition_state(mission.id)
+        except KeyError:
+            competition_state = None
+        deadline = self._state_deadline(competition_state) or self._deadline(spec, mission)
         deadline_state = "unknown"
         if deadline is not None:
             deadline_state = "expired" if observed_at >= deadline else "upcoming"
 
-        active_rules = [
-            rule.id
-            for rule in self.database.list_competition_rules(mission.id)
-            if rule.status == CompetitionRuleStatus.ACTIVE
-        ]
+        active_rules = (
+            list(competition_state.active_rule_ids)
+            if competition_state is not None
+            else [
+                rule.id
+                for rule in self.database.list_competition_rules(mission.id)
+                if rule.status == CompetitionRuleStatus.ACTIVE
+            ]
+        )
+        observed_scores = dict(competition_state.metrics) if competition_state is not None else {}
+        if competition_state is not None:
+            for agent_id, snapshot in competition_state.leaderboard.items():
+                for metric, value in snapshot.items():
+                    if value is not None:
+                        observed_scores[f"leaderboard.{agent_id}.{metric}"] = float(value)
+        observed_scores.update(score_signals or {})
         findings: list[str] = []
         uncertainties: list[str] = []
         if deadline_state == "expired":
@@ -96,7 +125,7 @@ class CompetitionObserver:
             submission_state=(
                 "published" if mission.state == MissionState.SUBMITTED else "not_published"
             ),
-            score_signals=dict(score_signals or {}),
+            score_signals=observed_scores,
             findings=findings,
             uncertainties=uncertainties,
         )

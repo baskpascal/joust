@@ -19,6 +19,8 @@ from .models import (
     BuildRun,
     ChangeSet,
     CompetitionCycle,
+    CurrentCompetitionState,
+    DeadlineSignal,
     CompetitionMemory,
     CompetitionObservation,
     CompetitionRule,
@@ -26,15 +28,22 @@ from .models import (
     EntrantProfile,
     Evaluation,
     Evidence,
+    Extraction,
     Experiment,
     HackathonSpec,
     Idea,
     Mission,
     MissionState,
+    LeaderboardSignal,
+    MetricSignal,
     MonitorBackoffState,
     ProjectTarget,
     RepositorySnapshot,
+    RuleObservation,
+    SourceObservation,
     SourceRecord,
+    StructuredSignal,
+    StructuredSignalType,
     Task,
     utcnow,
 )
@@ -227,6 +236,41 @@ MIGRATIONS: tuple[str, ...] = (
         monitor_type TEXT NOT NULL,
         payload TEXT NOT NULL,
         PRIMARY KEY(mission_id, monitor_type)
+    );
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS source_observations (
+        id TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        source_uri TEXT NOT NULL,
+        observed_at TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_source_observations_mission
+      ON source_observations(mission_id, observed_at);
+    CREATE TABLE IF NOT EXISTS extractions (
+        id TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        source_observation_id TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS structured_signals (
+        id TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        extraction_id TEXT NOT NULL,
+        signal_type TEXT NOT NULL,
+        observed_at TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_structured_signals_mission
+      ON structured_signals(mission_id, signal_type, observed_at);
+    CREATE TABLE IF NOT EXISTS current_competition_states (
+        id TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        reconciled_at TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        UNIQUE(mission_id, version)
     );
     """,
 )
@@ -587,6 +631,81 @@ class Database:
     def list_competition_rules(self, mission_id: UUID | str) -> list[CompetitionRule]:
         return self._list_for_mission("competition_rules", mission_id, CompetitionRule)
 
+    def save_source_observation(self, observation: SourceObservation) -> None:
+        self._save(
+            "source_observations",
+            observation,
+            mission_id=observation.mission_id,
+            source_uri=observation.source_uri,
+            observed_at=observation.observed_at.isoformat(),
+        )
+
+    def list_source_observations(self, mission_id: UUID | str) -> list[SourceObservation]:
+        return self._list_for_mission("source_observations", mission_id, SourceObservation)
+
+    def get_source_observation(self, observation_id: UUID | str) -> SourceObservation:
+        return self._get("source_observations", observation_id, SourceObservation)
+
+    def save_extraction(self, extraction: Extraction) -> None:
+        self._save(
+            "extractions",
+            extraction,
+            mission_id=extraction.mission_id,
+            source_observation_id=extraction.source_observation_id,
+        )
+
+    def list_extractions(self, mission_id: UUID | str) -> list[Extraction]:
+        return self._list_for_mission("extractions", mission_id, Extraction)
+
+    def save_structured_signal(self, signal: StructuredSignal) -> None:
+        self._save(
+            "structured_signals",
+            signal,
+            mission_id=signal.mission_id,
+            extraction_id=signal.extraction_id,
+            signal_type=signal.signal_type.value,
+            observed_at=signal.observed_at.isoformat(),
+        )
+
+    def list_structured_signals(self, mission_id: UUID | str) -> list[StructuredSignal]:
+        model_by_type = {
+            StructuredSignalType.RULE.value: RuleObservation,
+            StructuredSignalType.METRIC.value: MetricSignal,
+            StructuredSignalType.DEADLINE.value: DeadlineSignal,
+            StructuredSignalType.LEADERBOARD.value: LeaderboardSignal,
+        }
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT signal_type, payload FROM structured_signals "
+                "WHERE mission_id = ? ORDER BY observed_at, rowid",
+                (str(mission_id),),
+            ).fetchall()
+        return [
+            model_by_type[row["signal_type"]].model_validate_json(row["payload"]) for row in rows
+        ]
+
+    def save_current_competition_state(self, state: CurrentCompetitionState) -> None:
+        self._save(
+            "current_competition_states",
+            state,
+            mission_id=state.mission_id,
+            version=state.version,
+            reconciled_at=state.reconciled_at.isoformat(),
+        )
+
+    def list_current_competition_states(
+        self, mission_id: UUID | str
+    ) -> list[CurrentCompetitionState]:
+        return self._list_for_mission(
+            "current_competition_states", mission_id, CurrentCompetitionState
+        )
+
+    def get_current_competition_state(self, mission_id: UUID | str) -> CurrentCompetitionState:
+        states = self.list_current_competition_states(mission_id)
+        if not states:
+            raise KeyError(f"no reconciled competition state for mission: {mission_id}")
+        return max(states, key=lambda item: item.version)
+
     def save_competition_cycle(self, cycle: CompetitionCycle) -> None:
         self._save(
             "competition_cycles",
@@ -847,6 +966,19 @@ class Database:
             ),
             "competition_rules": [
                 item.model_dump(mode="json") for item in self.list_competition_rules(mission.id)
+            ],
+            "source_observations": [
+                item.model_dump(mode="json") for item in self.list_source_observations(mission.id)
+            ],
+            "extractions": [
+                item.model_dump(mode="json") for item in self.list_extractions(mission.id)
+            ],
+            "structured_signals": [
+                item.model_dump(mode="json") for item in self.list_structured_signals(mission.id)
+            ],
+            "competition_states": [
+                item.model_dump(mode="json")
+                for item in self.list_current_competition_states(mission.id)
             ],
             "competition_cycles": [
                 item.model_dump(mode="json") for item in self.list_competition_cycles(mission.id)
