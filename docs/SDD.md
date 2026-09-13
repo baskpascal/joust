@@ -2997,4 +2997,6 @@ Gate C additionally requires a target repository, a recorded implementation
 commit, project-specific build/test evidence, and a clean-clone reproduction.
 Gate D maps every submission claim to the validated target commit and blocks
 when the project has not completed the repair loop or when its GitHub state is
-unknown.
+unknown. The original V0 distribution/demo pack is never accepted as a
+substitute when a real `ProjectTarget` is attached; a target-bound submission
+pack must name its repository, branch, commit SHA, and reproduction evidence.

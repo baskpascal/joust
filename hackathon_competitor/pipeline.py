@@ -831,6 +831,13 @@ def complete_v0(orchestrator: MissionOrchestrator, mission_id) -> Mission:
         importlib.util.find_spec("hackathon_competitor") is not None
         and "exit_code=0" in install_validation
     )
+    target_attached = mission.project_target_id is not None
+    target_validated = False
+    if target_attached:
+        target_validated = any(
+            item.status == "validated"
+            for item in orchestrator.database.list_change_sets(mission.id)
+        )
     gate = submission_gate(
         compliance,
         install_tested=install_tested,
@@ -842,6 +849,11 @@ def complete_v0(orchestrator: MissionOrchestrator, mission_id) -> Mission:
             for rule in compliance.rules
             if rule.type == RuleType.SUBMISSION
         ),
+        project_target_attached=target_attached,
+        project_target_validated=target_validated,
+        # This V0 writer describes Galahad's distribution demo. A real target
+        # needs a separate pack that names its repository, branch, and commit.
+        project_submission_bound=not target_attached,
     )
     ready_tasks = orchestrator.tasks.refresh_ready(mission.id)
     if readiness.id not in {task.id for task in ready_tasks}:

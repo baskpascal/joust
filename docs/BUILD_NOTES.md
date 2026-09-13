@@ -6,8 +6,11 @@
   `plow-pbc/plow-hermes-agent` commit
   `8710797b6409c77df560c6198407765d138ea617`, and the current official
   downstream variant/Agent Index pattern.
-- Preserved the attached SDD verbatim in `docs/SDD.md`; both files verify to
-  SHA-256 `572c39001c2dffb67abf1f78fa3b085084b2647d6202f2dee17aff060170d203`.
+- Started from the attached SDD in `docs/SDD.md` (source SHA-256
+  `572c39001c2dffb67abf1f78fa3b085084b2647d6202f2dee17aff060170d203`) and
+  documented the real-project execution extension as section 71. The current
+  repository copy includes that extension (SHA-256
+  `f646a65677a57ad6f0c004244fd68f1c80b477fd3610b977e3dbbf34aed0eae3`).
 - Converted the workspace from a temporary base clone into a downstream
   Galahad variant; generic Plow/Hermes runtime files were removed because they
   are upstream-owned.
@@ -121,7 +124,7 @@ subdirectory. Doctor now checks the non-secret presence of the runtime marker
 without reading it and runs the official client smoke check against the actual
 Hermes home.
 
-The final rebuilt-image `doctor` returned healthy with migration v4, all six
+The final rebuilt-image `doctor` returned healthy with migration v5, all six
 skills, Plow tools available, the stable agent id present, Agent Index status
 `registered`, and the credential present at mode `0600`. The supervised report
 again returned HTTP 200 for 119,363 tokens across two rows.
@@ -177,9 +180,9 @@ absence alone.
 Project execution now also has an environment boundary: build, test, run, and
 coding-agent subprocesses inherit only a small platform-safe base plus an
 explicit non-sensitive allowlist. Credential-shaped names are rejected before
-execution. The local suite is at 91 tests after adding a red-team repair
+execution. The local suite is at 92 tests after adding a red-team repair
 contract that prevents failed historical attempts from contaminating final
-commit evidence.
+commit evidence and a target-bound submission readiness gate.
 
 The post-change end-to-end smoke drove the public CLI through a fresh mission,
 attached a temporary `new_repo` target, ran a file-based implementation
