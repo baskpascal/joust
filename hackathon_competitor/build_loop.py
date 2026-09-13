@@ -224,9 +224,12 @@ class RealBuildLoop:
             *(('install', command) for command in target.install_commands),
             *(('build', command) for command in target.build_commands),
             *(('test', command) for command in target.test_commands),
+            *(('run', command) for command in target.run_commands),
         ]
         if not commands:
-            raise BuildLoopError("project target must declare an install, build, or test command")
+            raise BuildLoopError(
+                "project target must declare an install, build, test, or run command"
+            )
 
         implementer.implement(root, specification)
         commit_sha = git_workspace.checkpoint("Implement competition project slice")

@@ -2959,15 +2959,17 @@ inspect clean target
  -> create mission branch
  -> implement one coherent slice
  -> commit change set
- -> run install/build/test commands
+ -> run install/build/test/run smoke commands
  -> red-team the actual diff and reports
  -> repair a blocking finding
  -> repeat within a bounded attempt count
  -> record validated commit
 ```
 
-Each command produces a `BuildRun` with its commit, exit status, error, and log
-path. Each implementation produces a `ChangeSet` with base SHA, diff hash,
+Each command produces a `BuildRun` with its commit, phase, exit status, error,
+and log path. A declared `run` command must be a bounded, non-interactive
+smoke/demo command; long-running servers belong behind a separate deployment
+adapter. Each implementation produces a `ChangeSet` with base SHA, diff hash,
 changed files, and resulting commit SHA. A dirty existing workspace is a hard
 failure until the user explicitly creates a clean target or preserves the
 changes elsewhere.
