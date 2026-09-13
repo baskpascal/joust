@@ -10,6 +10,11 @@ video scripts, screenshot checklist, install instructions, evidence/claims
 map, and final compliance report. Block readiness when a hard rule, executable
 claim, required field, license, or install path is unresolved.
 
+For a build-capable mission, the submission pack must point to the validated
+project repository, branch, commit SHA, and reproducible build/test evidence.
+The Galahad distribution repository alone is not proof that the competition
+project was built.
+
 Preparation may proceed automatically. Publishing, accepting rules or legal
 terms, and final submission require the user's explicit confirmation
 immediately before the external action. Never blindly retry an ambiguous write.
