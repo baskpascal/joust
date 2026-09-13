@@ -51,7 +51,7 @@ class CompetitionObserver:
             or mission.deadline_at
         )
 
-    def capture(
+    def collect(
         self,
         cycle_id: UUID,
         *,
@@ -147,6 +147,24 @@ class CompetitionObserver:
                 except (OSError, RuntimeError, ValueError) as exc:
                     observation.uncertainties.append(f"deployment observation failed: {exc}")
 
+        return observation
+
+    def capture(
+        self,
+        cycle_id: UUID,
+        *,
+        now: datetime | None = None,
+        score_signals: dict[str, float] | None = None,
+    ) -> CompetitionObservation:
+        return self.record(self.collect(cycle_id, now=now, score_signals=score_signals))
+
+    def record(self, observation: CompetitionObservation) -> CompetitionObservation:
+        """Persist a successful collection and advance OBSERVE exactly once."""
+
+        cycle = self.database.get_competition_cycle(observation.cycle_id)
+        if cycle.stage != CompeteStage.OBSERVE:
+            raise ValueError(f"competition cycle requires OBSERVE, got {cycle.stage.value}")
+        mission = self.database.get_mission(observation.mission_id)
         self.database.save_competition_observation(observation)
         evidence = Evidence(
             mission_id=mission.id,
@@ -170,7 +188,7 @@ class CompetitionObserver:
             ),
             confidence=1.0 if not observation.uncertainties else 0.7,
             authority="joust-observation-plane",
-            retrieved_at=observed_at,
+            retrieved_at=observation.observed_at,
         )
         self.database.save_evidence(evidence)
         observation.evidence_ids.append(evidence.id)

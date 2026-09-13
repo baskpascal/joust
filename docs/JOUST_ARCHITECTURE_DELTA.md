@@ -47,27 +47,27 @@ expired, user-stopped, or irrecoverably blocked.
 | Real research action | `RESEARCH` fetches bounded official URLs, removes script/style content, persists source evidence, and fails if no readable evidence exists; `CUSTOM` cannot claim research | PRESENT (live official pages) |
 | Planner resilience | Hermes planning runs without project rules/tools/plugins, has a 60-second bound, sees recent outcomes/project summary, and falls back to a deterministic safe action | PRESENT (live timeout/fallback) |
 | Verification-only build | A local action may pass configured checks and clean-clone reproduction without manufacturing a diff; this is explicit in `ChangeSet.verification_only` | PRESENT (contract; live predecessor exposed the bug) |
-| Public product identity | Local distribution is Joust; the running Agent Index registration remains `galahad-hackathon` | DECISION REQUIRED BEFORE EXTERNAL CHANGE |
+| Product and external identity | Product/display/brand are Joust and CTA is `Joust it.`; durable installation state rejects changes to the bound external `AGENT_ID`, which remains `galahad-hackathon` | PRESENT (external id intentionally stable) |
 
 ## Plan ordered by dependency and risk
 
-1. Add a deterministic competition-intelligence reducer: convert newly fetched
+1. Bind the immutable external identity and add observation fingerprints,
+   leases, retry/backoff, and last-success state before any scheduler is enabled.
+2. Add a deterministic competition-intelligence reducer: convert newly fetched
    evidence into proposed versioned rule/score/submission changes, require an
    authority/conflict decision, and update the active `CompetitionSpec`.
-2. Add observation fingerprints, leases, and retry/backoff so Hermes cron skips
-   unchanged state, prevents concurrent cycles, and does not burn tokens on a
-   repeated observation.
 3. Add structured Agent Index leaderboard/usage, submission-state, and
    deployment-health adapters. Live HTML containing `Loading…` is evidence of
    an unavailable signal, not a score.
-4. Add executors for tests without implementation, submission preparation,
+4. Authenticate and prove GitHub remote observation, then add executors for
+   tests without implementation, submission preparation,
    preview deployment, and approval-bound GitHub publication. Research and
    build executors are now real; `CUSTOM` remains an explicit no-op only.
 5. Run one authenticated GitHub branch/PR rehearsal after explicit approval,
    then exercise deployment observation and a second build caused by measured
    feedback.
-6. Reconcile the Joust public repository/product name with the still-running
-   `AGENT_ID=galahad-hackathon` registration without silently changing identity.
+6. Enable Hermes cron only after the monitored runner and external observation
+   path pass; keep the registered `AGENT_ID=galahad-hackathon` stable.
 
 ## Findings from the live persistent mission
 

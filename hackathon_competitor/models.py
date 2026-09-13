@@ -90,6 +90,14 @@ class ActionExecutionStatus(StrEnum):
     FAILED = "FAILED"
 
 
+class MonitorOutcome(StrEnum):
+    CHANGED = "CHANGED"
+    UNCHANGED = "UNCHANGED"
+    FAILED = "FAILED"
+    LEASED_OUT = "LEASED_OUT"
+    BACKING_OFF = "BACKING_OFF"
+
+
 class ProjectMode(StrEnum):
     EXISTING_REPO = "existing_repo"
     NEW_REPO = "new_repo"
@@ -189,6 +197,37 @@ class Mission(Contract):
     unresolved_questions: list[str] = Field(default_factory=list)
     evidence_ids: list[UUID] = Field(default_factory=list)
     workspace_path: str
+
+
+class AgentIdentity(Contract):
+    """Installation-level identity; ``agent_id`` is immutable once bound."""
+
+    agent_id: str = Field(min_length=1)
+    product_name: str = "Joust"
+    display_name: str = "Joust"
+    brand: str = "Joust"
+    command_cta: str = "Joust it."
+    bound_at: datetime = Field(default_factory=utcnow)
+
+
+class MonitorBackoffState(Contract):
+    mission_id: UUID
+    monitor_type: str
+    consecutive_failures: int = Field(default=0, ge=0)
+    next_attempt_at: datetime | None = None
+    last_error: str | None = None
+    last_successful_observation_id: UUID | None = None
+    updated_at: datetime = Field(default_factory=utcnow)
+
+
+class MonitorRunResult(Contract):
+    outcome: MonitorOutcome
+    mission_id: UUID
+    monitor_type: str
+    cycle_id: UUID | None = None
+    observation_id: UUID | None = None
+    fingerprint: str | None = None
+    next_attempt_at: datetime | None = None
 
 
 class EntrantProfile(Contract):

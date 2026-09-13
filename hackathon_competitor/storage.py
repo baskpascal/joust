@@ -4,6 +4,7 @@ import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import TypeVar
 from uuid import UUID
@@ -12,6 +13,7 @@ from pydantic import BaseModel
 
 from .models import (
     ActionExecution,
+    AgentIdentity,
     Approval,
     Artifact,
     BuildRun,
@@ -29,6 +31,7 @@ from .models import (
     Idea,
     Mission,
     MissionState,
+    MonitorBackoffState,
     ProjectTarget,
     RepositorySnapshot,
     SourceRecord,
@@ -197,6 +200,35 @@ MIGRATIONS: tuple[str, ...] = (
     CREATE INDEX IF NOT EXISTS idx_action_executions_cycle
       ON action_executions(cycle_id);
     """,
+    """
+    CREATE TABLE IF NOT EXISTS agent_identity (
+        singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+        agent_id TEXT NOT NULL UNIQUE,
+        payload TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS observation_fingerprints (
+        fingerprint TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        monitor_type TEXT NOT NULL,
+        observation_id TEXT,
+        first_seen_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_observation_fingerprints_mission
+      ON observation_fingerprints(mission_id, monitor_type, first_seen_at);
+    CREATE TABLE IF NOT EXISTS monitor_leases (
+        lease_key TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        holder TEXT NOT NULL,
+        acquired_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS monitor_backoff (
+        mission_id TEXT NOT NULL,
+        monitor_type TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        PRIMARY KEY(mission_id, monitor_type)
+    );
+    """,
 )
 
 
@@ -244,6 +276,131 @@ class Database:
                 "SELECT COALESCE(MAX(version), 0) FROM schema_migrations"
             ).fetchone()
             return int(row[0])
+
+    def bind_agent_identity(self, identity: AgentIdentity) -> AgentIdentity:
+        """Bind the external id once and reject later attempts to replace it."""
+
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT payload FROM agent_identity WHERE singleton = 1"
+            ).fetchone()
+            if row is not None:
+                bound = AgentIdentity.model_validate_json(row[0])
+                if bound.agent_id != identity.agent_id:
+                    raise ValueError(
+                        "AGENT_ID is immutable after binding: "
+                        f"expected {bound.agent_id!r}, got {identity.agent_id!r}"
+                    )
+                return bound
+            connection.execute(
+                "INSERT INTO agent_identity(singleton, agent_id, payload) VALUES (1, ?, ?)",
+                (identity.agent_id, self._payload(identity)),
+            )
+        return identity
+
+    def get_agent_identity(self) -> AgentIdentity | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT payload FROM agent_identity WHERE singleton = 1"
+            ).fetchone()
+        return AgentIdentity.model_validate_json(row[0]) if row is not None else None
+
+    def reserve_observation_fingerprint(
+        self,
+        *,
+        fingerprint: str,
+        mission_id: UUID | str,
+        monitor_type: str,
+        observation_id: UUID | str | None,
+        first_seen_at: datetime,
+    ) -> bool:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                "INSERT OR IGNORE INTO observation_fingerprints"
+                "(fingerprint, mission_id, monitor_type, observation_id, first_seen_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    fingerprint,
+                    str(mission_id),
+                    monitor_type,
+                    str(observation_id) if observation_id else None,
+                    first_seen_at.isoformat(),
+                ),
+            )
+            return cursor.rowcount == 1
+
+    def has_observation_fingerprint(self, fingerprint: str) -> bool:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM observation_fingerprints WHERE fingerprint = ?",
+                (fingerprint,),
+            ).fetchone()
+        return row is not None
+
+    def acquire_monitor_lease(
+        self,
+        *,
+        lease_key: str,
+        mission_id: UUID | str,
+        holder: str,
+        acquired_at: datetime,
+        expires_at: datetime,
+    ) -> bool:
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT holder, expires_at FROM monitor_leases WHERE lease_key = ?",
+                (lease_key,),
+            ).fetchone()
+            available = (
+                row is None
+                or row["holder"] == holder
+                or datetime.fromisoformat(row["expires_at"]) <= acquired_at
+            )
+            if not available:
+                return False
+            connection.execute(
+                "INSERT INTO monitor_leases"
+                "(lease_key, mission_id, holder, acquired_at, expires_at) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(lease_key) DO UPDATE SET mission_id=excluded.mission_id, "
+                "holder=excluded.holder, acquired_at=excluded.acquired_at, "
+                "expires_at=excluded.expires_at",
+                (
+                    lease_key,
+                    str(mission_id),
+                    holder,
+                    acquired_at.isoformat(),
+                    expires_at.isoformat(),
+                ),
+            )
+            return True
+
+    def release_monitor_lease(self, *, lease_key: str, holder: str) -> bool:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM monitor_leases WHERE lease_key = ? AND holder = ?",
+                (lease_key, holder),
+            )
+            return cursor.rowcount == 1
+
+    def get_monitor_backoff(self, mission_id: UUID | str, monitor_type: str) -> MonitorBackoffState:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT payload FROM monitor_backoff WHERE mission_id = ? AND monitor_type = ?",
+                (str(mission_id), monitor_type),
+            ).fetchone()
+        if row is None:
+            return MonitorBackoffState(mission_id=mission_id, monitor_type=monitor_type)
+        return MonitorBackoffState.model_validate_json(row[0])
+
+    def save_monitor_backoff(self, state: MonitorBackoffState) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                "INSERT INTO monitor_backoff(mission_id, monitor_type, payload) VALUES (?, ?, ?) "
+                "ON CONFLICT(mission_id, monitor_type) DO UPDATE SET payload=excluded.payload",
+                (str(state.mission_id), state.monitor_type, self._payload(state)),
+            )
 
     @staticmethod
     def _payload(model: BaseModel) -> str:

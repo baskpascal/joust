@@ -37,7 +37,7 @@ class MissingGitHub:
 
 def test_observation_plane_captures_real_local_project_state(tmp_path):
     database = Database(tmp_path / "state.db")
-    assert database.migrate() == 9
+    assert database.migrate() == 10
     project = tmp_path / "entry"
     project.mkdir()
     workspace = GitWorkspace(project)

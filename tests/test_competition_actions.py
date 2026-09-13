@@ -39,7 +39,7 @@ def _selected_cycle(database, mission, action):
 
 def test_selected_build_action_runs_real_build_loop_and_records_evidence(tmp_path):
     database = Database(tmp_path / "state.db")
-    assert database.migrate() == 9
+    assert database.migrate() == 10
     mission = Mission(
         title="Build competition entry",
         objective="win",

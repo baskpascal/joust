@@ -3,9 +3,12 @@
 The image downloads the official client named in `vendor/client.pin`, verifies
 its SHA-256, and runs it as the unprivileged Hermes user under `s6`.
 
-`AGENT_ID` is an operator-chosen stable identifier (for example,
+`AGENT_ID` is an immutable external identifier. It is not the product name.
+It is operator-chosen (for example,
 `galahad-hackathon`). Use the same value for Agent Index registration and every
-restart; the service stands down if it is absent. Verified status is a separate
+restart. Joust now binds the first configured value into installation state and
+fails explicitly if a later runtime tries to use a different id. The service
+stands down if it is absent. Verified status is a separate
 eligibility step and does not provide or choose the id. The broad Plow
 credential is supplied only to the client's one-time official registration
 exchange; periodic reports use the stored Agent Index key and do not receive

@@ -27,6 +27,7 @@ from .hermes_planner import (
     ObservationOnlyExecutor,
     ReadinessMeasurer,
 )
+from .identity import identity_from_environment
 from .models import (
     CompetitionActionType,
     EntrantProfile,
@@ -62,6 +63,9 @@ def runtime(home: Path | None = None) -> MissionOrchestrator:
     root = (home or default_home()).resolve()
     database = Database(root / "state.db")
     database.migrate()
+    identity = identity_from_environment()
+    if identity is not None:
+        database.bind_agent_identity(identity)
     return MissionOrchestrator(
         database,
         root / "missions",
@@ -145,9 +149,16 @@ def doctor(home: Path | None = None) -> tuple[dict[str, dict[str, object]], bool
         "ok": plow_tools_available,
         "available": plow_tools_available,
     }
+    configured_identity = identity_from_environment()
+    bound_identity = database.get_agent_identity()
+    identity_matches = configured_identity is not None and (
+        bound_identity is None or bound_identity.agent_id == configured_identity.agent_id
+    )
     checks["agent_id"] = {
-        "ok": bool(os.environ.get("AGENT_ID")),
-        "present": bool(os.environ.get("AGENT_ID")),
+        "ok": identity_matches,
+        "present": configured_identity is not None,
+        "bound": bound_identity is not None,
+        "matches_bound_identity": identity_matches,
     }
     service_candidates = [
         repo_root / "image/s6-overlay/s6-rc.d/agent-index/run",

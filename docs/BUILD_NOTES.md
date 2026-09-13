@@ -1,5 +1,32 @@
 # Build notes
 
+## 2026-09-13 — Competition Closed Loop: reliable identity and monitor gate
+
+The MVP closure plan is now tracked in `docs/COMPETITION_CLOSED_LOOP.md` as ten
+sequenced, verifiable items. The external Agent Index key is no longer treated
+as the product name: Joust centralizes product/display/brand as `Joust`, the CTA
+as `Joust it.`, and binds the first configured `AGENT_ID` into SQLite
+installation state. A later runtime using a different id fails explicitly, so
+the registered `galahad-hackathon` identity cannot be fragmented by an
+accidental rename.
+
+Database migration 10 adds observation fingerprints, atomic expiring monitor
+leases, and durable retry state. `CompetitionObserver` now separates read-only
+collection from evidence persistence. `MonitoredCompetitionRunner` uses that
+boundary to skip unchanged observations before planning, serialize workers,
+apply 1m/2m/5m/15m/1h capped backoff with jitter, and retain the last successful
+observation across failures. Collection failure and unchanged state have
+different durable outcomes and events. Hermes cron remains disabled until the
+remaining closed-loop gates pass.
+
+Verification: Ruff formatting/checks passed; the full suite passed with 132
+tests. The rebuilt `joust-agent:latest` image has manifest-list digest
+`sha256:54224c90e6ef07750779b28229948f2b5d8358d0669b2491d09ac03eef2bb22d`.
+An ephemeral image smoke test returned healthy at migration 10 with bound
+`agent_id=galahad-hackathon`, `display_name=Joust`, and a matching identity
+check. Active containers were not restarted and no remote mutation was
+performed.
+
 ## 2026-09-12 — Bootstrap and first vertical slice
 
 - Inspected the empty workspace, the attached SDD, official
