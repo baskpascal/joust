@@ -429,6 +429,17 @@ class LeaderboardSignal(StructuredSignal):
     token_usage: int | None = Field(default=None, ge=0)
 
 
+class PlowMetricsSnapshot(Contract):
+    agent_id: str
+    rank: int | None = Field(default=None, ge=1)
+    users: int | None = Field(default=None, ge=0)
+    successful_installs: int | None = Field(default=None, ge=0)
+    token_usage: int | None = Field(default=None, ge=0)
+    active_days: int | None = Field(default=None, ge=0)
+    verified: bool
+    captured_at: datetime = Field(default_factory=utcnow)
+
+
 class CurrentCompetitionState(Contract):
     id: UUID = Field(default_factory=uuid4)
     mission_id: UUID

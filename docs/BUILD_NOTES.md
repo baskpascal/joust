@@ -1,5 +1,23 @@
 # Build notes
 
+## 2026-09-13 — Competition Closed Loop: live Agent Index metrics
+
+The public Agent Index page was inspected read-only. Its own JavaScript uses
+the structured API at `https://agent-index-server.vercel.app`: `/v1/agents`,
+`/v1/agent?agent_id=...`, and `/v1/usage?agent_id=...`. Joust now contains a
+dedicated `CompetitionMetricsReader` contract and `PlowMetricsReader`; HTML/DOM
+parsing is not coupled to the orchestrator. Missing or malformed dynamic data
+raises `MetricsUnavailable` rather than becoming zero.
+
+`PlowMetricsIngestor` preserves the three raw JSON responses as source evidence,
+emits typed leaderboard/metric signals, reconciles current state, and feeds the
+result into `CompetitionObserver` before planning. A live read was persisted to
+mission `5a26f83b-61cd-426c-ba02-878dc8c9cc38` at
+`2026-09-13T23:20:15.847564Z`: one user, zero successful installs, 3,119,664
+tokens, two active days, not Verified, and therefore no eligible rank. The
+reconciled state is version 1 (`0227e2f5-62ea-4361-9666-00fabeaaef96`) with six
+active signals. This was a public read and local evidence write only.
+
 ## 2026-09-13 — Competition Closed Loop: structured competition state
 
 Database migration 11 adds durable raw `SourceObservation`, extraction,

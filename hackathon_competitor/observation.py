@@ -25,6 +25,10 @@ class DeploymentObserver(Protocol):
     def health(self, target: str) -> dict[str, Any]: ...
 
 
+class MetricsIngestor(Protocol):
+    def ingest(self, mission_id: UUID): ...
+
+
 class CompetitionObserver:
     """Collect read-only competition/project signals and advance OBSERVE."""
 
@@ -34,10 +38,12 @@ class CompetitionObserver:
         *,
         github: GitHubTool | None = None,
         deployment: DeploymentObserver | None = None,
+        metrics: MetricsIngestor | None = None,
     ):
         self.database = database
         self.github = github
         self.deployment = deployment
+        self.metrics = metrics
 
     @staticmethod
     def _deadline(spec, mission) -> datetime | None:
@@ -77,6 +83,12 @@ class CompetitionObserver:
             raise ValueError(f"competition cycle requires OBSERVE, got {cycle.stage.value}")
         mission = self.database.get_mission(cycle.mission_id)
         observed_at = now or utcnow()
+        collection_uncertainties: list[str] = []
+        if self.metrics is not None:
+            try:
+                self.metrics.ingest(mission.id)
+            except (OSError, RuntimeError, ValueError) as exc:
+                collection_uncertainties.append(f"metrics observation failed: {exc}")
         try:
             spec = self.database.get_spec_for_mission(mission.id)
         except KeyError:
@@ -108,6 +120,7 @@ class CompetitionObserver:
         observed_scores.update(score_signals or {})
         findings: list[str] = []
         uncertainties: list[str] = []
+        uncertainties.extend(collection_uncertainties)
         if deadline_state == "expired":
             findings.append("competition deadline has elapsed")
         elif deadline is None:

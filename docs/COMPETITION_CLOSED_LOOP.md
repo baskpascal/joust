@@ -30,7 +30,7 @@
   Verify: Fixture and reconciliation tests prove authority ordering, conflicts,
   supersession, and an auditable current state.
 
-- [ ] **3. Ingest real Agent Index metrics**
+- [x] **3. Ingest real Agent Index metrics**
   Spec ref: `Joust SDD > 4. Compete Loop; 5. Observation Plane`
   What to build: Add a `CompetitionMetricsReader` boundary and
   `PlowMetricsSnapshot` for rank, users, successful installs, token usage, active
@@ -108,7 +108,7 @@
 ## Milestone definition of done
 
 - [x] Raw evidence becomes versioned rules/signals.
-- [ ] Public competition metrics are ingested.
+- [x] Public competition metrics are ingested.
 - [ ] Metrics change mission decisions.
 - [x] Monitor primitives provide fingerprint, lease, backoff, and last-success state.
 - [ ] Hermes cron runs safely.

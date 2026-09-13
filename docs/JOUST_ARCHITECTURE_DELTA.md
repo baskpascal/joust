@@ -33,14 +33,15 @@ expired, user-stopped, or irrecoverably blocked.
 |---|---|---|
 | Control plane | SQLite mission state, deterministic transitions, DAG, evidence, decisions, rules, compliance, approvals | PRESENT |
 | Execution plane | `ProjectTarget`, safe filesystem/shell/Git, coding-command handoff, build/repair/reproduction, GitHub adapter | PRESENT (local) |
-| Observation plane | Durable observations capture deadline, active rules, local Git SHA/dirty state, build/change status, score signals, GitHub checks, deployment health, and live official-page snapshots with non-visible HTML removed | PARTIAL (structured leaderboard/deployment/submission adapters remain) |
+| Observation plane | Durable observations capture deadline, active rules, local Git SHA/dirty state, build/change status, structured Agent Index score signals, GitHub checks, deployment health, and live official-page snapshots with non-visible HTML removed | PARTIAL (deployment/submission adapters remain) |
 | Real project | Mission branch, commit, diff hash, explicit checks, actual-file review, clean-clone reproduction | PRESENT (local E2E) |
 | Target-bound submission | Repository/branch/SHA/diff-bound pack with compliance and reproduced demo gate | PRESENT (local E2E) |
 | Persistent compete loop | `CompeteLoop` and `CompetitionIterationRunner` resume ordered stages, record failures/interruption, use an audited deterministic fallback when Hermes planning times out, and continue to the next cycle | PRESENT (live persistent mission) |
 | Mission status vs phase | `MissionStatus` is separate from the backward-compatible phase field and terminal status prevents creation of another competition cycle | PRESENT (contract) |
 | CompetitionSpec | Backward-compatible `CompetitionSpec` now includes type, multiple deadlines, scoring, integrations, platform, leaderboard model, sources, and uncertainty | PRESENT (contract; extraction partial) |
 | Versioned CompetitionRule | Persisted lifecycle supports active/superseded/conflicted/unknown and critical supersession emits `STRATEGY_REASSESSMENT_REQUIRED` | PRESENT (contract; observation wiring partial) |
-| Structured competition state | `SourceObservation -> Extraction -> StructuredSignal -> Reconciliation -> CurrentCompetitionState` persists evidence-linked rule, metric, deadline, and leaderboard signals; authority and recency choose active values while conflicts remain visible | PRESENT (contract and deterministic fixtures; live metrics pending) |
+| Structured competition state | `SourceObservation -> Extraction -> StructuredSignal -> Reconciliation -> CurrentCompetitionState` persists evidence-linked rule, metric, deadline, and leaderboard signals; authority and recency choose active values while conflicts remain visible | PRESENT (contract, deterministic fixtures, and live Agent Index snapshot) |
+| Agent Index metrics | `PlowMetricsReader` reads `/v1/agents`, `/v1/agent`, and `/v1/usage`; `PlowMetricsIngestor` preserves raw JSON and produces typed metrics before observation | PRESENT (live mission snapshot) |
 | EntrantProfile | Persisted reusable profile with GitHub/Discord/platform identities, mission attachment, export, and CLI entrypoint | PRESENT |
 | ProjectTarget fields | Owner/name, dev/lint commands, deployment requirement/target, and base/final commit SHA extend the existing mandatory target boundary | PRESENT |
 | GitHub live action | Adapter and approval/idempotency contracts exist; authenticated remote clone/push/PR has not been exercised for a mission | PARTIAL / EXTERNAL |
