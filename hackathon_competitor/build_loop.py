@@ -2,13 +2,22 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
+import subprocess
 import tempfile
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
+from uuid import UUID, uuid4
 
-from .models import BuildRun, ChangeSet, ProjectTarget, RepositorySnapshot
+from .models import (
+    BuildRun,
+    ChangeSet,
+    ModelProvenance,
+    ProjectTarget,
+    RepositorySnapshot,
+)
 from .project_review import review_project_change
 from .storage import Database
 from .tool_gateway import CodingAgentCommandTool, LocalGitTool, LocalShellTool
@@ -93,6 +102,25 @@ def validate_project_commands(commands: Sequence[Sequence[str]]) -> None:
             upper = argument.upper()
             if any(marker.upper() in upper for marker in _SENSITIVE_COMMAND_MARKERS):
                 raise ValueError("project command contains a credential-shaped argument")
+
+
+def _provenance(implementer: object) -> ModelProvenance | None:
+    """Name the model behind a diff, when the implementer is a model.
+
+    A ChangeSet whose provenance is absent is a change no model claimed, and
+    the difference has to be visible in stored state rather than inferred from
+    a class name.
+    """
+
+    invocation_id = getattr(implementer, "invocation_id", None)
+    provider = getattr(implementer, "provider", None)
+    if provider is None:
+        return None
+    return ModelProvenance(
+        provider=str(provider),
+        model=str(getattr(implementer, "model", "unknown")),
+        invocation_id=invocation_id if isinstance(invocation_id, UUID) else uuid4(),
+    )
 
 
 class ProjectBootstrap(Protocol):
@@ -194,6 +222,110 @@ class HermesImplementer:
 
     def repair(self, project_root: Path, specification: str, failure: str) -> str:
         return self.implement(project_root, specification, failure=failure)
+
+
+class ClaudeCodeImplementer:
+    """A real coding agent, writing real files in the project directory.
+
+    The Hermes path stays the hosted runtime's implementer. This one exists so
+    a mission can be implemented wherever Joust is actually running, and so
+    that the provider behind a ChangeSet is a fact the database carries rather
+    than an assumption.
+
+    Edits are accepted automatically inside the project root and nowhere else;
+    the agent gets no permission to reach outside it.
+    """
+
+    provider = "claude-code-cli"
+
+    def __init__(
+        self,
+        *,
+        executable: str = "claude",
+        model: str = "default",
+        timeout_seconds: float = 1800.0,
+        environment: Mapping[str, str] | None = None,
+    ):
+        self.executable = executable
+        self.model = model
+        self.timeout_seconds = timeout_seconds
+        self.environment = dict(environment) if environment is not None else dict(os.environ)
+        self.last_output = ""
+
+    def set_environment(self, environment: Mapping[str, str]) -> None:
+        # Deliberately ignored: project commands run with a filtered
+        # environment, but the coding agent needs its own credentials to run
+        # at all. Mixing the two is what leaks a token into a build command.
+        return None
+
+    def _run(self, project_root: Path, prompt: str) -> str:
+        resolved = shutil.which(self.executable)
+        if resolved is None:
+            raise BuildLoopError(
+                f"IMPLEMENTATION_PROVIDER_UNAVAILABLE: {self.executable} is not on PATH"
+            )
+        argv = [
+            resolved,
+            "-p",
+            prompt,
+            "--permission-mode",
+            "acceptEdits",
+            "--add-dir",
+            str(project_root.resolve()),
+        ]
+        if self.model and self.model != "default":
+            argv.extend(["--model", self.model])
+        try:
+            result = subprocess.run(
+                argv,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout_seconds,
+                check=False,
+                cwd=str(project_root.resolve()),
+                env={**self.environment, "CLAUDE_CODE_ENTRYPOINT": "joust"},
+            )
+        except subprocess.TimeoutExpired as error:
+            raise BuildLoopError(
+                f"IMPLEMENTATION_PROVIDER_TIMEOUT: no result in {self.timeout_seconds:.0f}s"
+            ) from error
+        if result.returncode != 0:
+            raise BuildLoopError(
+                "IMPLEMENTATION_PROVIDER_FAILED: "
+                + ((result.stderr or result.stdout).strip()[:500] or f"exit {result.returncode}")
+            )
+        self.last_output = result.stdout
+        return result.stdout
+
+    def implement(
+        self,
+        project_root: Path,
+        specification: str,
+        failure: str | None = None,
+    ) -> str:
+        prompt = (
+            "You are implementing a competition entry. Work only inside the current "
+            "directory. Implement the specification completely, with tests that actually "
+            "exercise the behaviour. Inspect what already exists before writing. Do not "
+            "invent APIs, credentials or telemetry, and do not push, publish or deploy "
+            "anything.\n\n"
+            f"SPECIFICATION:\n{specification}"
+        )
+        if failure:
+            prompt += (
+                "\n\nA previous attempt failed. Read this output, find the root cause, "
+                "and fix it:\n" + failure
+            )
+        return self._run(project_root, prompt)
+
+    def repair(self, project_root: Path, specification: str, failure: str) -> str:
+        prompt = (
+            "A verification command just failed in this project. Diagnose it from the "
+            "output below and the code, state the root cause, apply the smallest repair "
+            "that fixes it, and do not weaken or delete tests to make them pass.\n\n"
+            f"ORIGINAL SPECIFICATION:\n{specification}\n\nFAILURE OUTPUT:\n{failure}"
+        )
+        return self._run(project_root, prompt)
 
 
 class RealBuildLoop:
@@ -395,6 +527,7 @@ class RealBuildLoop:
             mission_id=target.mission_id,
             project_target_id=target.id,
             base_sha=base_sha,
+            generated_by=_provenance(implementer),
             diff_hash=hashlib.sha256(diff.encode()).hexdigest(),
             files=git.commit_changed_files(commit_sha) if has_changes else [],
             commit_sha=commit_sha,

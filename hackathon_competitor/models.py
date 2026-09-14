@@ -344,6 +344,7 @@ class ChangeSet(Contract):
     commit_sha: str | None = None
     status: str = "draft"
     verification_only: bool = False
+    generated_by: ModelProvenance | None = None
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -870,3 +871,75 @@ class CapabilityResult(Contract):
     proposed_tasks: list[dict[str, Any]] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     metrics: dict[str, Any] = Field(default_factory=dict)
+
+
+class ModelInvocationStatus(StrEnum):
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    UNAVAILABLE = "UNAVAILABLE"
+
+
+class ModelInvocation(Contract):
+    """One call to a real model, recorded whether or not it answered.
+
+    Without this, nothing in the database distinguishes a decision a model
+    made from a decision a hash made. The hashes are of the prompt and the
+    context, not their text: the record proves which inputs produced which
+    output without copying a competition's pages into the state database.
+    """
+
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    purpose: str
+    provider: str
+    model: str
+    input_context_hash: str
+    prompt_hash: str
+    started_at: datetime
+    finished_at: datetime | None = None
+    token_usage: dict[str, int] = Field(default_factory=dict)
+    status: ModelInvocationStatus
+    output_artifact_ids: list[UUID] = Field(default_factory=list)
+    error: str | None = None
+
+
+class AIDecision(Contract):
+    """An observable decision attributed to one invocation.
+
+    It stores what was chosen, what it was chosen over, and a concise stated
+    reason — never a private reasoning trace.
+    """
+
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    invocation_id: UUID
+    decision_type: str
+    alternatives_considered: list[dict[str, Any]] = Field(default_factory=list)
+    selected_option: str
+    rationale: str
+    evidence_ids: list[UUID] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class ModelProvenance(Contract):
+    provider: str
+    model: str
+    invocation_id: UUID
+
+
+class StrategyCandidate(Contract):
+    """One materially distinct way to compete, as a model proposed it."""
+
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    invocation_id: UUID
+    product_thesis: str
+    target_user: str
+    recurring_job: str
+    winning_mechanism: str
+    technical_plan: str
+    distribution_plan: str
+    assumptions: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    expected_competitive_advantage: str
+    created_at: datetime = Field(default_factory=utcnow)

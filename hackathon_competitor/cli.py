@@ -12,12 +12,19 @@ from collections.abc import Mapping
 from pathlib import Path
 from uuid import UUID
 
+from .ai import ClaudeCliReasoner, UnavailableReasoner
+from .ai_mission import MissionBlocked, joust_it
 from .agent_index import (
     AgentIndexService,
     PinnedCliAgentIndexClient,
     observe_license_spdx,
 )
-from .build_loop import CommandImplementer, HermesImplementer, project_environment
+from .build_loop import (
+    ClaudeCodeImplementer,
+    CommandImplementer,
+    HermesImplementer,
+    project_environment,
+)
 from .competition_actions import (
     CompetitionActionDispatcher,
     RealBuildActionExecutor,
@@ -253,6 +260,15 @@ def build_parser() -> argparse.ArgumentParser:
     for name in ("show", "resume", "tasks"):
         sub = mission_commands.add_parser(name)
         sub.add_argument("mission_id", type=UUID)
+    joust = mission_commands.add_parser("joust-it")
+    joust.add_argument("--url", required=True)
+    joust.add_argument("--projects-root")
+    joust.add_argument("--claude-model", default="default")
+    joust.add_argument(
+        "--no-model",
+        action="store_true",
+        help="run the same mission with no reasoning provider, to see where it stops",
+    )
     export = mission_commands.add_parser("export")
     export.add_argument("mission_id", type=UUID)
     export.add_argument("--bundle", type=Path)
@@ -305,6 +321,8 @@ def build_parser() -> argparse.ArgumentParser:
     implementer = build.add_mutually_exclusive_group(required=True)
     implementer.add_argument("--implementation-command", metavar="JSON_ARGV")
     implementer.add_argument("--hermes", action="store_true")
+    implementer.add_argument("--claude", action="store_true")
+    build.add_argument("--claude-model", default="default")
     build.add_argument("--hermes-model")
     build.add_argument("--hermes-reasoning")
     build.add_argument("--spec")
@@ -379,6 +397,53 @@ def main(argv: list[str] | None = None) -> int:
         app.attach_project_target(target)
         print(json.dumps(target.model_dump(mode="json"), indent=2))
         return 0
+    if args.mission_command == "joust-it":
+        reasoner = (
+            UnavailableReasoner()
+            if args.no_model
+            else ClaudeCliReasoner(model=args.claude_model, workdir=Path.cwd())
+        )
+        try:
+            mission, selected, decision, target = joust_it(
+                app,
+                args.url,
+                reasoner,
+                projects_root=args.projects_root,
+            )
+        except MissionBlocked as blocked:
+            print(
+                json.dumps(
+                    {
+                        "mission_id": str(blocked.mission_id),
+                        "state": "BLOCKED",
+                        "boundary": blocked.code,
+                        "detail": blocked.detail,
+                    },
+                    indent=2,
+                )
+            )
+            return 2
+        print(
+            json.dumps(
+                {
+                    "mission_id": str(mission.id),
+                    "competition": mission.title,
+                    "deadline_at": (
+                        mission.deadline_at.isoformat() if mission.deadline_at else None
+                    ),
+                    "strategies_considered": len(decision.options),
+                    "selected": selected.product_thesis,
+                    "target_user": selected.target_user,
+                    "winning_mechanism": selected.winning_mechanism,
+                    "rationale": decision.rationale,
+                    "project_target_id": str(target.id),
+                    "project_path": target.local_path,
+                    "state": mission.state.value,
+                },
+                indent=2,
+            )
+        )
+        return 0
     if args.mission_command == "attach-entrant":
         profile = EntrantProfile(
             display_name=args.display_name,
@@ -400,6 +465,8 @@ def main(argv: list[str] | None = None) -> int:
                 model=args.hermes_model,
                 reasoning=args.hermes_reasoning,
             )
+        elif args.claude:
+            implementer = ClaudeCodeImplementer(model=args.claude_model)
         else:
             implementation_command = _parse_command_vectors([args.implementation_command])[0]
             implementer = CommandImplementer(implementation_command)
