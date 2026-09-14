@@ -12,6 +12,10 @@ recorded run exited zero. A branch is pushed because the remote SHA was read
 back and matched. Whatever Joust cannot observe stays unverified rather than
 becoming a pass.
 
+<p align="center">
+  <img src="docs/brand/joust-duel.png" alt="Two knights colliding at the tilt, lances shattering" width="100%">
+</p>
+
 ## Run it
 
 You need Git, Docker and Docker Compose v2.
@@ -76,6 +80,10 @@ execution, an observation of the actual remote state, and evidence. An action
 waiting on somebody else rests in `AWAITING_EXTERNAL`, which is neither success
 nor failure. A source that could not be read is recorded as unreadable, never
 as unchanged.
+
+<p align="center">
+  <img src="docs/brand/joust-marks.png" alt="The Joust marks: helm, lance, shield, barrier, pennon, crossed lances, chaplet" width="100%">
+</p>
 
 ## Read more
 
