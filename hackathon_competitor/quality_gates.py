@@ -9,8 +9,11 @@ def rules_gate(spec: HackathonSpec) -> QualityGateResult:
         findings.append("deadline is neither known nor explicitly unknown")
     if not spec.submission_requirements:
         findings.append("submission requirements are missing")
-    if not spec.prohibited_actions:
-        findings.append("critical prohibitions are missing")
+    # A source can impose only positive obligations.  Treating the absence of
+    # an explicit prohibition as a failure invents a competition rule and
+    # prevents Joust from working on real rule pages that do not publish one.
+    # Unknown prohibitions remain visible in the evidence/spec, but are not a
+    # fabricated blocker.
     if not spec.required_technologies:
         findings.append("required technologies are missing")
     return QualityGateResult(name="rules", passed=not findings, blocking_findings=findings)

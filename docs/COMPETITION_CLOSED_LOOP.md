@@ -150,14 +150,14 @@
 ## Install-path freeze
 
 ```text
-VERIFICATION_CANDIDATE = c8aa38d3c81009e47495f1b154eb301ca1b9d1ea
+VERIFICATION_CANDIDATE = f0b1e8648143836ebdcb75e4f3e096879a0a158a
 ```
 
 Public `main` is frozen at that commit while verification is pending. Work
 continues on branches; `main` moves again only for a critical reason, so the
 hosts review exactly what Joust claims is ready. Every superseded proposal was
 denied rather than removed, and exactly one verification request is live:
-`c55d938f`, naming this candidate.
+`c30e9d68`, naming this candidate.
 
 ## Milestone: enter the race
 
@@ -177,7 +177,7 @@ repository, the install path is part of the gate.
 - [x] One candidate SHA holds across every surface. Verification installs and
   runs this repository once, so the candidate, public `main`, what the install
   URL serves, and the SHA named in the handoff must all be the same commit.
-  The current candidate is `c8aa38d3c81009e47495f1b154eb301ca1b9d1ea`,
+  The current candidate is `f0b1e8648143836ebdcb75e4f3e096879a0a158a`,
   reproduced from a clean clone before publication and re-observed afterwards
   from an independent clone of the install URL: HEAD matched, doctor healthy,
   full suite green, branding `Joust`, 139 files.

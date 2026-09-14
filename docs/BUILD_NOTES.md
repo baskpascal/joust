@@ -1,5 +1,115 @@
 # Build notes
 
+## 2026-09-14 — Three people tried to install Joust and none of them got it running
+
+The Agent Index reports installs, and reading
+`/v1/agent?agent_id=galahad-hackathon` gave the number that matters:
+`{"attempted": 3, "succeeded": 0, "rate": 0}`. Thirty-eight agents are
+registered, one is Verified, and Joust is not it. Nobody who tried has ever
+reached a running agent, and nothing recorded why.
+
+The install path asks for a lot before it gives anything back: Docker, Compose
+v2, a running daemon, a credential minted from a second repository, and a
+stable `AGENT_ID` — with the failures arriving minutes into an image build, or
+silently, as a token the container refuses. The author hit the worst of them
+himself: a checkout on a Windows drive mounted under WSL reports 0777 whatever
+`chmod` is asked for, so the token stays readable by every account on the
+machine.
+
+`scripts/preflight.py` now answers all of that in a second, before anything is
+built. It is stdlib-only and imports nothing from the project, because it has
+to run the moment the clone finishes. It probes the filesystem for POSIX modes
+rather than guessing from the path, and each failure carries the command that
+fixes it.
+
+Writing it produced the first bug immediately: on this machine `docker` is on
+PATH as the WSL shim and answers every invocation with "could not be found in
+this WSL 2 distro", so the check failed and advised "Reinstall Docker" — the
+one action that would not have helped. A `docker` that exists but will not
+answer now points at Docker Desktop's WSL integration, and vendor output is
+collapsed to one line so the verdict stays visible.
+
+`tests/test_preflight.py` covers each remedy, including the Windows-drive trap
+and the shim. The README now runs the preflight between minting the credential
+and `docker compose up`. Whether this changes the install rate is unknown until
+the Agent Index reports another attempt; the number is 0/3 as of this writing.
+
+## 2026-09-14 — Reading competitions Joust had never seen
+
+The claim that Joust can enter any competition had only ever been exercised
+against the Plow hackathon and against local fixtures. Pointing the intake at
+four live, unrelated competitions broke it four different ways.
+
+Every Devpost host answered with nothing at all: `urllib` sends no `Accept`
+header, and the front door replies `HTTP 202` with an empty body to a request
+that asks for nothing. `SourceFetcher` handed that empty string on, the parser
+found no rules in it, and the mission failed with "rules lock requires at least
+three official rule records" — a sentence that blames the competition for
+Joust's own blindness. The fetcher now sends `Accept: */*`, the same thing any
+plain HTTP client sends, and it raises a typed `SourceUnreadable` carrying a
+reason (`http_status`, `empty_body`, `bot_challenge`, `unreachable`,
+`too_large`, `no_extractable_text`) instead of returning a page nobody read.
+A source that could not be read is unreadable, never ruleless.
+
+The first challenge detector was worse than none. Matching the AWS WAF cookie
+helper classified the complete 120KB `agentsforhumans.devpost.com/rules` page
+as an interstitial, because real pages embed that script too. Challenge markers
+are now specific to challenge documents and only apply below 20KB, where a stub
+lives and a rules page does not.
+
+Kaggle's competition rules render client-side: the served HTML carries 47
+characters of visible text. That is a real boundary and it is reported as one —
+`no_extractable_text` — rather than as a competition without rules.
+
+Deadlines were the last gap. Typed deadline extraction needed a JSON-LD event
+to supply a reference year, and Devpost publishes neither. But these hosts
+state the date in full: "Submission Period: Monday, August 10, 2026 (9:00 am
+Pacific Time) – Monday, September 14, 2026 (5:00 pm Pacific Time)". Full dates
+are now read without a reference year, the closing date of a stated period is
+taken as the deadline, and named zones ("Pacific Time") resolve alongside
+abbreviations. A date published without a time or without a zone is recorded as
+uncertainty rather than guessed.
+
+Observed after the repair, against live hosts on 2026-09-14:
+
+| Source | Result |
+|---|---|
+| `revenuecat-shipaton-2026.devpost.com/rules` | spec locked; 137 evidence records; deadline `2026-09-30T23:45:00-07:00` |
+| `agentsforhumans.devpost.com/rules` | spec locked; 55 evidence records; deadline `2026-09-14T17:00:00-07:00` |
+| `amazonappdev2026.devpost.com/rules` | spec locked; 66 evidence records; deadline `2026-10-23T12:00:00-07:00` |
+| `aiworthusing.com/agent-index` | spec locked; 6 evidence records; deadline absent, not invented |
+| `kaggle.com/competitions/.../rules` | `UNREADABLE: no_extractable_text` |
+
+The three extracted deadlines agree with the independently published
+`devpost.com/api/hackathons` submission periods. `tests/test_source_intake.py`
+holds one regression per defect, including the false positive. The suite is 192
+tests and passes with Ruff clean.
+
+## 2026-09-14 — Looking at the README instead of shipping it
+
+Several candidates went out carrying a README nobody had looked at. Markdown
+that reads fine as source does not tell you that a two-cell table holding a
+portrait beside a landscape leaves the two captions on different lines with the
+cell borders showing, or that a design-system mark sheet with its own heading
+duplicates the section heading above it. Rendering the file through GitHub's own
+markdown endpoint, wrapping it at the real content width and looking at it,
+shows all of that at once.
+
+The fix was to stop scattering art through the page. The table is gone. There
+are three banners of one width and one aspect: the hero, the collision at the
+tilt cropped to the action rather than to dead sky, and one strip carrying the
+helm, the prize-giving and the favour as equal panels in a single file, so no
+markdown layout can misalign them. The rendered page went from 3,627 pixels to
+2,758.
+
+Both banners are generated by `build_marks.py`, which crops them out of the
+scenes rather than keeping a second hand-made copy that could drift.
+
+Candidate `f0b1e8648143836ebdcb75e4f3e096879a0a158a` was validated from the
+install URL: HEAD matching, doctor healthy, full suite green, all three banners
+present at the same aspect, no table. Eight superseded proposals are denied; one
+is live.
+
 ## 2026-09-14 — Shading, and why the canvas preview kept dying
 
 Flat silhouettes were a crutch. They read acceptably at a glance precisely

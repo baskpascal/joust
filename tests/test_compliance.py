@@ -18,13 +18,13 @@ def fixture_spec():
     )
 
 
-def test_rules_gate_requires_complete_rule_shape():
+def test_rules_gate_does_not_invent_a_missing_prohibition():
     spec = fixture_spec()
     assert rules_gate(spec).passed
     spec.prohibited_actions = []
     result = rules_gate(spec)
-    assert not result.passed
-    assert "critical prohibitions are missing" in result.blocking_findings
+    assert result.passed
+    assert "critical prohibitions are missing" not in result.blocking_findings
 
 
 def test_unknown_blocker_prevents_submission_readiness():

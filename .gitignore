@@ -1,4 +1,5 @@
 .env
+.firecrawl/
 .venv/
 __pycache__/
 *.py[co]

@@ -35,10 +35,19 @@ export PATH="$PWD/plow-agents/bin:$PATH"
 plow-agents login && plow-agents lines && plow-agents mint <free-line-id>
 ```
 
-Pick a stable Agent Index id, set `AGENT_ID` to it, and start:
+Pick a stable Agent Index id, set `AGENT_ID` to it, and check the machine
+before anything is built. The preflight needs nothing installed and changes
+nothing; it names whatever is missing and what to do about it:
 
 ```bash
-AGENT_ID=your-agent-id docker compose up --build -d
+export AGENT_ID=your-agent-id
+python3 scripts/preflight.py
+```
+
+When it says ready, start:
+
+```bash
+docker compose up --build -d
 ```
 
 Then talk to it in Plow Chat: send a competition URL and `Joust it.`
