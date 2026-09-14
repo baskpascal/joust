@@ -10,7 +10,7 @@ W, H = 210, 78
 HZ = 64
 
 
-def knight(g, ox, oy, flip, plume, shield):
+def knight(g, ox, oy, flip, plume, shield, stride=0):
     """A mounted knight as one silhouette. Only the outline has to be right."""
     def X(x):
         return ox + (68 - x) if flip else ox + x
@@ -25,10 +25,16 @@ def knight(g, ox, oy, flip, plume, shield):
         g.bar(X(x0), oy + y0, X(x1), oy + y1, w, v)
 
     # Legs first, so the body masses close over their tops.
-    bar(44, 32, 58, 48, 4); bar(58, 48, 57, 55, 4)
-    bar(40, 32, 45, 50, 4); bar(45, 50, 44, 55, 4)
-    bar(14, 32, 3, 46, 4);  bar(3, 46, 3, 55, 4)
-    bar(20, 34, 13, 50, 4); bar(13, 50, 12, 55, 4)
+    if stride:
+        bar(44, 32, 50, 48, 4); bar(50, 48, 52, 55, 4)
+        bar(40, 32, 36, 48, 4); bar(36, 48, 34, 55, 4)
+        bar(14, 32, 10, 46, 4); bar(10, 46, 9, 55, 4)
+        bar(20, 34, 24, 48, 4); bar(24, 48, 25, 55, 4)
+    else:
+        bar(44, 32, 58, 48, 4); bar(58, 48, 57, 55, 4)
+        bar(40, 32, 45, 50, 4); bar(45, 50, 44, 55, 4)
+        bar(14, 32, 3, 46, 4);  bar(3, 46, 3, 55, 4)
+        bar(20, 34, 13, 50, 4); bar(13, 50, 12, 55, 4)
     poly([(6, 24), (0, 28), (1, 42), (9, 31)])          # tail
     ell(16, 30, 12, 10); ell(30, 31, 13, 9); ell(43, 30, 9, 9)
     poly([(37, 21), (48, 9), (56, 14), (44, 30)])       # neck

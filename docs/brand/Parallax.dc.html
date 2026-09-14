@@ -1,0 +1,68 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&amp;family=Space+Grotesk:wght@500;700&amp;family=JetBrains+Mono:wght@700&amp;display=swap">
+  <style>
+    body { margin: 0; background: #F2E7D0; }
+    .display { font-family: 'Archivo Black', 'Helvetica Neue', Helvetica, sans-serif; }
+    .body { font-family: 'Space Grotesk', 'Helvetica Neue', Helvetica, sans-serif; }
+    .mono { font-family: 'JetBrains Mono', 'Courier New', monospace; }
+    .pix { image-rendering: pixelated; }
+    input[type=range] { accent-color: #E23140; }
+    a { color: #E23140; } a:hover { color: #2B4FD9; }
+  </style>
+</helmet>
+<div style="width: 960px; height: 620px; background: #F2E7D0; border: 8px solid #100E18; box-sizing: border-box; display: flex; flex-direction: column">
+
+  <div style="position: relative; flex: 1; overflow: hidden; background: #6B4A5C">
+    <div style="position: absolute; left: 0; right: 0; top: 320px; bottom: 0; background: #3B2E4A"></div>
+
+    <div class="pix" style="position: absolute; left: 0; top: 176px; display: flex; transform: translateX({{farX}}px); opacity: 0.6"><img src="banners.png" alt="banners" style="width: 960px; height: 136px; display: block; image-rendering: pixelated" /><img src="banners.png" alt="banners" style="width: 960px; height: 136px; display: block; image-rendering: pixelated" /><img src="banners.png" alt="banners" style="width: 960px; height: 136px; display: block; image-rendering: pixelated" /></div>
+    <div class="pix" style="position: absolute; left: 0; top: 214px; display: flex; transform: translateX({{midX}}px)"><img src="stands.png" alt="stands" style="width: 960px; height: 160px; display: block; image-rendering: pixelated" /><img src="stands.png" alt="stands" style="width: 960px; height: 160px; display: block; image-rendering: pixelated" /><img src="stands.png" alt="stands" style="width: 960px; height: 160px; display: block; image-rendering: pixelated" /></div>
+
+    <div class="pix" style="position: absolute; top: 196px; left: 0; width: 288px; transform: translateX({{horseX}}px)">
+      <sc-if value="{{stepA}}" hint-placeholder-val="{{ true }}"><img src="riderA.png" alt="knight walking" style="width: 312px; height: 256px; display: block; image-rendering: pixelated" /></sc-if>
+      <sc-if value="{{stepB}}" hint-placeholder-val="{{ false }}"><img src="riderB.png" alt="knight walking" style="width: 312px; height: 256px; display: block; image-rendering: pixelated" /></sc-if>
+    </div>
+
+    <div class="pix" style="position: absolute; left: 604px; top: 0; width: 56px; transform: translateY({{shardY}}px) rotate({{shardRot}}deg)"><img src="shard.png" alt="broken lance" style="width: 56px; height: 176px; display: block; image-rendering: pixelated" /></div>
+
+    <div class="pix" style="position: absolute; left: 0; top: 392px; display: flex; transform: translateX({{nearX}}px)"><img src="rail.png" alt="rail" style="width: 960px; height: 80px; display: block; image-rendering: pixelated" /><img src="rail.png" alt="rail" style="width: 960px; height: 80px; display: block; image-rendering: pixelated" /><img src="rail.png" alt="rail" style="width: 960px; height: 80px; display: block; image-rendering: pixelated" /></div>
+  </div>
+
+  <div style="display: flex; align-items: center; gap: 18px; padding: 16px 22px; border-top: 6px solid #100E18; background: #F2E7D0">
+    <div class="mono" style="font-size: 12px; font-weight: 700; letter-spacing: 2px; color: #100E18">SCROLL</div>
+    <input type="range" min="0" max="100" step="1" value="{{p}}" onInput="{{setP}}" style="flex: 1; height: 24px" />
+    <div class="body" style="font-size: 13px; font-weight: 500; color: #100E18; opacity: 0.72">Three layers at three speeds. The shard falls with the page; the horse keeps walking.</div>
+  </div>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":960,"height":620}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.state && typeof this.state.p === 'number' ? this.state.p : 18;
+    const frame = Math.floor(p / 5) % 2 === 0;
+    return {
+      p: p,
+      setP: (e) => this.setState({ p: Number(e.target.value) }),
+      farX: -p * 3.1,
+      midX: -p * 8.4,
+      nearX: -p * 14.8,
+      horseX: -300 + p * 13.2,
+      stepA: frame,
+      stepB: !frame,
+      shardY: -70 + p * 5.9,
+      shardRot: p * 4.4,
+    };
+  }
+}
+</script>
+</body>
+</html>

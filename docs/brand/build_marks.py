@@ -84,13 +84,48 @@ board("Card.dc.html", f"""
   </div>
 </div>""")
 
-# ------------------------------------------------------------------- Duel
+# ------------------------------- shaded scenes, as images rather than vectors
+import png as _png  # noqa: E402
+from portrait import portrait as _portrait  # noqa: E402
+from scenes2 import favour as _favour, prize as _prize, rider as _rider  # noqa: E402
 from duel import scene as _duel_scene  # noqa: E402
 
-board("Duel.dc.html", f"""
-<div style="width: 1260px; height: 468px; background: {INK}; overflow: hidden">
-  {_duel_scene().svg(scale=6, label="Two knights colliding at the tilt")}
-</div>""")
+IMG_TPL = """<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body {{ margin: 0; background: {bg}; }}
+    a {{ color: #E23140; }} a:hover {{ color: #2B4FD9; }}
+  </style>
+</helmet>
+<div style="width: {w}px; height: {h}px; background: {bg}; overflow: hidden">
+  <img src="{src}" alt="{alt}" style="width: {w}px; height: {h}px; display: block; image-rendering: pixelated" />
+</div>
+</x-dc>
+</body>
+</html>
+"""
+
+# Dithering alternates colour every pixel, so run-length SVG cannot merge:
+# one scene became 5,468 rect nodes and the preview stopped answering.
+_scenes = (("Portrait", "portrait", _portrait(), 7, 6, "#12101F", "A knight's helm, close up"),
+           ("Prize", "prize", _prize(), 6, 5, "#12101F",
+            "The victor takes the prize from the royal stand"),
+           ("Favour", "favour", _favour(), 6, 6, "#6B4A5C",
+            "A lady knots her favour onto a lance"),
+           ("Duel", "duel", _duel_scene(), 6, 6, "#100E18",
+            "Two knights colliding at the tilt"))
+for name, stem, grid, board_scale, readme_scale, bg, alt in _scenes:
+    _png.write(f"{stem}.png", grid)
+    _png.write(f"joust-{stem}.png", grid, scale=readme_scale)
+    open(f"{name}.dc.html", "w", encoding="utf-8").write(IMG_TPL.format(
+        w=grid.w * board_scale, h=grid.h * board_scale, bg=bg, src=f"{stem}.png", alt=alt))
 
 # ---------------------------------------------------------------- Knights
 KNIGHTS = [
@@ -206,16 +241,16 @@ json.dump({
 print("built:", sorted(f for f in __import__("os").listdir(".") if f.endswith(".dc.html")))
 
 
-# Standalone pages the PNG renderer captures.
+# Standalone pages the PNG renderer captures for the README hero and card.
 import re as _re
 
 _css = _re.search(r"<style>(.*?)</style>", open("Main.dc.html", encoding="utf-8").read(), _re.S).group(1)
 _font = ('<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&'
          'family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@700&display=swap">')
 for _src, _out in (("Main.dc.html", "shot-hero.html"), ("Card.dc.html", "shot-card.html"),
-                   ("Duel.dc.html", "shot-duel.html"), ("Icons.dc.html", "shot-marks.html")):
+                   ("Icons.dc.html", "shot-marks.html")):
     _body = open(_src, encoding="utf-8").read().split("</helmet>")[1].split("</x-dc>")[0]
     with open(_out, "w", encoding="utf-8") as _fh:
         _fh.write(f'<!doctype html><meta charset="utf-8">{_font}'
                   f"<style>{_css} html,body{{margin:0;padding:0}}</style>{_body}")
-print("render pages written")
+print("scenes written as PNG; run render_marks.mjs for the hero, card and marks")
