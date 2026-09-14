@@ -90,6 +90,23 @@ class FakeShell:
         raise AssertionError(argv)
 
 
+class ExistingRepositoryShell(FakeShell):
+    def run(self, argv, *, timeout_seconds):
+        self.calls.append((argv, timeout_seconds))
+        if argv[0:3] == ["gh", "repo", "create"]:
+            raise RuntimeError("repository already exists")
+        if argv[0:3] == ["gh", "repo", "view"]:
+            return json.dumps(
+                {
+                    "nameWithOwner": "owner/project",
+                    "defaultBranchRef": {"name": ""},
+                    "url": "https://github.com/owner/project",
+                    "visibility": "PUBLIC",
+                }
+            )
+        return super().run(argv, timeout_seconds=timeout_seconds)
+
+
 def test_github_adapter_keeps_repository_and_publish_operations_structured(tmp_path):
     target_root = (tmp_path / "target-checkout").resolve()
     adapter = GitHubCliAdapter(str(target_root))
@@ -148,3 +165,12 @@ def test_github_runtime_preflight_is_read_only_structured_and_evidenced(tmp_path
     assert any(item.source_type == "github_runtime" for item in database.list_evidence(mission.id))
     assert all("create" not in argv for argv, _ in shell.calls)
     assert all(argv[0:2] != ["git", "push"] for argv, _ in shell.calls)
+
+
+def test_repository_creation_recovers_when_the_exact_repository_already_exists(tmp_path):
+    adapter = GitHubCliAdapter(str(tmp_path))
+    adapter.shell = ExistingRepositoryShell()
+
+    result = adapter.create_repository("owner/project", visibility="public")
+
+    assert result["nameWithOwner"] == "owner/project"

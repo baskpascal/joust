@@ -63,18 +63,30 @@ class GitHubCliAdapter:
             raise ValueError("repository visibility must be public, private, or internal")
         if not repository.strip() or repository.startswith("-"):
             raise ValueError("invalid GitHub repository")
-        self.shell.run(
-            [
-                "gh",
-                "repo",
-                "create",
-                repository,
-                f"--{visibility}",
-                "--description",
-                "Joust competition entry and verified remote-action rehearsal",
-            ],
-            timeout_seconds=120,
-        )
+        try:
+            self.shell.run(
+                [
+                    "gh",
+                    "repo",
+                    "create",
+                    repository,
+                    f"--{visibility}",
+                    "--description",
+                    "Joust competition entry and verified remote-action rehearsal",
+                ],
+                timeout_seconds=120,
+            )
+        except RuntimeError as create_error:
+            # A process can stop after GitHub accepts creation but before Joust
+            # persists the executor result. Suppress the original error only
+            # when a fresh read proves that the exact target now exists.
+            try:
+                existing = self.repository(repository)
+            except Exception:  # noqa: BLE001 - retain the original mutation error
+                raise create_error
+            if str(existing.get("nameWithOwner", "")).casefold() != repository.casefold():
+                raise create_error
+            return existing
         return self.repository(repository)
 
     def clone(self, repository: str, destination: str) -> str:
