@@ -363,7 +363,7 @@ class RealBuildLoop:
         git: LocalGitTool,
     ) -> tuple[bool, str]:
         shell = git.shell
-        failure = ""
+        failures: list[str] = []
         for phase, argv in commands:
             started = datetime.now(UTC)
             output = ""
@@ -375,7 +375,7 @@ class RealBuildLoop:
                 passed = True
             except (RuntimeError, TimeoutError) as exc:
                 error = str(exc)
-                failure = error
+                failures.append(f"[{phase}] {' '.join(argv)}\n{error}")
                 exit_code = 1
             log_path = self.artifact_root / str(target.mission_id) / "build" / f"{phase}.log"
             log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -399,8 +399,17 @@ class RealBuildLoop:
                 "BUILD_RUN_RECORDED",
                 {"build_run_id": str(run.id), "phase": phase, "passed": passed},
             )
-            if not passed:
-                return False, failure
+            if not passed and phase == "install":
+                # Nothing downstream can mean anything if the environment
+                # did not build, so this is the one failure worth stopping
+                # on.
+                return False, failures[-1]
+        if failures:
+            # Everything else runs to the end. A repair budget spent on a
+            # formatting nit, only to meet a failing test on the next
+            # attempt, is a budget wasted: one repair should see every
+            # failure at once.
+            return False, "\n\n".join(failures)
         return True, ""
 
     def _reproduce(
