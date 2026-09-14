@@ -87,6 +87,17 @@
   is captured, and submission remains an event rather than mission termination.
   Verify: Evidence bundle from the authenticated live rehearsal.
 
+  Live progress:
+  - [x] Independent public target `baskpascal/joust-entry` created and observed.
+  - [x] Mission branch pushed; remote SHA equals the validated local SHA.
+  - [x] PR #1 observed open from the mission branch to `main`.
+  - [x] Agent Index metadata update has an executor and a remote observer that
+    re-reads the public record and fails when the Index drops a field.
+  - [x] Verification request has an executor, an eligibility precondition, and
+    an observer that reads `blessed_at`.
+  - [ ] Deployment execution and health observation (no executor yet).
+  - [ ] Submission-state execution/observation (no executor yet).
+
 - [ ] **9. Enable Hermes cron**
   Spec ref: `Joust SDD > 4. Compete Loop; 6. Hermes and Plow`
   What to build: Schedule only the monitored runner after items 1-8 pass.
@@ -114,9 +125,36 @@
 - [ ] Hermes cron runs safely.
 - [x] GitHub runtime is authenticated.
 - [x] Remote checks are observed (the current result is an evidence-backed empty set).
-- [x] Push/PR/deploy/submission use the unified approval-action contract.
-- [ ] Actual external results are verified.
+- [~] Push/PR/deploy/submission use the unified approval-action contract. The
+  contract is kind-agnostic, but a kind is only closed once an executor and a
+  remote observer exist for it. Closed: `REPOSITORY_CREATE`, `PUSH`,
+  `PULL_REQUEST`, `AGENT_INDEX_UPDATE`, `VERIFICATION_REQUEST`. Still declared
+  without an executor: `DEPLOY`, `FINAL_SUBMISSION`.
+- [ ] Actual external results are verified end to end (GitHub creation/push/PR pass;
+  deployment and submission remain pending).
 - [x] Product identity is Joust in local/runtime contracts.
 - [x] `AGENT_ID` identity remains stable in durable installation state.
 
 `AGENT_ID` is an immutable external identifier. It is not the product name.
+
+## Observed competitive state
+
+Eligibility, not cron, is the current bottleneck. The published Plow gate is
+`license_is_mit and verified and reporting_healthy`. Observed live on
+2026-09-14 for `galahad-hackathon`:
+
+```text
+license MIT        true
+registered         true
+reporting healthy  true   (token usage reaching the Index across 2 active days)
+verified           false  (blessed_at is "")
+eligible_to_win    false
+rank               none   (ranking is computed over verified agents only)
+users              1
+successful installs 0
+```
+
+Joust cannot mark itself Verified. `joust mission index-eligibility` observes
+the gate and `joust mission request-verification` produces the durable,
+approval-bound handoff. Until the Index blesses the agent, the delivered
+request rests in `AWAITING_EXTERNAL`, which is neither success nor failure.

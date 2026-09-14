@@ -5,7 +5,7 @@ from enum import StrEnum
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 def utcnow() -> datetime:
@@ -182,6 +182,7 @@ class ExternalActionStatus(StrEnum):
     DENIED = "DENIED"
     EXECUTING = "EXECUTING"
     EXECUTED = "EXECUTED"
+    AWAITING_EXTERNAL = "AWAITING_EXTERNAL"
     VERIFIED = "VERIFIED"
     FAILED = "FAILED"
 
@@ -751,6 +752,22 @@ class Approval(Contract):
     decision_note: str | None = None
 
 
+class AgentIndexEligibility(Contract):
+    """Observed eligibility gate from the Agent Index publication flow."""
+
+    agent_id: str
+    registered: bool
+    # None is not False. An unobserved input is an uncertainty, and reporting
+    # it as a failed requirement would be as wrong as reporting it as met.
+    license_is_mit: bool | None
+    reporting_healthy: bool | None
+    verified: bool
+    eligible_to_win: bool
+    blockers: list[str] = Field(default_factory=list)
+    source_uri: str
+    observed_at: datetime = Field(default_factory=utcnow)
+
+
 class ProposedExternalAction(Contract):
     id: UUID = Field(default_factory=uuid4)
     mission_id: UUID
@@ -775,7 +792,18 @@ class ObservedExternalResult(Contract):
     matches_expected: bool
     source_uri: str
     summary: str
+    # A third outcome for actions a third party must complete. Joust delivered
+    # its side and observed the remote, and the remote has not acted yet. This
+    # is neither success nor failure, and collapsing it into either one is the
+    # synthetic claim the evidence system exists to prevent.
+    pending_external: bool = False
     observed_at: datetime = Field(default_factory=utcnow)
+
+    @model_validator(mode="after")
+    def _pending_is_not_success(self) -> "ObservedExternalResult":
+        if self.pending_external and self.matches_expected:
+            raise ValueError("a pending external result cannot also match the expected state")
+        return self
 
 
 class ExternalActionObservation(ObservedExternalResult):

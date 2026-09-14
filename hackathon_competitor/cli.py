@@ -11,6 +11,11 @@ import tempfile
 from pathlib import Path
 from uuid import UUID
 
+from .agent_index import (
+    AgentIndexService,
+    PinnedCliAgentIndexClient,
+    observe_license_spdx,
+)
 from .build_loop import CommandImplementer, HermesImplementer, project_environment
 from .competition_actions import (
     CompetitionActionDispatcher,
@@ -28,6 +33,7 @@ from .hermes_planner import (
     ReadinessMeasurer,
 )
 from .identity import identity_from_environment
+from .metrics import MetricsUnavailable, PlowMetricsReader
 from .models import (
     CompetitionActionType,
     EntrantProfile,
@@ -95,6 +101,20 @@ def _parse_command_vectors(values: list[str]) -> list[list[str]]:
             raise ValueError("command must be a non-empty JSON list of non-empty strings")
         commands.append(parsed)
     return commands
+
+
+def credential_check(candidates: list[Path]) -> dict[str, object]:
+    """The Plow token must not be readable by anyone else on the machine."""
+
+    credential = next((path for path in candidates if path.exists()), None)
+    if credential is None:
+        return {"ok": True, "present": False}
+    mode = stat.S_IMODE(credential.stat().st_mode)
+    return {
+        "ok": os.name == "nt" or mode in {0o400, 0o600},
+        "present": True,
+        "mode": oct(mode),
+    }
 
 
 def doctor(home: Path | None = None) -> tuple[dict[str, dict[str, object]], bool]:
@@ -194,17 +214,9 @@ def doctor(home: Path | None = None) -> tuple[dict[str, dict[str, object]], bool
     else:
         checks["agent_index_client_smoke"] = {"ok": True, "available": False}
 
-    credential_candidates = [repo_root / "plow-credentials", Path("/var/lib/plow/credentials")]
-    credential = next((path for path in credential_candidates if path.exists()), None)
-    if credential is None:
-        checks["credentials"] = {"ok": True, "present": False}
-    else:
-        mode = stat.S_IMODE(credential.stat().st_mode)
-        checks["credentials"] = {
-            "ok": os.name == "nt" or mode in {0o400, 0o600},
-            "present": True,
-            "mode": oct(mode),
-        }
+    checks["credentials"] = credential_check(
+        [repo_root / "plow-credentials", Path("/var/lib/plow/credentials")]
+    )
     healthy = all(check["ok"] for check in checks.values())
     return checks, healthy
 
@@ -285,6 +297,16 @@ def build_parser() -> argparse.ArgumentParser:
     compete.add_argument("--hermes-model")
     compete.add_argument("--hermes-reasoning")
     compete.add_argument("--max-repairs", type=int, default=1)
+
+    eligibility = mission_commands.add_parser("index-eligibility")
+    eligibility.add_argument("mission_id", type=UUID)
+    eligibility.add_argument("--agent", required=True)
+    verification = mission_commands.add_parser("request-verification")
+    verification.add_argument("mission_id", type=UUID)
+    verification.add_argument("--agent", required=True)
+    verification.add_argument("--contact", required=True)
+    verification.add_argument("--repo-url", required=True)
+    verification.add_argument("--commit", required=True)
 
     db = commands.add_parser("db")
     db_commands = db.add_subparsers(dest="db_command", required=True)
@@ -376,6 +398,41 @@ def main(argv: list[str] | None = None) -> int:
             github=GitHubCliAdapter(str(Path(target.local_path).resolve())),
         )
         print(json.dumps(change_set.model_dump(mode="json"), indent=2))
+        return 0
+    if args.mission_command in {"index-eligibility", "request-verification"}:
+        repository_root = Path(__file__).resolve().parents[1]
+        service = AgentIndexService(
+            app.database,
+            client=PinnedCliAgentIndexClient(workspace=str(repository_root)),
+        )
+        # Both inputs are observed, never assumed: the license comes off this
+        # repository and the reporting signal off the live Index. Either one
+        # that cannot be read stays unknown in the report.
+        try:
+            active_days = PlowMetricsReader(args.agent).snapshot().active_days
+        except MetricsUnavailable:
+            active_days = None
+        report = service.eligibility(
+            args.agent,
+            license_spdx=observe_license_spdx(repository_root),
+            reporting_active_days=active_days,
+        )
+        if args.mission_command == "index-eligibility":
+            print(json.dumps(report.model_dump(mode="json"), indent=2))
+            return 0 if report.eligible_to_win else 1
+        action = service.request_verification(
+            args.mission_id,
+            agent_id=args.agent,
+            eligibility=report,
+            contact_route=args.contact,
+            repository_url=args.repo_url,
+            commit_sha=args.commit,
+            idempotency_key=f"verification:{args.agent}",
+        )
+        # The proposal is durable and unapproved. Delivery is a separate,
+        # approved step, so printing this never publishes anything.
+        print(action.payload["handoff"])
+        print(json.dumps({"action_id": str(action.id), "approval_id": str(action.approval_id)}))
         return 0
     if args.mission_command == "prepare-project-submission":
         prepared = prepare_project_submission(app, args.mission_id)

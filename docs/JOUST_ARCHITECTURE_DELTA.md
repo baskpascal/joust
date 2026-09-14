@@ -46,7 +46,9 @@ expired, user-stopped, or irrecoverably blocked.
 | EntrantProfile | Persisted reusable profile with GitHub/Discord/platform identities, mission attachment, export, and CLI entrypoint | PRESENT |
 | ProjectTarget fields | Owner/name, dev/lint commands, deployment requirement/target, and base/final commit SHA extend the existing mandatory target boundary | PRESENT |
 | GitHub runtime | Runtime authentication persists in the Hermes volume; preflight observes the authenticated account, canonical repository, push permission, default-branch protection, open PRs, checks, and Actions state | PRESENT (read-only live evidence; mutation unrehearsed) |
-| External-action verification | Push, PR, deploy, Agent Index update, verification request, and final submission share a durable proposal, approval, idempotent execution, remote observation, and evidence contract; GitHub push/PR observers verify SHA or PR state | PRESENT (contract and deterministic tests; live mutation unrehearsed) |
+| External-action verification | One durable proposal/approval/idempotent-execution/remote-observation/evidence contract, kind-agnostic by construction. Executors and remote observers exist for `REPOSITORY_CREATE`, `PUSH`, `PULL_REQUEST`, `AGENT_INDEX_UPDATE`, and `VERIFICATION_REQUEST`; live repository creation, branch push, and PR creation were independently observed | PARTIAL (`DEPLOY` and `FINAL_SUBMISSION` are declared kinds with no executor) |
+| Third-party-pending actions | `AWAITING_EXTERNAL` separates "Joust delivered its side and the other party has not acted" from success and from failure; re-running such an action re-observes the remote instead of re-delivering the handoff | PRESENT |
+| Agent Index eligibility | `license_is_mit and registered and reporting_healthy and verified` observed from the repository's own LICENSE and the live public record; unobserved inputs stay `None` rather than becoming `False` | PRESENT (live: verification is the only open gate) |
 | Hermes model-backed coding | `HermesImplementer` completed a live model-backed action, created three project files, passed 16 generated tests, committed, and reproduced from a clean clone | PRESENT (live local E2E) |
 | Real research action | `RESEARCH` fetches bounded official URLs, removes script/style content, persists source evidence, and fails if no readable evidence exists; `CUSTOM` cannot claim research | PRESENT (live official pages) |
 | Planner resilience | Hermes planning runs without project rules/tools/plugins, has a 60-second bound, sees recent outcomes/project summary, and falls back to a deterministic safe action | PRESENT (live timeout/fallback) |
@@ -101,10 +103,32 @@ not a fixture-only controller:
   that this mission still conflates the Joust distribution repository with its
   competition entry. No remote mutation was attempted.
 
-The largest remaining closure gap is the verified external-action path: Joust
-must require a scoped policy decision, execute idempotently, observe the actual
-remote result, and persist evidence. Before a live rehearsal, the mission also
-needs a competition-entry target independent from the Joust distribution repo.
+The largest remaining closure gap is deployment and submission execution
+through the verified external-action path, followed by safe Hermes cron. Those
+two kinds are declared in `ExternalActionKind` but have no executor or observer
+anywhere, so the contract covers them only in principle. GitHub
+repository creation, push, and PR now require a scoped policy decision, execute
+with a stable idempotency key, observe the actual remote result, and persist
+evidence against an independent competition-entry target.
+
+That GitHub portion is now closed for mission
+`5a26f83b-61cd-426c-ba02-878dc8c9cc38`: Joust created the independent public
+`baskpascal/joust-entry` repository, initialized `main`, pushed the mission
+branch, and opened PR #1. All three durable actions are `VERIFIED`. The remote
+branch SHA is `369c41889cd29d8f87642e1909ad880e4ec4671b`; the post-action observation
+found the expected open PR and an evidence-backed empty check/Actions set.
+Deployment and submission remain outside the completed rehearsal.
+
+The Agent Index surface is now closed the same way. `AgentIndexService` writes
+public page metadata through the pinned upstream client and verifies the write
+by re-reading the public record, failing when the Index silently drops a field.
+Verification is modelled honestly as an external handoff: Joust refuses to
+request it while its own published gate is unmet, delivers the complete section
+47 handoff, and then observes `blessed_at`. Because only Plow can bless an
+agent, a delivered request rests in `AWAITING_EXTERNAL` and polling re-observes
+the record without re-delivering. Live on 2026-09-14, `galahad-hackathon` is
+MIT, registered, and reporting healthy, and Verified is the single open gate,
+which is why its rank is absent: ranking is computed over verified agents.
 
 ## Critical end-to-end path
 

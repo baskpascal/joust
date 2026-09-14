@@ -119,8 +119,12 @@ class ExternalActionService:
             self.database.save_external_action(action)
         self.approvals.require_granted(action.approval_id)
 
+        # AWAITING_EXTERNAL joins EXECUTED and FAILED here so that polling a
+        # third party re-observes the remote instead of re-running the side
+        # effect. Delivering the same handoff twice is not idempotent.
         resume_observation = action.execution_result is not None and action.status in {
             ExternalActionStatus.EXECUTED,
+            ExternalActionStatus.AWAITING_EXTERNAL,
             ExternalActionStatus.FAILED,
         }
         try:
@@ -172,13 +176,18 @@ class ExternalActionService:
             )
             raise
 
+        if observed.matches_expected:
+            claim = f"External action {action.kind.value} observed and verified"
+        elif observed.pending_external:
+            claim = (
+                f"External action {action.kind.value} delivered; "
+                "the third party has not acted yet"
+            )
+        else:
+            claim = f"External action {action.kind.value} remote state did not match"
         evidence = Evidence(
             mission_id=action.mission_id,
-            claim=(
-                f"External action {action.kind.value} observed and verified"
-                if observed.matches_expected
-                else f"External action {action.kind.value} remote state did not match"
-            ),
+            claim=claim,
             source_type="external_action_observation",
             source_uri=observed.source_uri,
             excerpt=json.dumps(observed.actual_state, sort_keys=True),
@@ -194,24 +203,28 @@ class ExternalActionService:
             **observed.model_dump(),
         )
         self.database.save_external_action_observation(observation)
-        action.status = (
-            ExternalActionStatus.VERIFIED
-            if observed.matches_expected
-            else ExternalActionStatus.FAILED
-        )
+        if observed.matches_expected:
+            action.status = ExternalActionStatus.VERIFIED
+            event = "EXTERNAL_ACTION_VERIFIED"
+        elif observed.pending_external:
+            action.status = ExternalActionStatus.AWAITING_EXTERNAL
+            event = "EXTERNAL_ACTION_AWAITING_EXTERNAL"
+        else:
+            action.status = ExternalActionStatus.FAILED
+            event = "EXTERNAL_ACTION_MISMATCH"
         action.last_error = None if observed.matches_expected else observed.summary
         action.updated_at = utcnow()
         self.database.save_external_action(action)
         self.database.append_event(
             action.mission_id,
-            "EXTERNAL_ACTION_VERIFIED" if observed.matches_expected else "EXTERNAL_ACTION_MISMATCH",
+            event,
             {
                 "action_id": str(action.id),
                 "evidence_id": str(evidence.id),
                 "summary": observed.summary,
             },
         )
-        if not observed.matches_expected:
+        if not observed.matches_expected and not observed.pending_external:
             raise ExternalActionVerificationError(observed.summary)
         return observation
 

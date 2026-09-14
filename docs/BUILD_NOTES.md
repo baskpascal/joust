@@ -1,5 +1,83 @@
 # Build notes
 
+## 2026-09-14 — Agent Index actions and the pending-external outcome
+
+An audit of the milestone found one overstated claim. The definition of done
+recorded push, PR, deploy, and submission as using the unified approval-action
+contract, but `grep ExternalActionKind` reached only `approvals.py`,
+`models.py`, and `github_publish.py`: `DEPLOY`, `AGENT_INDEX_UPDATE`,
+`VERIFICATION_REQUEST`, and `FINAL_SUBMISSION` were enum values with no
+executor and no observer. The contract is kind-agnostic, so it covered them in
+principle and not in fact. The checklist now names which kinds are closed.
+
+Two of those four are now closed. `AgentIndexService` writes public page
+metadata through the pinned upstream client and verifies by re-reading the
+public record, so an Index that drops a field produces a mismatch rather than a
+success. Verification is an external handoff: Joust refuses to request it while
+its own published gate is unmet, so the one review the competition offers is
+not spent on an ineligible agent.
+
+That required a third outcome. `ExternalActionStatus.AWAITING_EXTERNAL` and
+`ObservedExternalResult.pending_external` separate "Joust delivered its side and
+the other party has not acted" from both success and failure; a model validator
+forbids a result that is pending and matching at once, and re-running such an
+action re-observes the remote instead of re-delivering the handoff. Reporting a
+delivered verification request as `FAILED` would have been as wrong as
+reporting it as `VERIFIED`.
+
+Live observation of `galahad-hackathon` on this date: MIT, registered, and
+reporting healthy across two active days with 3,119,664 tokens, `blessed_at` is
+`""`, and rank is absent because ranking is computed over verified agents only.
+Users is 1 and successful installs is 0. Eligibility, not Hermes cron, is the
+binding constraint. `joust mission index-eligibility` and
+`joust mission request-verification` were both exercised live; the latter
+persists an unapproved proposal carrying the rendered handoff and publishes
+nothing.
+
+One test was also wrong rather than one check. `test_doctor` asserted whole-host
+health, which depends on the mode of a credential file outside the repository,
+so it failed on a working tree mounted from 9p/DrvFs where `chmod` is a no-op.
+The doctor's finding was correct: the file really is world-readable there. The
+test now asserts the checks the process controls, and `credential_check` is
+covered directly against absent, `0600`, and `0644` files. Keeping the
+credential outside `/mnt` is machine configuration and does not belong in this
+repository.
+
+## 2026-09-14 — Competition Closed Loop: live GitHub mutation rehearsal
+
+With the user's explicit approval, Joust created the independent public target
+[`baskpascal/joust-entry`](https://github.com/baskpascal/joust-entry), initialized
+`main` at `0beaf9e7e830645c4cac4d9fc2dec4a688c3c995`, pushed mission branch
+`joust/5a26f83b-61cd-426c-ba02-878dc8c9cc38`, and opened
+[PR #1](https://github.com/baskpascal/joust-entry/pull/1) against `main`. The
+branch contains commit `369c41889cd29d8f87642e1909ad880e4ec4671b` and the
+remote branch observer returned that exact SHA.
+
+The three durable actions are independently recorded as `VERIFIED`:
+
+- repository creation: `474e39f9-b9c6-4c99-9de2-70a8b99934fa`;
+- branch push: `4794def0-e506-4b44-8b85-55a3a29bfd3a`;
+- pull request: `362b7dea-612f-4e01-b3e8-315d1e88eaff`.
+
+The rehearsal exposed two real adapter defects before completion. Git
+authentication was not visible in the first ephemeral process because the
+persistent Git-config volume was not mounted, and a detached HEAD pushing to an
+empty repository required a fully qualified `refs/heads/main` destination. The
+first failure left the repository empty and the action `FAILED`; retry used the
+same action/idempotency key, proved the exact repository already existed, then
+completed and observed initialization. A CLI preflight also caught that the
+installed `gh pr create` lacks `--json`; Joust now reads its returned URL and
+uses `gh pr view --json` for independent verification.
+
+The mission now points to a persistent, independent checkout at
+`/var/lib/hermes/hackathon_competitor/missions/5a26f83b-61cd-426c-ba02-878dc8c9cc38/targets/joust-entry`,
+not the Joust distribution repository. A post-action snapshot at
+`2026-09-14T00:53:45.105160Z` observed PR #1 open with the expected head/base,
+push permission, and empty check/Actions sets. Empty means no CI exists; it does
+not mean CI passed. No merge, deploy, Agent Index update, verification request,
+or submission occurred. The runtime image digest is
+`sha256:318bd10c0f843b0bee7cd71d76ae5ce96b8f3c9cef9cfd0552ab58e58c52ae40`.
+
 ## 2026-09-14 — Competition Closed Loop: verified external actions
 
 Database migration 12 adds durable `ProposedExternalAction` and
