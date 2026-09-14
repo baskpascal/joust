@@ -1,5 +1,40 @@
 # Build notes
 
+## 2026-09-14 — Entering the race: public identity, credential, and release
+
+The Plow account profile published the builder as `La brava`. `plow-agents
+profile --name "p_ascal"` changed it, and the public record now reads agent
+`Joust`, id `galahad-hackathon`, builder `p_ascal`. The id was deliberately not
+renamed: it is registered and accumulating usage, and the Agent Index keeps the
+stable id separate from the display name for exactly this reason.
+
+The credential moved to `~/.config/joust/plow-credentials` at mode `0600`
+rather than enabling `metadata` in `/etc/wsl.conf`. Compose reads the host path
+from `PLOW_CREDENTIALS_PATH`, defaulting to the documented `./plow-credentials`,
+and the doctor inspects that configured path first; otherwise it would keep
+failing on a checkout whose container reads a correctly protected token from
+somewhere else. The world-readable original was removed after confirming the
+copy was byte-identical.
+
+The real blocker was none of the above. The official rule is that "Verified
+agents are installed and run by the hosts", so the install path is part of the
+eligibility gate, and the install URL pointed at a public `main` that was 165
+commits behind and still branded Galahad. A host installing today would have
+received the wrong agent. Release
+`a2a5e5a2e38240aef9d84aa46b33eae6b8e2648f` publishes the current entry as a
+squashed snapshot matching the previous release pattern, carrying the 139
+committed files minus `.knightwatch`. It was reproduced from a clean clone
+first, 172 tests and a healthy doctor, and re-observed from an independent
+clone of the public URL afterwards.
+
+Requesting verification against that commit then exposed a real defect. The CLI
+keyed the idempotency token on the agent alone, so the first handoff bound the
+key permanently and every later candidate was refused as a conflicting intent.
+The key now includes the candidate commit: re-requesting the same candidate is
+idempotent, a new candidate is a new request. The proposal is durable and
+unapproved; delivery runs through the community Discord and is not Joust's to
+send.
+
 ## 2026-09-14 — Agent Index actions and the pending-external outcome
 
 An audit of the milestone found one overstated claim. The definition of done
