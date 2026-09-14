@@ -54,7 +54,38 @@ def test_realistic_agent_index_copy_yields_rules_without_story_false_positive():
     assert contradictions == []
 
 
-def test_incomplete_real_page_returns_inspectable_blocked_mission(tmp_path):
+def test_json_ld_event_metadata_keeps_a_date_only_deadline_unverified():
+    source = parse_source(
+        """
+        <html><head>
+        <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@type": "Event",
+          "name": "Useful Agents",
+          "organizer": {"@type": "Organization", "name": "Organizer"},
+          "startDate": "2026-09-09T13:00:00-07:00",
+          "endDate": "2026-09-22T13:00:00-07:00"
+        }
+        </script>
+        </head><body>
+          <p>September 16th - Submission deadline on the agent index.</p>
+          <p>September 23rd, 1pm PT - Leaderboard snapshot.</p>
+        </body></html>
+        """,
+        "https://events.example/useful-agents",
+        "official",
+        "official_page",
+    )
+
+    assert source.title == "Useful Agents"
+    assert source.organizer == "Organizer"
+    assert source.start_at == "2026-09-09T13:00:00-07:00"
+    assert source.deadlines == {"FINAL_SNAPSHOT": "2026-09-23T13:00:00-07:00"}
+    assert "SUBMISSION_DEADLINE is published without a time" in source.uncertainty[0]
+
+
+def test_real_page_without_prohibitions_can_advance_to_strategy(tmp_path):
     database = Database(tmp_path / "state.db")
     database.migrate()
     app = MissionOrchestrator(database, tmp_path / "missions")
@@ -66,7 +97,7 @@ def test_incomplete_real_page_returns_inspectable_blocked_mission(tmp_path):
     )
     status = mission_status(app, mission)
 
-    assert mission.state == MissionState.BLOCKED
+    assert mission.state == MissionState.PLANNING
     assert status["deadline"] is None
-    assert status["quality_blockers"] == ["critical prohibitions are missing"]
-    assert status["next_ready_tasks"] == []
+    assert status["quality_blockers"] == []
+    assert status["selected_strategy"] is not None

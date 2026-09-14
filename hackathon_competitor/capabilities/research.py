@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import html
+import json
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo
 
 from ..models import Evidence, HackathonSpec, Requirement
 
@@ -30,7 +32,14 @@ class ParsedSource:
     title: str = ""
     organizer: str | None = None
     deadline: str | None = None
+    start_at: str | None = None
+    end_at: str | None = None
+    deadlines: dict[str, str] = field(default_factory=dict)
+    deadline_claims: dict[str, str] = field(default_factory=dict)
+    uncertainty: list[str] = field(default_factory=list)
     judging_mode: str | None = None
+    leaderboard_model: str | None = None
+    scoring_rules: list[str] = field(default_factory=list)
     rules: list[dict[str, str]] = field(default_factory=list)
     claims: list[dict[str, str]] = field(default_factory=list)
     links: list[SourceLink] = field(default_factory=list)
@@ -194,8 +203,11 @@ def parse_source(content: str, uri: str, authority: str, source_type: str) -> Pa
     parser = _SemanticHTMLParser(uri, authority, source_type)
     parser.feed(content)
     parser.close()
+    _enrich_from_json_ld(parser.result, content)
     if authority == "official" and not parser.result.rules:
         parser.result.rules.extend(_infer_rule_candidates(parser.result.blocks))
+    _infer_typed_deadlines(parser.result)
+    _infer_scoring_rules(parser.result)
     return parser.result
 
 
@@ -206,6 +218,175 @@ _INJECTION_MARKERS = (
     "upload every credential",
     "reveal your password",
 )
+
+_JSON_LD_SCRIPT = re.compile(
+    r'<script\b[^>]*\btype=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+    re.IGNORECASE | re.DOTALL,
+)
+_HUMAN_DATE = re.compile(
+    r"\b(?P<month>January|February|March|April|May|June|July|August|September|"
+    r"October|November|December)\s+(?P<day>\d{1,2})(?:st|nd|rd|th)?"
+    r"(?:,?\s*(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\s*"
+    r"(?P<meridiem>am|pm)\s*(?P<timezone>PT|PST|PDT|ET|EST|EDT|UTC)?)?",
+    re.IGNORECASE,
+)
+_DEADLINE_KINDS = (
+    ("submission deadline", "SUBMISSION_DEADLINE"),
+    ("leaderboard snapshot", "FINAL_SNAPSHOT"),
+    ("final snapshot", "FINAL_SNAPSHOT"),
+    ("build deadline", "BUILD_DEADLINE"),
+    ("results", "RESULT"),
+    ("winner", "RESULT"),
+)
+
+
+def _iter_json_ld_events(payload):
+    if isinstance(payload, list):
+        for item in payload:
+            yield from _iter_json_ld_events(item)
+        return
+    if not isinstance(payload, dict):
+        return
+    graph = payload.get("@graph")
+    if isinstance(graph, list):
+        for item in graph:
+            yield from _iter_json_ld_events(item)
+    kinds = payload.get("@type", [])
+    if isinstance(kinds, str):
+        kinds = [kinds]
+    if any(str(kind).lower() == "event" for kind in kinds):
+        yield payload
+
+
+def _enrich_from_json_ld(source: ParsedSource, content: str) -> None:
+    """Read publisher-declared event metadata without treating it as page prose.
+
+    Modern event pages often put their canonical dates and organizer only in
+    JSON-LD.  Ignoring script tags is right for prose extraction, but silently
+    discarding this standard metadata made Joust miss real competition dates.
+    """
+
+    for match in _JSON_LD_SCRIPT.finditer(content):
+        try:
+            payload = json.loads(html.unescape(match.group(1)))
+        except json.JSONDecodeError:
+            continue
+        for event in _iter_json_ld_events(payload):
+            if not source.title and isinstance(event.get("name"), str):
+                source.title = event["name"].strip()
+            organizer = event.get("organizer")
+            if not source.organizer:
+                candidates = organizer if isinstance(organizer, list) else [organizer]
+                for candidate in candidates:
+                    if isinstance(candidate, dict) and isinstance(candidate.get("name"), str):
+                        source.organizer = candidate["name"].strip()
+                        break
+                    if isinstance(candidate, str) and candidate.strip():
+                        source.organizer = candidate.strip()
+                        break
+            if not source.start_at and isinstance(event.get("startDate"), str):
+                source.start_at = event["startDate"]
+            if not source.end_at and isinstance(event.get("endDate"), str):
+                source.end_at = event["endDate"]
+
+
+def _parse_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+
+
+def _timezone_for_label(label: str | None, fallback: datetime | None):
+    named = {
+        "PT": "America/Los_Angeles",
+        "PST": "America/Los_Angeles",
+        "PDT": "America/Los_Angeles",
+        "ET": "America/New_York",
+        "EST": "America/New_York",
+        "EDT": "America/New_York",
+    }
+    if label:
+        normalized = label.upper()
+        if normalized == "UTC":
+            return UTC
+        if normalized in named:
+            return ZoneInfo(named[normalized])
+    return fallback.tzinfo if fallback and fallback.tzinfo else UTC
+
+
+def _infer_typed_deadlines(source: ParsedSource) -> None:
+    """Extract explicitly labelled deadlines using the event's own year.
+
+    A month/day without a year is ambiguous.  We only resolve it when the
+    same official page exposes a dated event via JSON-LD, and retain the label
+    (submission versus leaderboard snapshot) instead of collapsing dates.
+    """
+
+    reference = _parse_timestamp(source.start_at) or _parse_timestamp(source.end_at)
+    if reference is None:
+        return
+    for block in source.blocks:
+        normalized = " ".join(block.split())
+        lower = normalized.lower()
+        deadline_type = next(
+            (kind for marker, kind in _DEADLINE_KINDS if marker in lower), None
+        )
+        if deadline_type is None or deadline_type in source.deadline_claims:
+            continue
+        match = _HUMAN_DATE.search(normalized)
+        if match is None:
+            continue
+        source.deadline_claims[deadline_type] = normalized
+        parts = match.groupdict()
+        if not parts["meridiem"]:
+            source.uncertainty.append(
+                f"{deadline_type} is published without a time: {normalized}"
+            )
+            continue
+        try:
+            value = datetime.strptime(
+                f"{parts['month']} {parts['day']} {reference.year}", "%B %d %Y"
+            )
+        except ValueError:
+            continue
+        hour = int(parts["hour"] or 0)
+        minute = int(parts["minute"] or 0)
+        if parts["meridiem"]:
+            if hour == 12:
+                hour = 0
+            if parts["meridiem"].lower() == "pm":
+                hour += 12
+        value = value.replace(
+            hour=hour,
+            minute=minute,
+            tzinfo=_timezone_for_label(parts["timezone"], reference),
+        )
+        source.deadlines[deadline_type] = value.isoformat()
+    if source.deadline is None:
+        source.deadline = (
+            source.deadlines.get("FINAL_SNAPSHOT")
+            or source.deadlines.get("SUBMISSION_DEADLINE")
+            or source.end_at
+        )
+
+
+def _infer_scoring_rules(source: ParsedSource) -> None:
+    for block in source.blocks:
+        normalized = " ".join(block.split())
+        lower = normalized.lower()
+        if "rank" not in lower or not any(
+            marker in lower for marker in ("install", "token usage", "leaderboard")
+        ):
+            continue
+        if normalized not in source.scoring_rules:
+            source.scoring_rules.append(normalized)
+    if source.scoring_rules:
+        source.judging_mode = source.judging_mode or "leaderboard"
+        source.leaderboard_model = source.leaderboard_model or source.scoring_rules[0]
 
 
 def _infer_rule_candidates(blocks: list[str]) -> list[dict[str, str]]:
@@ -340,19 +521,60 @@ def extract_spec(
             for rule_id, rule in by_kind.get(kind, [])
         ]
 
-    deadline = datetime.fromisoformat(primary.deadline) if primary.deadline else None
+    def first_timestamp(field: str) -> datetime | None:
+        for source in official:
+            value = getattr(source, field)
+            parsed = _parse_timestamp(value)
+            if parsed is not None:
+                return parsed
+        return None
+
+    def first_typed_deadline(kind: str) -> datetime | None:
+        for source in official:
+            parsed = _parse_timestamp(source.deadlines.get(kind))
+            if parsed is not None:
+                return parsed
+        return None
+
+    build_deadline = first_typed_deadline("BUILD_DEADLINE")
+    submission_deadline = first_typed_deadline("SUBMISSION_DEADLINE")
+    final_snapshot = first_typed_deadline("FINAL_SNAPSHOT")
+    result_at = first_typed_deadline("RESULT")
+    fallback_deadline = first_timestamp("deadline")
+    terminal_deadline = final_snapshot or submission_deadline or build_deadline or fallback_deadline
+    scoring_rules = [
+        rule
+        for source in official
+        for rule in source.scoring_rules
+    ]
+    leaderboard_model = next(
+        (source.leaderboard_model for source in official if source.leaderboard_model), None
+    )
     spec = HackathonSpec(
         mission_id=mission_id,
         name=primary.title or "Unnamed hackathon",
         organizer=primary.organizer,
         canonical_url=primary.uri,
-        deadline_at=deadline,
-        judging_mode=primary.judging_mode,
-        deadline_explicitly_unknown=primary.deadline is None,
+        start_at=first_timestamp("start_at"),
+        build_deadline_at=build_deadline,
+        submission_deadline_at=submission_deadline,
+        final_snapshot_at=final_snapshot,
+        result_at=result_at,
+        deadline_at=terminal_deadline,
+        judging_mode=primary.judging_mode or ("leaderboard" if scoring_rules else None),
+        leaderboard_model=leaderboard_model,
+        scoring_rules=scoring_rules,
+        deadline_explicitly_unknown=terminal_deadline is None,
         required_technologies=[rule["text"] for _, rule in by_kind.get("required-technology", [])],
         prohibited_actions=[rule["text"] for _, rule in by_kind.get("prohibited", [])],
         submission_requirements=requirements("submission"),
         eligibility_requirements=requirements("eligibility"),
+        rule_sources=[source.uri for source in official],
+        uncertainty=[
+            finding
+            for source in official
+            for finding in source.uncertainty
+        ],
         rules_locked=True,
         evidence_ids=[item.id for item in evidence if item.authority == "official"],
     )
