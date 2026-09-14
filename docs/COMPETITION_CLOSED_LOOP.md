@@ -147,6 +147,18 @@
 
 `AGENT_ID` is an immutable external identifier. It is not the product name.
 
+## Install-path freeze
+
+```text
+VERIFICATION_CANDIDATE = 81ba2dbeb7a560eb8bb56d8985011026ca05eabf
+```
+
+Public `main` is frozen at that commit while verification is pending. Work
+continues on branches; `main` moves again only for a critical reason, so the
+hosts review exactly what Joust claims is ready. Every superseded proposal was
+denied rather than removed, and exactly one verification request is live:
+`d6d435ac`, naming this candidate.
+
 ## Milestone: enter the race
 
 Eligibility is the binding constraint, and the official page states the rule
@@ -165,7 +177,7 @@ repository, the install path is part of the gate.
 - [x] One candidate SHA holds across every surface. Verification installs and
   runs this repository once, so the candidate, public `main`, what the install
   URL serves, and the SHA named in the handoff must all be the same commit.
-  The current candidate is `fb7a22ebe20ec4bd7e27399b77ac79c5b1a7dc07`,
+  The current candidate is `81ba2dbeb7a560eb8bb56d8985011026ca05eabf`,
   reproduced from a clean clone before publication and re-observed afterwards
   from an independent clone of the install URL: HEAD matched, doctor healthy,
   full suite green, branding `Joust`, 139 files.
