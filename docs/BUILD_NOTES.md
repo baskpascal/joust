@@ -1,5 +1,39 @@
 # Build notes
 
+## 2026-09-14 — Three people tried to install Joust and none of them got it running
+
+The Agent Index reports installs, and reading
+`/v1/agent?agent_id=galahad-hackathon` gave the number that matters:
+`{"attempted": 3, "succeeded": 0, "rate": 0}`. Thirty-eight agents are
+registered, one is Verified, and Joust is not it. Nobody who tried has ever
+reached a running agent, and nothing recorded why.
+
+The install path asks for a lot before it gives anything back: Docker, Compose
+v2, a running daemon, a credential minted from a second repository, and a
+stable `AGENT_ID` — with the failures arriving minutes into an image build, or
+silently, as a token the container refuses. The author hit the worst of them
+himself: a checkout on a Windows drive mounted under WSL reports 0777 whatever
+`chmod` is asked for, so the token stays readable by every account on the
+machine.
+
+`scripts/preflight.py` now answers all of that in a second, before anything is
+built. It is stdlib-only and imports nothing from the project, because it has
+to run the moment the clone finishes. It probes the filesystem for POSIX modes
+rather than guessing from the path, and each failure carries the command that
+fixes it.
+
+Writing it produced the first bug immediately: on this machine `docker` is on
+PATH as the WSL shim and answers every invocation with "could not be found in
+this WSL 2 distro", so the check failed and advised "Reinstall Docker" — the
+one action that would not have helped. A `docker` that exists but will not
+answer now points at Docker Desktop's WSL integration, and vendor output is
+collapsed to one line so the verdict stays visible.
+
+`tests/test_preflight.py` covers each remedy, including the Windows-drive trap
+and the shim. The README now runs the preflight between minting the credential
+and `docker compose up`. Whether this changes the install rate is unknown until
+the Agent Index reports another attempt; the number is 0/3 as of this writing.
+
 ## 2026-09-14 — Reading competitions Joust had never seen
 
 The claim that Joust can enter any competition had only ever been exercised
