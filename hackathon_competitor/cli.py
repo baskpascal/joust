@@ -13,7 +13,7 @@ from pathlib import Path
 from uuid import UUID
 
 from .ai import ClaudeCliReasoner, UnavailableReasoner
-from .ai_mission import MissionBlocked, joust_it
+from .ai_mission import MissionBlocked, ask, joust_it, redirect
 from .agent_index import (
     AgentIndexService,
     PinnedCliAgentIndexClient,
@@ -269,6 +269,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="run the same mission with no reasoning provider, to see where it stops",
     )
+    ask_parser = mission_commands.add_parser("ask")
+    ask_parser.add_argument("mission_id", type=UUID)
+    ask_parser.add_argument("question")
+    ask_parser.add_argument("--claude-model", default="default")
+    redirect_parser = mission_commands.add_parser("redirect")
+    redirect_parser.add_argument("mission_id", type=UUID)
+    redirect_parser.add_argument("instruction")
+    redirect_parser.add_argument("--claude-model", default="default")
     export = mission_commands.add_parser("export")
     export.add_argument("mission_id", type=UUID)
     export.add_argument("--bundle", type=Path)
@@ -445,6 +453,40 @@ def main(argv: list[str] | None = None) -> int:
                     "project_target_id": str(target.id),
                     "project_path": target.local_path,
                     "state": mission.state.value,
+                },
+                indent=2,
+            )
+        )
+        return 0
+    if args.mission_command == "ask":
+        print(
+            ask(
+                app,
+                args.mission_id,
+                args.question,
+                ClaudeCliReasoner(model=args.claude_model, workdir=Path.cwd()),
+            )
+        )
+        return 0
+    if args.mission_command == "redirect":
+        try:
+            selected, ai_decision = redirect(
+                app,
+                args.mission_id,
+                args.instruction,
+                ClaudeCliReasoner(model=args.claude_model, workdir=Path.cwd()),
+            )
+        except MissionBlocked as blocked:
+            print(json.dumps({"boundary": blocked.code, "detail": blocked.detail}, indent=2))
+            return 2
+        print(
+            json.dumps(
+                {
+                    "now_pursuing": selected.product_thesis,
+                    "target_user": selected.target_user,
+                    "winning_mechanism": selected.winning_mechanism,
+                    "because": ai_decision.rationale,
+                    "ai_decision_id": str(ai_decision.id),
                 },
                 indent=2,
             )
