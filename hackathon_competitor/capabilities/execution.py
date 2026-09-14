@@ -1,3 +1,12 @@
+"""The demo project: a fixed file written to disk, not an implementation.
+
+`build_demo_project` writes one hardcoded source string. It proves the build
+machinery moves a file into a workspace and runs it; it proves nothing about a
+competition entry. Real implementation goes through `build_loop.RealBuildLoop`
+with a model-backed implementer, which is the only path allowed to produce a
+ChangeSet carrying provenance.
+"""
+
 from __future__ import annotations
 
 import json

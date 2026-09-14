@@ -1,3 +1,11 @@
+"""Planning documents rendered from templates; not a model's plan.
+
+`architecture_tournament` scores three fixed candidates with three fixed arrays,
+so its winner was decided when it was written, and `render_prd` is an f-string.
+Both are fixtures for the deterministic slice. The plan a mission actually
+builds from comes from `ai_strategy.plan_project`.
+"""
+
 from __future__ import annotations
 
 from ..models import DebateRecord, Decision, HackathonSpec, Idea, MetaJudgeResult

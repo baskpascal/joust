@@ -1,5 +1,71 @@
 # Build notes
 
+## 2026-09-14 — Auditing whether a model was ever in the loop
+
+The question was direct: does Joust use AI to compete, or does it run a
+deterministic pipeline wearing that name? Tracing the execution path rather
+than the class names gave an uncomfortable answer.
+
+`llm.py` and `structured.py` define an `LLMClient`, a telemetry wrapper and a
+structured runner. Nothing in the product constructs one; grep finds them only
+in tests. The mission path from a URL — `run_vertical_slice` — reached no model
+at all. Its twenty ideas came from a fixed dictionary of names (`Navigator`,
+`Workbench`, `Coach`, `Radar`, …). Their six scores came from
+`_stable_score`, which is `sha256(title).hexdigest()[:8]` mapped into
+0.55-0.96. Six "independent judges" multiplied those same hashes by six fixed
+weight tables, and `select_strategy` returned the largest number, with a
+rationale reading "won the independent product, technical, and skeptical
+reviews". `architecture_tournament` scored three fixed candidates with three
+fixed arrays, so its winner was decided when it was typed.
+`build_demo_project` wrote one hardcoded source string.
+
+A model was genuinely in the loop in exactly two places, both downstream:
+`HermesCompetitionPlanner.assess` asks a model to choose the next action from a
+fixed enum, and `HermesImplementer` runs a real coding agent over an already
+attached project. Neither decides what to build. And nothing in stored state
+distinguished a model's decision from a hash's: there was no invocation record,
+no provider field, and a `ChangeSet` carried no attribution.
+
+So the product promise was being made by the parts that could not keep it.
+
+`ai.py` is the boundary now: a provider, an `InvocationRecorder` that writes a
+`ModelInvocation` for every call including the ones that fail, and
+`UnavailableReasoner`, which exists so "Joust without a model" is a state you
+can run rather than an argument. `capabilities/ai_strategy.py` asks a real model
+for materially different strategies, validates them against the competition
+they came from, refuses three restatements of one idea, and makes it choose one
+with a stated reason and a reason per rejection. `plan_project` lets the model
+name the repository, pick the stack and write the first slice, because those
+are product decisions and putting a template there would put the imitation
+straight back. `ai_mission.joust_it` is the path a competition URL now takes.
+
+Observed, against competitions the code had never seen:
+
+| Competition | Result |
+|---|---|
+| OneAquaHealth IEEE (rules page published the same day) | 3 strategies, chose `dryday`, created the project, reached BUILDING |
+| Amazon Developer Hackathon | 3 strategies across the Fire TV, Bee and Ring tracks, each citing that track's own gate |
+| RevenueCat Shipaton | 3 strategies; named store publication as the binding constraint, not idea quality |
+| AI Worth Using Agent Index | 3 strategies; read the scoring as single-axis and planned `flakedown` around reported usage |
+
+The ablation is the part that matters. The same command, the same URL, with
+the provider replaced by `UnavailableReasoner`: mission `BLOCKED`, boundary
+`AI_STRATEGY_UNAVAILABLE`, one invocation recorded as `UNAVAILABLE`, zero
+strategy candidates, zero decisions, and no project directory created. Nothing
+deterministic underneath produced an approximation of the same entry.
+
+Two defects came out of running it rather than reading it. `Database._save`
+takes the model as its second positional parameter, so a column named `model`
+collided with it — `TypeError: got multiple values for argument 'model'` — and
+the column is `model_name`. And `joust_it` built a `SourceRecord` without its
+required `content_hash`, which only surfaced on the first live acceptance run.
+Both are competition-agnostic; neither was a patch to make a particular
+hackathon pass.
+
+The deterministic modules are kept and now say what they are in their own
+docstrings. Having the imitation in the tree, labelled, is better than having
+it in the product unlabelled.
+
 ## 2026-09-14 — The Plow toolset was never connected, and nothing said so
 
 The live container had been reporting healthily to the Agent Index for

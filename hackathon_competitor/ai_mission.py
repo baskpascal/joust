@@ -13,6 +13,7 @@ instead of quietly producing the same artefacts anyway.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from uuid import UUID
 
@@ -95,6 +96,7 @@ def joust_it(
                 uri=source.uri,
                 authority=source.authority,
                 source_type=source.source_type,
+                content_hash=hashlib.sha256(source.text.encode()).hexdigest(),
             )
         )
     try:

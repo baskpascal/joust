@@ -1,3 +1,18 @@
+"""A deterministic stand-in for strategy, kept only as a regression fixture.
+
+None of this reasons. `generate_ideas` names twenty ideas from a fixed list,
+`_stable_score` is a SHA-256 of the title mapped into 0.55-0.96, the six
+"independent judges" multiply those same hashes by fixed weights, and
+`select_strategy` returns the largest number. It produced a confident decision
+for every competition and read none of them.
+
+It survives because the original vertical slice and its tests are built on it,
+and because having the imitation in the tree, clearly labelled, is better than
+having it in the product unlabelled. The path that decides what Joust builds is
+`hackathon_competitor.capabilities.ai_strategy`, which calls a real model and
+stops when none answers. Do not route a mission through this module.
+"""
+
 from __future__ import annotations
 
 import hashlib

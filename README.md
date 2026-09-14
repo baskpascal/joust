@@ -1,24 +1,19 @@
 <p align="center">
-  <img src="docs/brand/joust-hero.png" alt="Joust — a persistent autonomous competition agent" width="100%">
+  <img src="docs/brand/joust-hero.png" alt="Joust" width="100%">
 </p>
 
-<p align="center">
-  Give Joust a competition. It reads the rules, picks a way to win, builds a real entry,
-  tests it, repairs its own failures, publishes the result,<br>and keeps improving it until
-  the deadline.
-</p>
+# Joust
 
-<p align="center">
-  <img src="docs/brand/joust-duel.png" alt="Two knights colliding at the tilt, lances shattering" width="100%">
-</p>
+**Drop a competition. Joust it.**
 
-Joust runs on Plow, and it is evidence-first: nothing reports success on a
-claim, only on a result it observed. A build passes because a recorded run
-exited zero. A branch is pushed because the remote SHA was read back and
-matched. Whatever Joust cannot observe stays unverified rather than becoming a
-pass.
+Joust is an agent that takes a hackathon or technical competition, works out
+what winning actually requires there, decides what to build, builds it in a
+separate real project, tests it, and keeps improving it until the deadline.
 
-## Run it
+It reads the competition you give it. It has no idea what your competition is
+until it reads it.
+
+## Try it
 
 You need Git, Docker and Docker Compose v2.
 
@@ -35,79 +30,90 @@ export PATH="$PWD/plow-agents/bin:$PATH"
 plow-agents login && plow-agents lines && plow-agents mint <free-line-id>
 ```
 
-Pick a stable Agent Index id, set `AGENT_ID` to it, and check the machine
-before anything is built. The preflight needs nothing installed and changes
-nothing; it names whatever is missing and what to do about it:
+Pick a stable Agent Index id, then check the machine before anything is built.
+The preflight needs nothing installed and changes nothing; it names whatever is
+missing and the command that fixes it:
 
 ```bash
 export AGENT_ID=your-agent-id
 python3 scripts/preflight.py
 ```
 
-When it says ready, start:
+When it says ready:
 
 ```bash
 docker compose up --build -d
 ```
 
-Then talk to it in Plow Chat: send a competition URL and `Joust it.`
+## First mission
 
-```bash
-python -m hackathon_competitor.cli doctor
-```
-
-<details>
-<summary>Windows PowerShell, a standalone image build, and credential paths</summary>
-
-<br>
-
-```powershell
-$env:AGENT_ID = "your-agent-id"
-docker compose up --build -d
-```
-
-`docker build -t joust-agent .` builds the image on its own. `AGENT_ID` is
-yours to choose, is not the product name, and must not change across restarts.
-If your checkout sits on a filesystem that cannot hold POSIX modes — a Windows
-drive mounted under WSL, say — keep the credential somewhere that can and point
-`PLOW_CREDENTIALS_PATH` at it.
-
-</details>
-
-## What it does
-
-Joust owns a mission, not a codebase, so publishing a submission does not end
-the run:
+In Plow Chat, send the competition and three words:
 
 ```text
-observe → assess → strategize → execute → verify → measure → adapt ─┐
-   ^                                                                │
-   └────────────────────────────────────────────────────────────────┘
+https://some-hackathon.devpost.com/rules
+
+Joust it.
 ```
 
-Every remote mutation — pushing, opening a pull request, deploying, submitting —
-takes one path: a durable proposal, an approval decision, an idempotent
-execution, an observation of the actual remote state, and evidence.
+Or run the same mission from the command line:
 
-An action waiting on somebody else rests in `AWAITING_EXTERNAL`, which is
-neither success nor failure. A source that could not be read is recorded as
-unreadable, never as unchanged.
+```bash
+python -m hackathon_competitor.cli mission joust-it --url <competition-url>
+```
 
-<p align="center">
-  <img src="docs/brand/joust-scenes.png" alt="The helm, the prize-giving, and a favour knotted onto a lance" width="100%">
-</p>
+## What happens
 
-## Read more
+1. **It reads the live competition.** Rules, deadlines and the scoring
+   mechanism come out of the pages themselves. A page it cannot read is
+   reported unreadable, never as a competition without rules.
+2. **A model forms competing strategies.** At least three, for different users,
+   winning in different ways, each tied to a rule the competition actually
+   states.
+3. **It chooses one and says why** — against that competition's own scoring,
+   with a reason recorded for every strategy it turned down.
+4. **It creates a real project.** A separate repository with its own stack,
+   its own tests and its own install path. Not a folder inside Joust.
+5. **A coding model implements it,** and when a test fails, diagnoses and
+   repairs it.
+6. **It keeps going after the first build** — watching the competition, the
+   deadline and its own project, and changing course when they change.
+
+Every model call is stored: which provider, which model, what it was asked, what
+it chose, and what it chose over. A change the model made carries the model's
+name. **With no model configured, a mission stops at `AI_STRATEGY_UNAVAILABLE`
+and builds nothing** — there is no deterministic impersonation underneath.
+
+## Evidence
+
+Three live competitions read on 2026-09-14, none of them known to the code:
+
+| Competition | What Joust produced |
+|---|---|
+| [OneAquaHealth IEEE](https://oneaquahealth-ieee-hackathon.devpost.com/rules) | 3 strategies; chose a dry-weather discharge detector for a utility operator; created `dryday` |
+| [Amazon Developer Hackathon](https://amazonappdev2026.devpost.com/rules) | 3 strategies across the Fire TV, Bee and Ring tracks; deadline read as 2026-10-23 12:00 PDT |
+| [RevenueCat Shipaton](https://revenuecat-shipaton-2026.devpost.com/rules) | 3 strategies; identified store publication as the binding gate |
+
+[The build notes](docs/BUILD_NOTES.md) record how each of these went, including
+what broke.
+
+## Current limitations
+
+- **Reading is not universal.** Competition pages that render client-side —
+  Kaggle's rules, for one — return `no_extractable_text`. Joust says so rather
+  than guessing.
+- **Deadlines are read from prose.** Where a page states no parseable date,
+  the deadline stays unknown instead of being invented.
+- **The chat path depends on Plow.** When the Plow device behind the credential
+  is disconnected, the toolset parks and the agent can report but not converse.
+- **Submission is never automatic.** Publishing, deploying, accepting terms and
+  submitting each wait for an explicit approval immediately before the action.
+- **Parts of the older pipeline are deterministic fixtures.** They are labelled
+  as such in the source and no mission is routed through them.
+
+## Inside
 
 [The design document](docs/SDD.md) says what Joust is meant to be.
 [The runbook](docs/RUNBOOK.md) says how to operate it.
 [The build notes](docs/BUILD_NOTES.md) say why each piece came out the way it did.
-
-`python -m hackathon_competitor.cli bundle` writes a reproducible archive of the
-committed files, and refuses to produce one that is missing the install files or
-the MIT licence, or that carries credentials, databases or bytecode.
-
-The art is generated, not hand-exported: `python docs/brand/build_marks.py`
-redraws every scene and `node docs/brand/render_marks.mjs` captures the banners.
 
 MIT licensed.
