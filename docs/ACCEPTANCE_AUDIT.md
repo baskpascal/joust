@@ -54,6 +54,11 @@ runtime evidence nor client registration proves a public Verified listing.
 | Interrupted action recovery | Restart closes an orphaned `RUNNING` execution durably and advances the cycle without duplicate execution | PASS (local contract + live recovery) |
 | Structured leaderboard/usage signal | Live page returned dynamic `Loading…`; no rank/install/usage value was inferred | PARTIAL / ADAPTER NEEDED |
 | Joust contract foundation | `test_joust_contracts.py` proves status/phase separation defaults, typed competition metadata, persisted entrant attribution, rule supersession, and strategy-reassessment events | PASS (local contract) |
+| Competitions Joust has never seen | Three live Devpost hackathons (`revenuecat-shipaton-2026`, `agentsforhumans`, `amazonappdev2026`) each locked a spec with 55-137 evidence records and a deadline matching the independently published `devpost.com/api/hackathons` submission period | PASS (live read-only, 2026-09-14) |
+| Unreadable source is not a ruleless competition | `kaggle.com/competitions/.../rules` renders client-side and is reported `UNREADABLE: no_extractable_text`; typed reasons cover status, empty body, challenge, unreachable, size | PASS (live boundary preserved) |
+| Install preconditions checked before the build | `scripts/preflight.py` from a bare clone of public `main` at `13c10dd`: git, Docker 29.1.3, Compose v2.40.3, daemon, credential mode `0o600`, `AGENT_ID` — ready, exit 0 | PASS (clean external clone) |
+| Live competitive standing | `/v1/agent?agent_id=galahad-hackathon` returned `installs {attempted: 3, succeeded: 0}`, `users 1`, `token_usage 3119664`, `blessed_at ""`; 38 agents registered, 1 Verified | OBSERVED (not verified, unranked) |
+| Public release reaches installers | Public `main` moved `f0b1e86` → `13c10dd`, read back from the remote; `raw.githubusercontent.com` serves the new README step and `scripts/preflight.py` (HTTP 200) | PASS (public) |
 | Unit/integration/E2E/secret/license quality | 127 tests, Ruff, diff check, MIT license | PASS |
 
 ## External handoff
