@@ -50,6 +50,21 @@ class Grid:
             for xx in range(x, x + w):
                 self.put(xx, yy, v)
 
+    def crop(self, x0, y0, w, h):
+        out = Grid(w, h)
+        for y in range(h):
+            for x in range(w):
+                sy, sx = y0 + y, x0 + x
+                if 0 <= sy < self.h and 0 <= sx < self.w:
+                    out.cells[y][x] = self.cells[sy][sx]
+        return out
+
+    def blit(self, other, x0, y0):
+        for y in range(other.h):
+            for x in range(other.w):
+                if other.cells[y][x] is not None:
+                    self.put(x0 + x, y0 + y, other.cells[y][x])
+
     def rects(self):
         out = []
         for y, row in enumerate(self.cells):
