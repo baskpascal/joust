@@ -1,5 +1,40 @@
 # Build notes
 
+## 2026-09-14 — Shading, and why the canvas preview kept dying
+
+Flat silhouettes were a crutch. They read acceptably at a glance precisely
+because they hide that nothing is modelled, and once that was said plainly the
+fix was a different technique, not a better silhouette: five-step colour ramps
+per material, one light direction, a per-pixel normal, ordered 2x2 dithering at
+the band boundaries, and an outline in deep violet rather than black. The
+portrait carries twenty-three tones where the flat scenes carried six.
+
+The scenes were also all the same picture — night sky, sun disc, stand on the
+right — and shading would not have fixed that. Each one moved instead. The
+portrait is a close crop, because detail needs pixels per object and a
+tournament field spread over two hundred pixels has none to spare. The prize is
+a low angle in torchlight, over the victor's bare head, looking up at the royal
+box. The favour is a macro at dawn: her hand, the shaft, silk knotting round it.
+
+Assembling all of it surfaced a real defect. The Prize artboard rendered alone
+but came up blank in the full canvas, with "the preview stopped answering the
+editor". It was weight: dithering alternates colour every pixel, so run-length
+encoding merges nothing and a 104x116 scene became 5,468 SVG rect nodes. Dense
+pixel art is a raster, not a vector. A small PNG writer now emits each scene at
+2.5 KB as one image node, and separately at README scale, because GitHub does
+not honour a pixelated rendering hint and the file has to carry the final size.
+
+Finding that needed the right instrument. Checking artboards by assembling them
+as plain HTML never exercises the canvas runtime, so the one artboard that could
+not be verified that way — the interactive parallax — was also the one carrying
+an unnoticed bug: each layer was one viewport wide and ran out the moment it was
+dragged. Opening the assembled canvas in a browser showed both at once.
+
+Candidate `c8aa38d3c81009e47495f1b154eb301ca1b9d1ea` carries the filled README
+and was validated from the install URL: HEAD matching, doctor healthy, full
+suite green, all five images present. Seven superseded proposals are denied; one
+is live.
+
 ## 2026-09-14 — Rasterised silhouettes, and the entry repository goes private
 
 `baskpascal/joust-entry` is now private, observed as `private=true`. It was

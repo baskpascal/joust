@@ -86,6 +86,7 @@ board("Card.dc.html", f"""
 
 # ------------------------------- shaded scenes, as images rather than vectors
 import png as _png  # noqa: E402
+from raster import Grid as _Grid  # noqa: E402
 from portrait import portrait as _portrait  # noqa: E402
 from scenes2 import favour as _favour, prize as _prize, rider as _rider  # noqa: E402
 from duel import scene as _duel_scene  # noqa: E402
@@ -123,9 +124,22 @@ _scenes = (("Portrait", "portrait", _portrait(), 7, 6, "#12101F", "A knight's he
             "Two knights colliding at the tilt"))
 for name, stem, grid, board_scale, readme_scale, bg, alt in _scenes:
     _png.write(f"{stem}.png", grid)
-    _png.write(f"joust-{stem}.png", grid, scale=readme_scale)
     open(f"{name}.dc.html", "w", encoding="utf-8").write(IMG_TPL.format(
         w=grid.w * board_scale, h=grid.h * board_scale, bg=bg, src=f"{stem}.png", alt=alt))
+
+# The README takes three banners of one width and one aspect. Three separate
+# images of three aspects, dropped in a table, read as thrown in.
+_by_stem = {stem: grid for _n, stem, grid, *_r in _scenes}
+_png.write("joust-duel.png", _by_stem["duel"].crop(0, 6, 210, 70), scale=6)
+
+_PANEL_W, _PANEL_H, _GUTTER = 68, 70, 4
+_strip = _Grid(_PANEL_W * 3 + _GUTTER * 2, _PANEL_H)
+_strip.rect(0, 0, _strip.w, _strip.h, "#12101F")
+for _i, (_stem, _cx, _cy) in enumerate((("portrait", 14, 0), ("prize", 18, 12),
+                                        ("favour", 28, 9))):
+    _strip.blit(_by_stem[_stem].crop(_cx, _cy, _PANEL_W, _PANEL_H),
+                _i * (_PANEL_W + _GUTTER), 0)
+_png.write("joust-scenes.png", _strip, scale=6)
 
 # ---------------------------------------------------------------- Knights
 KNIGHTS = [
