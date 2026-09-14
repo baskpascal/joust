@@ -1,5 +1,66 @@
 # Build notes
 
+## 2026-09-14 — Two unseen competitions, built and validated by a real coding agent
+
+`joust mission joust-it` was pointed at two competitions the code had never
+built a project for: OneAquaHealth IEEE (`dryday`, a water-quality compliance
+report generator) and the Agent Index (`issue-pilot`, a GitHub issue triage
+bot). Both reached `BUILDING` with an AI-authored `FIRST_SLICE.md`, and both
+were then handed to `ClaudeCodeImplementer` to actually write.
+
+`issue-pilot` exposed the intended failure/repair contract working end to end
+without help: the model's own package.json used `vitest`, not the `ts-node`
+command the plan had declared, so the project's own stored test command had to
+be corrected to match what was actually built before verification meant
+anything. From there the agent found and fixed a real module-resolution defect
+(`NodeNext` needs an explicit `.js` import extension) and, on the next repair
+round, a real API defect (`octokit.issues.list` does not exist; the method is
+`listForRepo`). Final commit `646d9077` passes 4 tests.
+
+`dryday` repeatedly failed with `OSError: [Errno 7] Argument list too long`
+inside `ClaudeCodeImplementer.repair`, and the first three hypotheses were all
+wrong. It was not the coding agent's own environment (trimming it to
+`PATH`/`HOME` didn't fix it). It was not two heavy builds running concurrently
+against a Windows-drive-backed checkout (it failed identically running alone).
+Direct measurement inside the failing call finally found it: the repair prompt
+was 12,358,004 characters. The project's `flake8 .` command had no exclusion
+for `.venv`, so it was linting every third-party package inside the virtualenv
+— Pillow, reportlab, the lot — and that output was going straight into a
+command-line argument to `claude -p`, well past what `execve` will accept.
+
+Finding it took longer than it should have because of a second, independent
+defect: `_run_commands` names each phase's log file `{phase}.log` with no
+disambiguation, so when a target declares two lint commands (`flake8` then
+`black --check`, both phase `"lint"`), the second command's log silently
+overwrites the first's. The evidence for what had actually failed was gone by
+the time anyone looked at it. Reading `lint.log` after the crash showed a
+small, unremarkable `black` diff and nothing to explain twelve million
+characters; only instrumenting the failing call directly, rather than trusting
+the log it wrote, found the real cause.
+
+Both are now fixed. `_run_commands` suffixes a log file by occurrence
+(`lint.log`, `lint-2.log`, ...) when a phase repeats, so no command's failure
+is ever silently discarded. `_bounded_failure` caps what any coding-agent
+prompt embeds from a captured command failure to 20,000 characters, keeping
+head and tail rather than truncating blind, since the actual assertion or
+traceback is usually at the end of a flood of unrelated noise — this is a
+property of the pipeline now, not a fix scoped to one linter misconfiguration,
+so a different runaway command in a different generated project cannot
+reproduce the same failure. `dryday`'s own `lint_commands` were also corrected
+to exclude `.venv`. Final commit `807df02` passes 11 tests, `flake8` and
+`black --check` clean.
+
+A third, unrelated mistake surfaced while chasing this: both projects had been
+created inside the Joust repository itself (`--projects-root` pointed at a
+`projects/` directory under the checkout), which put each project's own `.git`
+pack data inside the tree that `test_secret_bearing_paths_are_excluded_from_git_and_build_context`
+scans for secret-shaped strings — compressed git blob bytes coincidentally
+matched the pattern. Both projects were moved to an independent directory
+outside the repository and their `ProjectTarget.local_path` updated to match;
+the full suite (200 tests) is green again. Mission-owned projects must never
+live inside Joust's own source tree, for the same reason Joust must never
+treat its own repository as a mission target.
+
 ## 2026-09-14 — Auditing whether a model was ever in the loop
 
 The question was direct: does Joust use AI to compete, or does it run a
