@@ -5,13 +5,14 @@ from typing import Any, Protocol
 from urllib.parse import urlencode
 from uuid import UUID
 
-from .approvals import ExternalActionService
+from .approvals import ExternalActionService, ExternalObservationUnavailable
 from .metrics import JsonReader, MetricsUnavailable, UrllibJsonReader
 from .models import (
     AgentIndexEligibility,
     ApprovalLevel,
     ExternalActionKind,
     ExternalActionRisk,
+    ExternalActionStatus,
     ObservedExternalResult,
     ProposedExternalAction,
 )
@@ -23,6 +24,25 @@ from .tool_gateway import LocalShellTool
 METADATA_FIELDS = ("name", "blurb", "repo", "runtime", "install_url")
 
 DEFAULT_INDEX_API = "https://agent-index-server.vercel.app"
+
+# Each handoff waits on one public timestamp. Keeping the shape in one table
+# means a poll can never observe a different marker than its delivery did.
+HANDOFF_MARKERS: dict[ExternalActionKind, dict[str, str]] = {
+    ExternalActionKind.VERIFICATION_REQUEST: {
+        "marker_field": "blessed_at",
+        "state_key": "verified",
+        "achieved": "the Agent Index marks {agent} Verified",
+        "pending": "the verification request for {agent} is delivered; "
+        "the Agent Index has not marked it Verified yet",
+    },
+    ExternalActionKind.DEPLOY: {
+        "marker_field": "deployable_at",
+        "state_key": "deployable",
+        "achieved": "the Agent Index marks {agent} deployable",
+        "pending": "the hosting handoff for {agent} is delivered; "
+        "Plow has not enabled hosted deployment yet",
+    },
+}
 DEFAULT_CLIENT_PATH = "/opt/plow/agent-index-client.py"
 
 
@@ -295,11 +315,7 @@ class AgentIndexService:
         return self._deliver_handoff(
             action_id,
             deliver=deliver,
-            marker_field="blessed_at",
-            state_key="verified",
-            achieved="the Agent Index marks {agent} Verified",
-            pending="the verification request for {agent} is delivered; "
-            "the Agent Index has not marked it Verified yet",
+            **HANDOFF_MARKERS[ExternalActionKind.VERIFICATION_REQUEST],
         )
 
     # -- hosted deployment handoff --------------------------------------
@@ -344,12 +360,31 @@ class AgentIndexService:
         return self._deliver_handoff(
             action_id,
             deliver=deliver,
-            marker_field="deployable_at",
-            state_key="deployable",
-            achieved="the Agent Index marks {agent} deployable",
-            pending="the hosting handoff for {agent} is delivered; "
-            "Plow has not enabled hosted deployment yet",
+            **HANDOFF_MARKERS[ExternalActionKind.DEPLOY],
         )
+
+    def poll_handoff(self, action_id: UUID) -> dict[str, Any]:
+        """Re-observe a delivered handoff. It can never re-deliver one.
+
+        The action service treats AWAITING_EXTERNAL as a resumed observation, so
+        the executor below is unreachable; it raises rather than returning a
+        plausible receipt, because a handoff delivered twice is the one thing
+        this path must never do.
+        """
+
+        action = self.database.get_external_action(action_id)
+        if action.status != ExternalActionStatus.AWAITING_EXTERNAL:
+            raise AgentIndexError(
+                f"only a delivered handoff can be polled; this one is {action.status.value}"
+            )
+        marker = HANDOFF_MARKERS.get(action.kind)
+        if marker is None:
+            raise AgentIndexError(f"{action.kind.value} is not a handoff kind")
+
+        def refuse(_agent_id: str, _handoff: dict[str, Any]) -> dict[str, Any]:
+            raise AgentIndexError("polling must never re-deliver a handoff")
+
+        return self._deliver_handoff(action_id, deliver=refuse, **marker)
 
     def _deliver_handoff(
         self,
@@ -378,7 +413,11 @@ class AgentIndexService:
             return receipt
 
         def observe(result: Any) -> ObservedExternalResult:
-            record = self.reader.read(agent_id)
+            try:
+                record = self.reader.read(agent_id)
+            except MetricsUnavailable as exc:
+                # Unreadable, not unblessed: keep the action waiting.
+                raise ExternalObservationUnavailable(str(exc)) from exc
             done = _marked(record, marker_field)
             actual = {
                 "agent_id": agent_id,
