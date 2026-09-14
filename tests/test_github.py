@@ -22,6 +22,8 @@ class FakeShell:
         if argv[0:3] == ["gh", "repo", "clone"]:
             return "cloned"
         if argv[0:2] == ["gh", "pr"] and argv[2] == "create":
+            return "https://github.com/owner/project/pull/3\n"
+        if argv[0:2] == ["gh", "pr"] and argv[2] == "view":
             return json.dumps(
                 {
                     "url": "https://github.com/owner/project/pull/3",

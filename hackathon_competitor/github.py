@@ -123,8 +123,9 @@ class GitHubCliAdapter:
     def create_pull_request(
         self, repository: str, *, head: str, base: str, title: str, body: str
     ) -> dict[str, Any]:
-        value = self._gh_json(
+        output = self.shell.run(
             [
+                "gh",
                 "pr",
                 "create",
                 "--repo",
@@ -137,6 +138,19 @@ class GitHubCliAdapter:
                 title,
                 "--body",
                 body,
+            ],
+            timeout_seconds=120,
+        ).strip()
+        urls = [line.strip() for line in output.splitlines() if line.strip().startswith("https://")]
+        if not urls:
+            raise GitHubError("GitHub did not return a pull request URL")
+        value = self._gh_json(
+            [
+                "pr",
+                "view",
+                urls[-1],
+                "--repo",
+                repository,
                 "--json",
                 "url,number,headRefName,baseRefName",
             ]
