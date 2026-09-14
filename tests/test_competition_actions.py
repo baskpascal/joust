@@ -15,7 +15,7 @@ from hackathon_competitor.models import (
     ProjectMode,
     ProjectTarget,
 )
-from hackathon_competitor.storage import Database
+from hackathon_competitor.storage import MIGRATIONS, Database
 
 
 class TinyImplementer:
@@ -39,7 +39,7 @@ def _selected_cycle(database, mission, action):
 
 def test_selected_build_action_runs_real_build_loop_and_records_evidence(tmp_path):
     database = Database(tmp_path / "state.db")
-    assert database.migrate() == 11
+    assert database.migrate() == len(MIGRATIONS)
     mission = Mission(
         title="Build competition entry",
         objective="win",

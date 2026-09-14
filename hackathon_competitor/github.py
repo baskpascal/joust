@@ -22,6 +22,8 @@ class GitHubTool(Protocol):
         self, repository: str, *, head: str, base: str, title: str, body: str
     ) -> dict[str, Any]: ...
     def checks(self, repository: str, ref: str) -> list[dict[str, Any]]: ...
+    def branch_sha(self, repository: str, branch: str) -> str: ...
+    def pull_request(self, repository: str, number: int) -> dict[str, Any]: ...
     def runtime_snapshot(self, repository: str, ref: str) -> GitHubRuntimeSnapshot: ...
 
 
@@ -128,6 +130,29 @@ class GitHubCliAdapter:
                 }
             )
         return checks
+
+    def branch_sha(self, repository: str, branch: str) -> str:
+        if not branch or branch.startswith("-"):
+            raise ValueError("invalid GitHub branch")
+        value = self._gh_json(["api", f"repos/{repository}/git/ref/heads/{branch}"])
+        if not isinstance(value, dict):
+            raise GitHubError("GitHub branch ref returned a non-object")
+        target = value.get("object")
+        if not isinstance(target, dict) or not isinstance(target.get("sha"), str):
+            raise GitHubError("GitHub branch ref omitted its commit SHA")
+        return target["sha"]
+
+    def pull_request(self, repository: str, number: int) -> dict[str, Any]:
+        value = self._gh_json(["api", f"repos/{repository}/pulls/{number}"])
+        if not isinstance(value, dict):
+            raise GitHubError("GitHub pull request returned a non-object")
+        return {
+            "number": value.get("number"),
+            "state": value.get("state"),
+            "head": (value.get("head") or {}).get("ref"),
+            "base": (value.get("base") or {}).get("ref"),
+            "url": value.get("html_url"),
+        }
 
     def runtime_snapshot(self, repository: str, ref: str) -> GitHubRuntimeSnapshot:
         user = self._gh_json(["api", "user"])

@@ -25,6 +25,18 @@ class FakeGitHub:
         self.pull_requests.append((repository, head, base, title, body))
         return {"url": "https://github.com/owner/project/pull/4", "number": 4}
 
+    def branch_sha(self, repository, branch):
+        return "commit"
+
+    def pull_request(self, repository, number):
+        return {
+            "url": "https://github.com/owner/project/pull/4",
+            "number": number,
+            "state": "open",
+            "head": "joust/mission",
+            "base": "main",
+        }
+
 
 def _setup(tmp_path):
     database = Database(tmp_path / "state.db")
@@ -56,18 +68,18 @@ def test_github_publish_requires_matching_explicit_approval(tmp_path):
     database, target, change_set = _setup(tmp_path)
     github = FakeGitHub()
     service = GitHubPublicationService(database, github)
-    approval = service.request_push(target, change_set)
+    action = service.request_push(target, change_set, idempotency_key="push-1")
 
     with pytest.raises(ApprovalRequired):
-        service.push(approval.id, target, change_set, idempotency_key="push-1")
+        service.push(action.id, target, change_set)
     assert not github.pushes
 
     decided = service.external.approvals.decide(
-        approval.id, granted=True, explicit_confirmation=True, note="reviewed commit"
+        action.approval_id, granted=True, explicit_confirmation=True, note="reviewed commit"
     )
     assert decided.status == ApprovalStatus.GRANTED
-    assert service.push(approval.id, target, change_set, idempotency_key="push-1") == "pushed"
-    assert service.push(approval.id, target, change_set, idempotency_key="push-1") == "pushed"
+    assert service.push(action.id, target, change_set)["sha"] == "commit"
+    assert service.push(action.id, target, change_set)["sha"] == "commit"
     assert github.pushes == [("origin", "joust/mission")]
 
 
@@ -77,18 +89,42 @@ def test_github_publish_rejects_default_branch_and_mismatched_pr(tmp_path):
     service = GitHubPublicationService(database, github)
     target.working_branch = target.default_branch
     with pytest.raises(GitHubPublicationError, match="default branch"):
-        service.request_push(target, change_set)
+        service.request_push(target, change_set, idempotency_key="push-default")
 
     target.working_branch = "joust/mission"
-    approval = service.request_pull_request(target, change_set, title="Build slice")
-    service.external.approvals.decide(approval.id, granted=True, explicit_confirmation=True)
+    action = service.request_pull_request(
+        target, change_set, title="Build slice", idempotency_key="pr-1"
+    )
+    service.external.approvals.decide(action.approval_id, granted=True, explicit_confirmation=True)
     target.working_branch = "joust/other"
     with pytest.raises(GitHubPublicationError, match="approval"):
         service.create_pull_request(
-            approval.id,
+            action.id,
             target,
             change_set,
             title="Build slice",
             body="body",
-            idempotency_key="pr-1",
         )
+
+
+def test_pull_request_success_requires_observed_remote_state(tmp_path):
+    database, target, change_set = _setup(tmp_path)
+    github = FakeGitHub()
+    service = GitHubPublicationService(database, github)
+    action = service.request_pull_request(
+        target, change_set, title="Build slice", idempotency_key="pr-1"
+    )
+    service.external.approvals.decide(action.approval_id, granted=True, explicit_confirmation=True)
+
+    result = service.create_pull_request(
+        action.id,
+        target,
+        change_set,
+        title="Build slice",
+        body="body",
+    )
+
+    assert result["number"] == 4
+    assert github.pull_requests == [
+        ("owner/project", "joust/mission", "main", "Build slice", "body")
+    ]

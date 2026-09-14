@@ -28,6 +28,7 @@ from .models import (
     EntrantProfile,
     Evaluation,
     Evidence,
+    ExternalActionObservation,
     Extraction,
     Experiment,
     HackathonSpec,
@@ -38,6 +39,7 @@ from .models import (
     MetricSignal,
     MonitorBackoffState,
     ProjectTarget,
+    ProposedExternalAction,
     RepositorySnapshot,
     RuleObservation,
     SourceObservation,
@@ -272,6 +274,29 @@ MIGRATIONS: tuple[str, ...] = (
         payload TEXT NOT NULL,
         UNIQUE(mission_id, version)
     );
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS proposed_external_actions (
+        id TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        status TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_external_actions_mission
+      ON proposed_external_actions(mission_id, created_at);
+    CREATE TABLE IF NOT EXISTS external_action_observations (
+        id TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        action_id TEXT NOT NULL,
+        verified INTEGER NOT NULL,
+        observed_at TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_external_action_observations_action
+      ON external_action_observations(action_id, observed_at);
     """,
 )
 
@@ -835,6 +860,58 @@ class Database:
 
     def list_approvals(self, mission_id: UUID | str) -> list[Approval]:
         return self._list_for_mission("approvals", mission_id, Approval)
+
+    def save_external_action(self, action: ProposedExternalAction) -> None:
+        self._save(
+            "proposed_external_actions",
+            action,
+            mission_id=action.mission_id,
+            kind=action.kind.value,
+            status=action.status.value,
+            idempotency_key=action.idempotency_key,
+            created_at=action.created_at.isoformat(),
+        )
+
+    def get_external_action(self, action_id: UUID | str) -> ProposedExternalAction:
+        return self._get("proposed_external_actions", action_id, ProposedExternalAction)
+
+    def get_external_action_by_idempotency_key(
+        self, idempotency_key: str
+    ) -> ProposedExternalAction | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT payload FROM proposed_external_actions WHERE idempotency_key = ?",
+                (idempotency_key,),
+            ).fetchone()
+        if row is None:
+            return None
+        return ProposedExternalAction.model_validate_json(row[0])
+
+    def list_external_actions(self, mission_id: UUID | str) -> list[ProposedExternalAction]:
+        return self._list_for_mission(
+            "proposed_external_actions", mission_id, ProposedExternalAction
+        )
+
+    def save_external_action_observation(self, observation: ExternalActionObservation) -> None:
+        self._save(
+            "external_action_observations",
+            observation,
+            mission_id=observation.mission_id,
+            action_id=observation.action_id,
+            verified=int(observation.matches_expected),
+            observed_at=observation.observed_at.isoformat(),
+        )
+
+    def list_external_action_observations(
+        self, action_id: UUID | str
+    ) -> list[ExternalActionObservation]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT payload FROM external_action_observations "
+                "WHERE action_id = ? ORDER BY observed_at",
+                (str(action_id),),
+            ).fetchall()
+        return [ExternalActionObservation.model_validate_json(row[0]) for row in rows]
 
     def add_artifact_dependency(
         self, parent_id: UUID, child_id: UUID, dependency_type: str

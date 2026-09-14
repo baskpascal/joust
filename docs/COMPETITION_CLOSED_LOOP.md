@@ -69,7 +69,7 @@
   checks are stored with repository and commit SHA.
   Verify: Adapter tests and a read-only authenticated runtime rehearsal.
 
-- [ ] **7. Unify approved external actions**
+- [x] **7. Unify approved external actions**
   Spec ref: `Joust SDD > 8. Autonomy Policy`
   What to build: Route push, PR, deploy, Agent Index update, verification request,
   and final submission through `ProposedExternalAction -> ApprovalPolicy ->
@@ -114,7 +114,7 @@
 - [ ] Hermes cron runs safely.
 - [x] GitHub runtime is authenticated.
 - [x] Remote checks are observed (the current result is an evidence-backed empty set).
-- [ ] Push/PR/deploy/submission use approval actions.
+- [x] Push/PR/deploy/submission use the unified approval-action contract.
 - [ ] Actual external results are verified.
 - [x] Product identity is Joust in local/runtime contracts.
 - [x] `AGENT_ID` identity remains stable in durable installation state.

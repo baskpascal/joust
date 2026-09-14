@@ -1,5 +1,34 @@
 # Build notes
 
+## 2026-09-14 — Competition Closed Loop: verified external actions
+
+Database migration 12 adds durable `ProposedExternalAction` and
+`ExternalActionObservation` records. Push, pull request, deploy, Agent Index
+update, verification request, and final submission now share one contract:
+proposal, non-`AUTO` approval, idempotency key, execution, independent remote
+observation, and evidence. A successful executor response alone never marks an
+action verified.
+
+The service rejects missing, pending, denied, expired, mismatched, and reused
+approvals before execution. Verified retries return the recorded observation
+without invoking the executor again. An interruption before an executor result
+retries with the same external idempotency key; an interruption after the
+result was persisted resumes observation without repeating the mutation. A
+remote mismatch is stored as evidence and leaves the action `FAILED`.
+
+`GitHubPublicationService` now uses this contract. Push success requires the
+observed remote branch SHA to equal the validated commit; PR success requires
+an observed open PR with the approved head and base. The generic action kinds
+reserve the same path for deployment, Agent Index metadata, verification, and
+final submission adapters rather than allowing bespoke approval bypasses.
+
+Ruff passed and the complete test suite passed. The rebuilt runtime is healthy
+on database schema 12, retains GitHub authentication, and reports zero proposed
+external actions for the live mission. No push, PR, deploy, Agent Index update,
+verification request, or submission was proposed or executed. The rebuilt
+`joust-agent:latest` image has manifest-list digest
+`sha256:2603cd291c869bc79c0a55813107274ebe760b062b31d134aa843b61f3c951f5`.
+
 ## 2026-09-14 — Competition Closed Loop: authenticated GitHub observation
 
 `GitHubRuntimeObserver` now performs a read-only preflight through the GitHub

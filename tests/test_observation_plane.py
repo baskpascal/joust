@@ -12,7 +12,7 @@ from hackathon_competitor.models import (
     ProjectTarget,
 )
 from hackathon_competitor.observation import CompetitionObserver
-from hackathon_competitor.storage import Database
+from hackathon_competitor.storage import MIGRATIONS, Database
 from hackathon_competitor.workspace import GitWorkspace
 
 
@@ -37,7 +37,7 @@ class MissingGitHub:
 
 def test_observation_plane_captures_real_local_project_state(tmp_path):
     database = Database(tmp_path / "state.db")
-    assert database.migrate() == 11
+    assert database.migrate() == len(MIGRATIONS)
     project = tmp_path / "entry"
     project.mkdir()
     workspace = GitWorkspace(project)

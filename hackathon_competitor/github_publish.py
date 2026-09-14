@@ -1,12 +1,19 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 from uuid import UUID
 
 from .approvals import ExternalActionService
 from .github import GitHubTool
-from .models import Approval, ApprovalLevel, ChangeSet, ProjectTarget
+from .models import (
+    ApprovalLevel,
+    ChangeSet,
+    ExternalActionKind,
+    ExternalActionRisk,
+    ObservedExternalResult,
+    ProjectTarget,
+    ProposedExternalAction,
+)
 from .storage import Database
 
 
@@ -38,28 +45,55 @@ class GitHubPublicationService:
             raise GitHubPublicationError("only a validated change set can be published")
         return target.repository_url, target.working_branch, change_set.commit_sha
 
-    def request_push(self, target: ProjectTarget, change_set: ChangeSet) -> Approval:
-        repository, branch, commit = self._require_target(target, change_set)
-        action = f"push {repository} {branch} {commit} diff={change_set.diff_hash}"
-        return self.external.request(change_set.mission_id, action, ApprovalLevel.CONFIRM)
-
-    def push(
+    def request_push(
         self,
-        approval_id: UUID,
         target: ProjectTarget,
         change_set: ChangeSet,
         *,
         idempotency_key: str,
-    ) -> str:
+    ) -> ProposedExternalAction:
         repository, branch, commit = self._require_target(target, change_set)
         action = f"push {repository} {branch} {commit} diff={change_set.diff_hash}"
-        approval = self.database.get_approval(approval_id)
-        if approval.action != action:
-            raise GitHubPublicationError("approval does not match the target commit or diff")
-        return self.external.execute(
-            approval_id,
+        return self.external.propose(
+            change_set.mission_id,
+            kind=ExternalActionKind.PUSH,
+            target=repository,
+            description=action,
+            risk=ExternalActionRisk.REMOTE_MUTATION,
+            approval_level=ApprovalLevel.CONFIRM,
             idempotency_key=idempotency_key,
-            action=lambda: self.github.push("origin", branch),
+            payload={"branch": branch, "commit": commit, "diff_hash": change_set.diff_hash},
+            expected_state={"branch": branch, "sha": commit},
+        )
+
+    def push(
+        self,
+        action_id: UUID,
+        target: ProjectTarget,
+        change_set: ChangeSet,
+    ) -> dict[str, Any]:
+        repository, branch, commit = self._require_target(target, change_set)
+        proposed = self.database.get_external_action(action_id)
+        if proposed.expected_state != {"branch": branch, "sha": commit}:
+            raise GitHubPublicationError("approval does not match the target commit or diff")
+        observation = self.external.execute(
+            action_id,
+            executor=lambda _key: {"output": self.github.push("origin", branch)},
+            observer=lambda _result: self._observe_push(repository, branch, commit),
+        )
+        return observation.actual_state
+
+    def _observe_push(self, repository: str, branch: str, commit: str) -> ObservedExternalResult:
+        remote_sha = self.github.branch_sha(repository, branch)
+        return ObservedExternalResult(
+            actual_state={"branch": branch, "sha": remote_sha},
+            matches_expected=remote_sha == commit,
+            source_uri=f"https://github.com/{repository}/tree/{branch}",
+            summary=(
+                "remote branch matches the validated local commit"
+                if remote_sha == commit
+                else f"remote SHA {remote_sha} does not match expected {commit}"
+            ),
         )
 
     def request_pull_request(
@@ -68,50 +102,79 @@ class GitHubPublicationService:
         change_set: ChangeSet,
         *,
         title: str,
-    ) -> Approval:
+        idempotency_key: str,
+    ) -> ProposedExternalAction:
         repository, branch, commit = self._require_target(target, change_set)
         action = (
             f"pull_request {repository} {branch}->{target.default_branch} "
             f"{commit} diff={change_set.diff_hash} title={title}"
         )
-        return self.external.request(change_set.mission_id, action, ApprovalLevel.CONFIRM)
+        return self.external.propose(
+            change_set.mission_id,
+            kind=ExternalActionKind.PULL_REQUEST,
+            target=repository,
+            description=action,
+            risk=ExternalActionRisk.REMOTE_MUTATION,
+            approval_level=ApprovalLevel.CONFIRM,
+            idempotency_key=idempotency_key,
+            payload={"head": branch, "base": target.default_branch, "title": title},
+            expected_state={"head": branch, "base": target.default_branch, "state": "open"},
+        )
 
     def create_pull_request(
         self,
-        approval_id: UUID,
+        action_id: UUID,
         target: ProjectTarget,
         change_set: ChangeSet,
         *,
         title: str,
         body: str,
-        idempotency_key: str,
     ) -> dict[str, Any]:
         repository, branch, commit = self._require_target(target, change_set)
         action = (
             f"pull_request {repository} {branch}->{target.default_branch} "
             f"{commit} diff={change_set.diff_hash} title={title}"
         )
-        approval = self.database.get_approval(approval_id)
-        if approval.action != action:
+        proposed = self.database.get_external_action(action_id)
+        if proposed.description != action:
             raise GitHubPublicationError("approval does not match the requested pull request")
-        result = self.external.execute(
-            approval_id,
-            idempotency_key=idempotency_key,
-            action=lambda: json.dumps(
-                self.github.create_pull_request(
-                    repository,
-                    head=branch,
-                    base=target.default_branch,
-                    title=title,
-                    body=body,
-                ),
-                sort_keys=True,
+        observation = self.external.execute(
+            action_id,
+            executor=lambda _key: self.github.create_pull_request(
+                repository,
+                head=branch,
+                base=target.default_branch,
+                title=title,
+                body=body,
+            ),
+            observer=lambda result: self._observe_pull_request(
+                repository, result, branch, target.default_branch
             ),
         )
-        try:
-            value = json.loads(result)
-        except json.JSONDecodeError as exc:
-            raise GitHubPublicationError("GitHub PR result was not JSON") from exc
-        if not isinstance(value, dict):
-            raise GitHubPublicationError("GitHub PR result was not an object")
-        return value
+        return observation.actual_state
+
+    def _observe_pull_request(
+        self,
+        repository: str,
+        result: Any,
+        head: str,
+        base: str,
+    ) -> ObservedExternalResult:
+        if not isinstance(result, dict) or not isinstance(result.get("number"), int):
+            raise GitHubPublicationError("GitHub PR result omitted its number")
+        actual = self.github.pull_request(repository, result["number"])
+        matches = (
+            actual.get("head") == head
+            and actual.get("base") == base
+            and actual.get("state") == "open"
+        )
+        return ObservedExternalResult(
+            actual_state=actual,
+            matches_expected=matches,
+            source_uri=str(actual.get("url") or f"https://github.com/{repository}/pulls"),
+            summary=(
+                "pull request is open with the approved head and base"
+                if matches
+                else "observed pull request does not match the approved head/base state"
+            ),
+        )

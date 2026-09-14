@@ -159,6 +159,32 @@ class ApprovalStatus(StrEnum):
     EXPIRED = "EXPIRED"
 
 
+class ExternalActionKind(StrEnum):
+    PUSH = "push"
+    PULL_REQUEST = "pull_request"
+    DEPLOY = "deploy"
+    AGENT_INDEX_UPDATE = "agent_index_update"
+    VERIFICATION_REQUEST = "verification_request"
+    FINAL_SUBMISSION = "final_submission"
+
+
+class ExternalActionRisk(StrEnum):
+    REMOTE_MUTATION = "REMOTE_MUTATION"
+    PRODUCTION_MUTATION = "PRODUCTION_MUTATION"
+    ACCOUNT_MUTATION = "ACCOUNT_MUTATION"
+    IRREVERSIBLE_SUBMISSION = "IRREVERSIBLE_SUBMISSION"
+
+
+class ExternalActionStatus(StrEnum):
+    PROPOSED = "PROPOSED"
+    APPROVED = "APPROVED"
+    DENIED = "DENIED"
+    EXECUTING = "EXECUTING"
+    EXECUTED = "EXECUTED"
+    VERIFIED = "VERIFIED"
+    FAILED = "FAILED"
+
+
 class Criterion(Contract):
     name: str
     description: str = ""
@@ -722,6 +748,40 @@ class Approval(Contract):
     requested_at: datetime = Field(default_factory=utcnow)
     decided_at: datetime | None = None
     decision_note: str | None = None
+
+
+class ProposedExternalAction(Contract):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    kind: ExternalActionKind
+    target: str
+    description: str
+    risk: ExternalActionRisk
+    approval_level: ApprovalLevel
+    idempotency_key: str = Field(min_length=1)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    expected_state: dict[str, Any] = Field(default_factory=dict)
+    approval_id: UUID
+    status: ExternalActionStatus = ExternalActionStatus.PROPOSED
+    execution_result: dict[str, Any] | None = None
+    last_error: str | None = None
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
+
+
+class ObservedExternalResult(Contract):
+    actual_state: dict[str, Any]
+    matches_expected: bool
+    source_uri: str
+    summary: str
+    observed_at: datetime = Field(default_factory=utcnow)
+
+
+class ExternalActionObservation(ObservedExternalResult):
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    action_id: UUID
+    evidence_id: UUID
 
 
 class DebateRecord(Contract):

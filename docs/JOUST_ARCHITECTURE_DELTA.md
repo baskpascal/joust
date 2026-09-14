@@ -31,7 +31,7 @@ expired, user-stopped, or irrecoverably blocked.
 
 | Joust requirement | Current implementation evidence | Status |
 |---|---|---|
-| Control plane | SQLite mission state, deterministic transitions, DAG, evidence, decisions, rules, compliance, approvals | PRESENT |
+| Control plane | SQLite mission state, deterministic transitions, DAG, evidence, decisions, rules, compliance, and durable proposed/approved/observed external actions | PRESENT |
 | Execution plane | `ProjectTarget`, safe filesystem/shell/Git, coding-command handoff, build/repair/reproduction, GitHub adapter | PRESENT (local) |
 | Observation plane | Durable observations capture deadline, active rules, local Git SHA/dirty state, build/change status, structured Agent Index score signals, GitHub checks, deployment health, and live official-page snapshots with non-visible HTML removed | PARTIAL (deployment/submission adapters remain) |
 | Real project | Mission branch, commit, diff hash, explicit checks, actual-file review, clean-clone reproduction | PRESENT (local E2E) |
@@ -46,6 +46,7 @@ expired, user-stopped, or irrecoverably blocked.
 | EntrantProfile | Persisted reusable profile with GitHub/Discord/platform identities, mission attachment, export, and CLI entrypoint | PRESENT |
 | ProjectTarget fields | Owner/name, dev/lint commands, deployment requirement/target, and base/final commit SHA extend the existing mandatory target boundary | PRESENT |
 | GitHub runtime | Runtime authentication persists in the Hermes volume; preflight observes the authenticated account, canonical repository, push permission, default-branch protection, open PRs, checks, and Actions state | PRESENT (read-only live evidence; mutation unrehearsed) |
+| External-action verification | Push, PR, deploy, Agent Index update, verification request, and final submission share a durable proposal, approval, idempotent execution, remote observation, and evidence contract; GitHub push/PR observers verify SHA or PR state | PRESENT (contract and deterministic tests; live mutation unrehearsed) |
 | Hermes model-backed coding | `HermesImplementer` completed a live model-backed action, created three project files, passed 16 generated tests, committed, and reproduced from a clean clone | PRESENT (live local E2E) |
 | Real research action | `RESEARCH` fetches bounded official URLs, removes script/style content, persists source evidence, and fails if no readable evidence exists; `CUSTOM` cannot claim research | PRESENT (live official pages) |
 | Planner resilience | Hermes planning runs without project rules/tools/plugins, has a 60-second bound, sees recent outcomes/project summary, and falls back to a deterministic safe action | PRESENT (live timeout/fallback) |
