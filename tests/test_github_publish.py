@@ -1,7 +1,11 @@
 import pytest
 
 from hackathon_competitor.approvals import ApprovalRequired
-from hackathon_competitor.github_publish import GitHubPublicationError, GitHubPublicationService
+from hackathon_competitor.github_publish import (
+    GitHubPublicationError,
+    GitHubPublicationService,
+    GitHubRepositoryService,
+)
 from hackathon_competitor.models import (
     ApprovalStatus,
     ChangeSet,
@@ -16,6 +20,18 @@ class FakeGitHub:
     def __init__(self):
         self.pushes = []
         self.pull_requests = []
+        self.created_repositories = []
+
+    def create_repository(self, repository, *, visibility):
+        self.created_repositories.append((repository, visibility))
+        return self.repository(repository)
+
+    def repository(self, repository):
+        return {
+            "nameWithOwner": repository,
+            "visibility": "PUBLIC",
+            "url": f"https://github.com/{repository}",
+        }
 
     def push(self, remote, branch):
         self.pushes.append((remote, branch))
@@ -80,7 +96,7 @@ def test_github_publish_requires_matching_explicit_approval(tmp_path):
     assert decided.status == ApprovalStatus.GRANTED
     assert service.push(action.id, target, change_set)["sha"] == "commit"
     assert service.push(action.id, target, change_set)["sha"] == "commit"
-    assert github.pushes == [("origin", "joust/mission")]
+    assert github.pushes == [("owner/project", "joust/mission")]
 
 
 def test_github_publish_rejects_default_branch_and_mismatched_pr(tmp_path):
@@ -128,3 +144,25 @@ def test_pull_request_success_requires_observed_remote_state(tmp_path):
     assert github.pull_requests == [
         ("owner/project", "joust/mission", "main", "Build slice", "body")
     ]
+
+
+def test_repository_creation_is_approved_initialized_and_observed(tmp_path):
+    database, target, _ = _setup(tmp_path)
+    github = FakeGitHub()
+    service = GitHubRepositoryService(database, github)
+    action = service.request_creation(
+        target.mission_id,
+        repository="owner/joust-entry",
+        visibility="public",
+        initial_branch="main",
+        initial_sha="commit",
+        idempotency_key="repo-create-1",
+    )
+    service.external.approvals.decide(action.approval_id, granted=True, explicit_confirmation=True)
+
+    result = service.create(action.id)
+
+    assert result["repository"] == "owner/joust-entry"
+    assert result["sha"] == "commit"
+    assert github.created_repositories == [("owner/joust-entry", "public")]
+    assert github.pushes == [("https://github.com/owner/joust-entry.git", "main")]

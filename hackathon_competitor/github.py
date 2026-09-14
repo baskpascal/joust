@@ -15,6 +15,7 @@ class GitHubError(RuntimeError):
 
 class GitHubTool(Protocol):
     def repository(self, repository: str) -> dict[str, Any]: ...
+    def create_repository(self, repository: str, *, visibility: str) -> dict[str, Any]: ...
     def clone(self, repository: str, destination: str) -> str: ...
     def create_branch(self, repository: str, branch: str, base: str) -> str: ...
     def push(self, remote: str, branch: str) -> str: ...
@@ -45,11 +46,36 @@ class GitHubCliAdapter:
 
     def repository(self, repository: str) -> dict[str, Any]:
         value = self._gh_json(
-            ["repo", "view", repository, "--json", "nameWithOwner,defaultBranchRef,url"]
+            [
+                "repo",
+                "view",
+                repository,
+                "--json",
+                "nameWithOwner,defaultBranchRef,url,visibility",
+            ]
         )
         if not isinstance(value, dict):
             raise GitHubError("repository lookup returned a non-object")
         return value
+
+    def create_repository(self, repository: str, *, visibility: str) -> dict[str, Any]:
+        if visibility not in {"public", "private", "internal"}:
+            raise ValueError("repository visibility must be public, private, or internal")
+        if not repository.strip() or repository.startswith("-"):
+            raise ValueError("invalid GitHub repository")
+        self.shell.run(
+            [
+                "gh",
+                "repo",
+                "create",
+                repository,
+                f"--{visibility}",
+                "--description",
+                "Joust competition entry and verified remote-action rehearsal",
+            ],
+            timeout_seconds=120,
+        )
+        return self.repository(repository)
 
     def clone(self, repository: str, destination: str) -> str:
         if not repository.strip() or not destination.strip():

@@ -160,6 +160,7 @@ class ApprovalStatus(StrEnum):
 
 
 class ExternalActionKind(StrEnum):
+    REPOSITORY_CREATE = "repository_create"
     PUSH = "push"
     PULL_REQUEST = "pull_request"
     DEPLOY = "deploy"
