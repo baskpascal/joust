@@ -8,6 +8,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
 from uuid import UUID
 
@@ -101,6 +102,26 @@ def _parse_command_vectors(values: list[str]) -> list[list[str]]:
             raise ValueError("command must be a non-empty JSON list of non-empty strings")
         commands.append(parsed)
     return commands
+
+
+def credential_candidates(
+    repository_root: Path,
+    environment: Mapping[str, str] | None = None,
+) -> list[Path]:
+    """Where the Plow token may live, most specific first.
+
+    PLOW_CREDENTIALS_PATH is what Compose mounts, so it is what the doctor must
+    inspect. Without it, a checkout on a filesystem that cannot hold POSIX
+    modes would keep failing this check while the token the container actually
+    reads is correctly protected somewhere else.
+    """
+
+    values = environment if environment is not None else os.environ
+    configured = values.get("PLOW_CREDENTIALS_PATH", "").strip()
+    candidates = [Path(configured)] if configured else []
+    candidates.append(repository_root / "plow-credentials")
+    candidates.append(Path("/var/lib/plow/credentials"))
+    return candidates
 
 
 def credential_check(candidates: list[Path]) -> dict[str, object]:
@@ -214,9 +235,7 @@ def doctor(home: Path | None = None) -> tuple[dict[str, dict[str, object]], bool
     else:
         checks["agent_index_client_smoke"] = {"ok": True, "available": False}
 
-    checks["credentials"] = credential_check(
-        [repo_root / "plow-credentials", Path("/var/lib/plow/credentials")]
-    )
+    checks["credentials"] = credential_check(credential_candidates(repo_root))
     healthy = all(check["ok"] for check in checks.values())
     return checks, healthy
 

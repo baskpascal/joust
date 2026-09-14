@@ -54,3 +54,21 @@ def test_runtime_marker_requires_a_nonempty_regular_file(tmp_path):
     marker.write_text("configured")
     assert _runtime_marker_present(marker)
     assert not _runtime_marker_present(Path(tmp_path))
+
+
+def test_configured_credential_path_is_inspected_first(tmp_path):
+    from hackathon_competitor.cli import credential_candidates
+
+    configured = tmp_path / "elsewhere" / "plow-credentials"
+    candidates = credential_candidates(
+        tmp_path, environment={"PLOW_CREDENTIALS_PATH": str(configured)}
+    )
+    assert candidates[0] == configured
+    assert candidates[1] == tmp_path / "plow-credentials"
+
+    # An unset or blank variable must not inject a bogus first candidate.
+    assert credential_candidates(tmp_path, environment={})[0] == tmp_path / "plow-credentials"
+    assert (
+        credential_candidates(tmp_path, environment={"PLOW_CREDENTIALS_PATH": "  "})[0]
+        == tmp_path / "plow-credentials"
+    )
