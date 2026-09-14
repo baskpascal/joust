@@ -493,8 +493,17 @@ class RealBuildLoop:
         git_workspace = GitWorkspace(root, environment=environment)
         git_workspace.initialize(default_branch=target.default_branch)
         git = LocalGitTool(root, shell=git_workspace.shell)
-        if git.changed_files():
-            raise BuildLoopError("project workspace is dirty; refusing to overwrite user changes")
+        dirty = git.changed_files()
+        if dirty:
+            # Naming the files matters: the usual cause is the project's own
+            # test run writing output it does not ignore, which otherwise
+            # deadlocks every later cycle with nothing to act on.
+            listed = ", ".join(sorted(dirty)[:10])
+            more = f" (+{len(dirty) - 10} more)" if len(dirty) > 10 else ""
+            raise BuildLoopError(
+                "project workspace is dirty; refusing to overwrite user changes. "
+                f"Commit or ignore these first: {listed}{more}"
+            )
         try:
             base_sha = git.current_revision()
         except RuntimeError:

@@ -88,3 +88,26 @@ def test_a_failed_install_stops_immediately(tmp_path):
     assert "[install]" in failure
     assert "[test]" not in failure
     assert [run.phase for run in database.list_build_runs(target.mission_id)] == ["install"]
+
+
+def test_a_dirty_workspace_says_which_files_are_blocking(tmp_path):
+    """The usual cause is the project's own test output, which it does not ignore."""
+
+    import pytest
+
+    from hackathon_competitor.build_loop import BuildLoopError, ClaudeCodeImplementer
+
+    project = tmp_path / "project"
+    project.mkdir()
+    loop, _ = _loop(tmp_path)
+    target = _target(project, {"test_commands": [["python3", "-c", "print(1)"]]})
+    workspace = GitWorkspace(project)
+    workspace.initialize(default_branch="main")
+    (project / "keep.txt").write_text("x", encoding="utf-8")
+    workspace.checkpoint("seed")
+    (project / "generated-output.csv").write_text("1,2\n", encoding="utf-8")
+
+    with pytest.raises(BuildLoopError) as caught:
+        loop.run(target, "spec", ClaudeCodeImplementer())
+
+    assert "generated-output.csv" in str(caught.value)
