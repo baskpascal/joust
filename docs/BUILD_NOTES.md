@@ -1,5 +1,30 @@
 # Build notes
 
+## 2026-09-14 — The install path gets a face, and the knights do not ship
+
+The freeze was reopened once, deliberately, before the handoff was delivered.
+Verification means the hosts install and run this repository, so the README is
+part of what gets reviewed, and it was still opening on a wall of developer
+commands with no statement of what Joust does. Candidate
+`a82e28b81bb9446a010e33f6987ffb99b0abd05b` publishes the rewritten README and a
+generated pixel-art identity, and was validated the way a host meets it: cloned
+from the install URL, HEAD matching, doctor healthy, full suite green, hero
+image present. The four superseded proposals are denied, one is live, and the
+freeze is back on.
+
+The art is generated rather than hand-exported. `build_marks.py` redraws the
+artboards from pixel maps and `render_marks.mjs` captures the PNGs through a
+scripted Chromium with an explicit clip, because window-geometry screenshots
+silently cropped a quarter off the bottom of the first attempt.
+
+Mounted knights at the tilt were attempted and abandoned after three passes.
+The horses would not read: the barrel rendered as a flat slab, and raising the
+neck to separate the head from the body turned it into a club. Rendering each
+pass and looking at it is what made that obvious, and shipping the result would
+have put weak art on the page a reviewer opens. The heraldic crest carries the
+identity on its own, so the knight sprite was removed rather than published at
+that quality. It remains an open thread, not a blocker.
+
 ## 2026-09-14 — One candidate SHA, and a monitor that knows it cannot read
 
 Verification installs and runs this repository once, so the entry now holds one
