@@ -1,5 +1,56 @@
 # Build notes
 
+## 2026-09-14 — Reading competitions Joust had never seen
+
+The claim that Joust can enter any competition had only ever been exercised
+against the Plow hackathon and against local fixtures. Pointing the intake at
+four live, unrelated competitions broke it four different ways.
+
+Every Devpost host answered with nothing at all: `urllib` sends no `Accept`
+header, and the front door replies `HTTP 202` with an empty body to a request
+that asks for nothing. `SourceFetcher` handed that empty string on, the parser
+found no rules in it, and the mission failed with "rules lock requires at least
+three official rule records" — a sentence that blames the competition for
+Joust's own blindness. The fetcher now sends `Accept: */*`, the same thing any
+plain HTTP client sends, and it raises a typed `SourceUnreadable` carrying a
+reason (`http_status`, `empty_body`, `bot_challenge`, `unreachable`,
+`too_large`, `no_extractable_text`) instead of returning a page nobody read.
+A source that could not be read is unreadable, never ruleless.
+
+The first challenge detector was worse than none. Matching the AWS WAF cookie
+helper classified the complete 120KB `agentsforhumans.devpost.com/rules` page
+as an interstitial, because real pages embed that script too. Challenge markers
+are now specific to challenge documents and only apply below 20KB, where a stub
+lives and a rules page does not.
+
+Kaggle's competition rules render client-side: the served HTML carries 47
+characters of visible text. That is a real boundary and it is reported as one —
+`no_extractable_text` — rather than as a competition without rules.
+
+Deadlines were the last gap. Typed deadline extraction needed a JSON-LD event
+to supply a reference year, and Devpost publishes neither. But these hosts
+state the date in full: "Submission Period: Monday, August 10, 2026 (9:00 am
+Pacific Time) – Monday, September 14, 2026 (5:00 pm Pacific Time)". Full dates
+are now read without a reference year, the closing date of a stated period is
+taken as the deadline, and named zones ("Pacific Time") resolve alongside
+abbreviations. A date published without a time or without a zone is recorded as
+uncertainty rather than guessed.
+
+Observed after the repair, against live hosts on 2026-09-14:
+
+| Source | Result |
+|---|---|
+| `revenuecat-shipaton-2026.devpost.com/rules` | spec locked; 137 evidence records; deadline `2026-09-30T23:45:00-07:00` |
+| `agentsforhumans.devpost.com/rules` | spec locked; 55 evidence records; deadline `2026-09-14T17:00:00-07:00` |
+| `amazonappdev2026.devpost.com/rules` | spec locked; 66 evidence records; deadline `2026-10-23T12:00:00-07:00` |
+| `aiworthusing.com/agent-index` | spec locked; 6 evidence records; deadline absent, not invented |
+| `kaggle.com/competitions/.../rules` | `UNREADABLE: no_extractable_text` |
+
+The three extracted deadlines agree with the independently published
+`devpost.com/api/hackathons` submission periods. `tests/test_source_intake.py`
+holds one regression per defect, including the false positive. The suite is 192
+tests and passes with Ruff clean.
+
 ## 2026-09-14 — Looking at the README instead of shipping it
 
 Several candidates went out carrying a README nobody had looked at. Markdown
