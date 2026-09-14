@@ -1,5 +1,38 @@
 # Build notes
 
+## 2026-09-14 — The Plow toolset was never connected, and nothing said so
+
+The live container had been reporting healthily to the Agent Index for
+seventeen hours — `200 {'ok': True, 'agent_id': 'galahad-hackathon', 'days': 2,
+'rows': 4}` every five minutes — while carrying this beside it, at the same
+interval, since the moment it booted:
+
+```text
+WARNING tools.mcp_tool: MCP server 'plow' failed initial connection after 3
+attempts, parking until a reconnect is requested (state: connecting → parked):
+MCPError: Server returned an error response
+```
+
+Reporting is not reachability. A rebuild from the current tree reproduced it on
+a fresh boot with a freshly read credential, so it is not a stale container.
+Asking the relay directly, from inside the container and with the agent's own
+token, named the condition:
+
+```text
+POST $PLOW_MCP_URL  ->  401 {"detail":"Missing or invalid Authorization header"}   (no token)
+POST $PLOW_MCP_URL  ->  503 {"detail":"Device is not connected"}                   (agent token)
+```
+
+The token authenticates. `api.plow.co` reports that the device behind the
+minted line is not connected, which is state on Plow's side, not in this
+repository. Until it is connected, the Plow toolset stays parked and the
+product's first-use sentence — send a competition URL in Plow Chat and say
+`Joust it.` — has nothing to run on. That is an external blocker, recorded as
+one, and it is the most plausible reason an installer would conclude nothing
+happened.
+
+The agent-index reporter is unaffected and continues to report truthfully.
+
 ## 2026-09-14 — Three people tried to install Joust and none of them got it running
 
 The Agent Index reports installs, and reading
