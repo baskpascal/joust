@@ -1,124 +1,165 @@
-# Joust
+<p align="center">
+  <img src="docs/brand/joust-hero.png" alt="Joust — a persistent autonomous competition agent" width="100%">
+</p>
 
-Joust is an evidence-first Hermes agent that helps a team understand,
-research, plan, build, attack, repair, and package a hackathon entry.
+Give Joust a competition. It reads the rules, picks a way to win, builds a real
+entry, tests it, diagnoses its own failures and repairs them, publishes the
+result, then keeps watching the competition and improving until the deadline.
 
-Its promise is simple: **give it a hackathon; it tries to win it.**
+```text
+https://some-competition.example
 
-## Architecture
-
-This repository is a Plow agent variant. It builds from the immutable official
-`plow-hermes-agent` image and owns only Joust's persona, skills, deterministic
-mission kernel, tests, docs, and Agent Index reporter. Generic Hermes/Plow
-runtime behavior is not forked here.
-
-Mission state is persisted in SQLite. Artifacts are written to the filesystem.
-State transitions and DAG scheduling are deterministic code; model-backed
-capabilities must return schema-validated data before they may influence state.
-
-## Developer quick start
-
-Requirements: Python 3.11+ and Pydantic 2.x.
-
-```bash
-python -m hackathon_competitor.cli db migrate
-python -m hackathon_competitor.cli mission create --url tests/fixtures/hackathon/official.html
-python -m hackathon_competitor.cli mission resume <mission-id>
-python -m hackathon_competitor.cli mission show <mission-id>
-python -m hackathon_competitor.cli mission refresh-rules <mission-id> --url <official-url>
-python -m hackathon_competitor.cli mission attach-project <mission-id> \
-  --path <project-dir> --mode existing_repo \
-  --test-command '["python","-m","pytest","-q"]'
-python -m hackathon_competitor.cli mission build-project <mission-id> \
-  --implementation-command '["codex","exec","--full-auto"]' \
-  --max-repairs 0
-python -m hackathon_competitor.cli mission build-project <mission-id> \
-  --hermes --max-repairs 1
-python -m hackathon_competitor.cli mission prepare-project-submission <mission-id>
-python -m hackathon_competitor.cli doctor
+Joust it.
 ```
 
-`attach-project` keeps the competition source and the project repository as
-separate mission objects. Build, test, and install commands are explicit JSON
-argv lists; they are executed without shell expansion. `build-project` runs a
-mission branch, records the implementation commit and build logs, and repeats
-the checks from a clean clone. Project subprocesses receive a reduced
-non-secret environment; use repeatable `--environment-name NAME` only for an
-explicitly approved, non-sensitive variable. It never pushes or opens a pull
-request; use the approval-bound GitHub publication service for those external
-actions.
+Joust is a Hermes agent that runs on Plow. It is **evidence-first**: no step
+reports success on a claim, only on an observed result. A build passes because
+a recorded `BuildRun` exited zero; a branch is pushed because the remote SHA was
+read back and matched; an agent is Verified because the public record says so.
+Anything Joust cannot observe stays `UNVERIFIED` rather than becoming a pass.
 
-`--hermes` uses Hermes one-shot mode as the trusted coding process. Model
-credentials are available only to Hermes; target install/lint/build/test/run
-commands continue to receive the reduced non-secret project environment.
+## The compete loop
 
-After a validated target build, `prepare-project-submission` generates a pack
-whose repository, branch, commit SHA, diff hash, and reproduction evidence are
-all bound to that target. The V0 Joust demo pack cannot stand in for this
-target-bound pack.
+A Mission is the root object, not a codebase. It keeps running after a
+submission is published, because publishing is an event in a competition, not
+the end of one.
 
-Use `HACKATHON_COMPETITOR_HOME` to override the default local state directory.
+```text
+observe → assess → strategize → execute → verify → measure → adapt ─┐
+   ^                                                                │
+   └────────────────────────────────────────────────────────────────┘
+```
 
-## Run on Plow
+The loop ends only when the mission is completed, expired, stopped by its
+operator, or irrecoverably blocked.
 
-Requirements: Git, Docker, and Docker Compose v2. After cloning the repository,
-an optional standalone image build is:
+## What is actually wired
+
+| Capability | State |
+| --- | --- |
+| Competition research into versioned rules and signals | live, with source evidence and supersession |
+| Real target repository, mission branch, change sets | live, separate from Joust's own repository |
+| Build, test, failure analysis, automatic repair, commit | live, reproduced from a clean clone |
+| Authenticated GitHub observation and mutation | live: repository creation, push, and pull request |
+| Agent Index metrics, metadata, verification, submission | live reads; writes behind the approval contract |
+| Hosted deployment | prepared as an approval-bound handoff |
+
+Every remote mutation takes the same path, and none of it can shortcut to
+success:
+
+```text
+proposal → approval policy → idempotent execution → remote observation → evidence
+```
+
+An action waiting on somebody else rests in `AWAITING_EXTERNAL`, which is
+neither success nor failure. A source that could not be read is recorded as
+unreadable, never as unchanged.
+
+## Run it on Plow
+
+Requirements: Git, Docker, and Docker Compose v2. A standalone image build is
+optional:
 
 ```bash
 docker build -t joust-agent .
 ```
 
-1. Generate a line-scoped credential locally with the official helper:
+1. Mint a line-scoped credential with the official helper:
 
    ```bash
    git clone https://github.com/plow-pbc/plow-agents.git
    export PATH="$PWD/plow-agents/bin:$PATH"
    plow-agents login
-   # Send the printed activation phrase by SMS/iMessage, then:
+   # send the printed activation phrase by SMS/iMessage, then:
    plow-agents lines
    plow-agents mint <free-line-id>
    ```
 
-   `mint` writes `./plow-credentials`. Keep that file local; it contains the
-   Plow API token and is excluded from Git and Docker build context.
-2. Choose a stable Agent Index id, for example `galahad-hackathon`, and set
-   `AGENT_ID` to it. This is an operator-chosen identifier, not a value that
-   Plow supplies; keep it unchanged across restarts and registration.
-3. When the Verified program opens (September 14, 2026 per the organizer
-   update), request Verified for that Agent Index entry. Start with Docker
-   Compose using the command for your shell:
+   `mint` writes `./plow-credentials`. It holds a Plow API token: keep it local,
+   readable only by you, and out of Git and the Docker build context, where it
+   is already excluded.
+
+2. Choose a stable Agent Index id and set `AGENT_ID` to it. It is an
+   operator-chosen identifier that Plow does not supply, it is not the product
+   name, and it must not change across restarts or re-registration.
+
+3. Start it:
 
    ```bash
-   AGENT_ID=galahad-hackathon docker compose up --build -d
+   AGENT_ID=your-agent-id docker compose up --build -d
    ```
 
    ```powershell
-   $env:AGENT_ID = "galahad-hackathon"
+   $env:AGENT_ID = "your-agent-id"
    docker compose up --build -d
    ```
 
-   `.env.example` contains the same non-secret default if you prefer to copy
-   it to `.env`; never place the minted credential in `.env`.
+   `.env.example` carries the same non-secret defaults if you prefer a `.env`.
+   Never put the minted credential in it. Where a checkout cannot hold POSIX
+   modes — a Windows drive mounted under WSL, for instance — keep the credential
+   on a filesystem that can and point `PLOW_CREDENTIALS_PATH` at it.
 
-Final contest submission, legal attestations, public pushes, and production
-deployments are never performed by the local mission pipeline. They remain
-explicitly confirmation-gated actions.
+The image runs the official Agent Index client, pinned by commit and SHA-256,
+under `s6` every five minutes. It reports day and model token counts. Prompts,
+mission content, credentials and file paths are never sent.
 
-The image includes the official Agent Index client pinned by commit and
-SHA-256 and runs it under `s6` every five minutes. Credentials, prompts,
-mission content, and file paths are not sent by Joust's reporting service.
+## Working on it
 
-See [docs/SDD.md](docs/SDD.md), [docs/DECISIONS.md](docs/DECISIONS.md), and
-[docs/RUNBOOK.md](docs/RUNBOOK.md).
+Requirements: Python 3.11+ and Pydantic 2.x.
 
-## Public source bundle
+```bash
+python -m hackathon_competitor.cli doctor
+python -m hackathon_competitor.cli mission create --url <competition-url>
+python -m hackathon_competitor.cli mission attach-project <mission-id> \
+  --path <project-dir> --mode existing_repo \
+  --test-command '["python","-m","pytest","-q"]'
+python -m hackathon_competitor.cli mission build-project <mission-id> --hermes --max-repairs 1
+python -m hackathon_competitor.cli mission index-eligibility <mission-id> --agent <agent-id>
+```
 
-Create a reproducible ZIP from committed files only:
+`attach-project` keeps the competition source and the entry repository as
+separate mission objects; Joust's own repository is never implicitly the
+target. Build, test and install commands are explicit JSON argv lists, executed
+without shell expansion, and project subprocesses get a reduced, non-secret
+environment. `build-project` works on a mission branch, records the commit and
+the logs, and repeats the checks from a clean clone. It never pushes and never
+opens a pull request: those go through the approval-bound publication service.
+
+`just test`, `just lint`, `just doctor` and `just bundle` wrap the same things.
+`HACKATHON_COMPETITOR_HOME` overrides the local state directory.
+
+## Marks
+
+<p align="center">
+  <img src="docs/brand/joust-card.png" alt="The Joust crest: per pale crimson and azure, a lance in pale gold" width="620">
+</p>
+
+Per pale crimson and azure, a lance in pale gold. Every mark is drawn on a
+16-pixel grid and keeps its shape down to a favicon. The art is generated rather
+than hand-exported, so it is reproducible like everything else here:
+
+```bash
+python docs/brand/build_marks.py    # redraws the artboards from the pixel maps
+node docs/brand/render_marks.mjs    # captures the PNGs (needs a Chromium)
+```
+
+## Reading further
+
+[docs/SDD.md](docs/SDD.md) is the design document.
+[docs/JOUST_ARCHITECTURE_DELTA.md](docs/JOUST_ARCHITECTURE_DELTA.md) tracks what
+is built against it, [docs/BUILD_NOTES.md](docs/BUILD_NOTES.md) records why each
+piece came out the way it did, and [docs/RUNBOOK.md](docs/RUNBOOK.md) and
+[docs/DECISIONS.md](docs/DECISIONS.md) cover operation and the calls made along
+the way.
+
+Create a reproducible public archive from committed files:
 
 ```bash
 python -m hackathon_competitor.cli bundle --output dist/joust-public.zip
 ```
 
-The command validates required install files, MIT licensing, README markers,
-and the absence of credentials, databases, bytecode, and internal review
-metadata before returning the archive SHA-256.
+It refuses to produce one that is missing the install files or the MIT licence,
+or that carries credentials, databases, bytecode or internal review notes, and
+returns the archive's SHA-256.
+
+MIT licensed.

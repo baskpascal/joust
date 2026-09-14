@@ -11,3 +11,4 @@ plow-credentials
 dist/
 build/
 *.egg-info/
+docs/brand/shot-*.html
