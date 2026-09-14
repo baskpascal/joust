@@ -1,5 +1,38 @@
 # Build notes
 
+## 2026-09-14 — Rasterised silhouettes, and the entry repository goes private
+
+`baskpascal/joust-entry` is now private, observed as `private=true`. It was
+never a second product: the SDD forbids Joust treating its own repository as a
+mission target, so proving the external-action path needed an independent repo
+to act on. Joust created it, initialised `main`, pushed a mission branch and
+opened PR #1, and those three actions are recorded `VERIFIED`. The problem was
+that its `main` had been seeded from the Joust tree, so a stale second
+repository presenting itself as Joust sat on a public profile during the very
+week the hosts review it. The durable evidence does not depend on it being
+public.
+
+The mounted knights, abandoned twice, now work. The technique was the fault,
+not the subject. Hand-typing ASCII pixel maps produces rectangles, and a horse
+silhouette is overlapping organic masses — a rump, a barrel, a chest, a neck
+wedge — so typed cell by cell it came out as a slab, and raising the neck to
+separate the head only turned it into a club. The scene is rasterised instead:
+ellipses, polygons and thick segments snapped to the grid with no
+anti-aliasing. The outline comes out right on the first pass and the shading
+never had to exist, because the whole composition is silhouette against a sun.
+
+Three render passes fixed the rest. Both lances lay at the same shallow angle
+and merged into a single white rail across the image until the V was opened;
+the tilt sat in the foreground like a fence until it moved between the riders,
+which is what a tilt is; the riders were beheaded by the top of the grid; and
+the grip pennons were painted on top of the shields.
+
+Candidate `05c4b4aa1a02ced03af377a75b07443da6602d8a` carries the duel and the
+mark set in the README alongside the hero, still ninety-three lines, and was
+validated from the install URL: HEAD matching, doctor healthy, full suite
+green, all three images present. Six superseded proposals are denied; one is
+live.
+
 ## 2026-09-14 — A README you can finish, and a pixel identity that reads
 
 The README was rewritten down to a hero, a paragraph, three commands, and the
