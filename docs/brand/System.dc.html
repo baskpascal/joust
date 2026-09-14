@@ -1,0 +1,78 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&amp;family=Space+Grotesk:wght@500;700&amp;family=JetBrains+Mono:wght@700&amp;display=swap">
+  <style>
+    body { margin: 0; background: #F2E7D0; }
+    .display { font-family: 'Archivo Black', 'Helvetica Neue', Helvetica, sans-serif; }
+    .body { font-family: 'Space Grotesk', 'Helvetica Neue', Helvetica, sans-serif; }
+    .mono { font-family: 'JetBrains Mono', 'Courier New', monospace; }
+    .lbl { font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 12px; font-weight: 700;
+           letter-spacing: 2px; text-transform: uppercase; color: #100E18; opacity: 0.62; }
+    a { color: #E23140; } a:hover { color: #2B4FD9; }
+  </style>
+</helmet>
+
+<div style="width: 1240px; height: 720px; background: #F2E7D0; border: 9px solid #100E18; box-sizing: border-box; padding: 40px 44px; display: flex; flex-direction: column; gap: 30px">
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; border-bottom: 5px solid #100E18; padding-bottom: 18px">
+    <div class="display" style="font-size: 42px; color: #100E18; letter-spacing: -1.4px">THE SYSTEM</div>
+    <div class="body" style="font-size: 15px; font-weight: 500; color: #100E18; max-width: 540px; text-align: right; line-height: 1.6">Six tinctures, no gradients, no anti-aliasing. Depth comes from off-register plates — the pixel wordmark carries a red and a blue copy one pixel behind the black.</div>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 14px">
+    <div class="lbl">Tinctures</div>
+    <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px">
+      <div style="display: flex; flex-direction: column; gap: 9px">
+        <div style="height: 96px; background: #E23140; border: 4px solid #100E18"></div>
+        <div class="mono" style="font-size: 13px; font-weight: 700; color: #100E18">#E23140</div>
+        <div class="body" style="font-size: 13px; color: #100E18; opacity: 0.72">Lance red · the primary</div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 9px">
+        <div style="height: 96px; background: #F5B325; border: 4px solid #100E18"></div>
+        <div class="mono" style="font-size: 13px; font-weight: 700; color: #100E18">#F5B325</div>
+        <div class="body" style="font-size: 13px; color: #100E18; opacity: 0.72">Field gold · grounds and discs</div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 9px">
+        <div style="height: 96px; background: #2B4FD9; border: 4px solid #100E18"></div>
+        <div class="mono" style="font-size: 13px; font-weight: 700; color: #100E18">#2B4FD9</div>
+        <div class="body" style="font-size: 13px; color: #100E18; opacity: 0.72">Register blue · the offset plate</div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 9px">
+        <div style="height: 96px; background: #2C8C5A; border: 4px solid #100E18"></div>
+        <div class="mono" style="font-size: 13px; font-weight: 700; color: #100E18">#2C8C5A</div>
+        <div class="body" style="font-size: 13px; color: #100E18; opacity: 0.72">Vert · the fourth tincture</div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 9px">
+        <div style="height: 96px; background: #F2E7D0; border: 4px solid #100E18"></div>
+        <div class="mono" style="font-size: 13px; font-weight: 700; color: #100E18">#F2E7D0</div>
+        <div class="body" style="font-size: 13px; color: #100E18; opacity: 0.72">Paper · the ground</div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 9px">
+        <div style="height: 96px; background: #100E18; border: 4px solid #100E18"></div>
+        <div class="mono" style="font-size: 13px; font-weight: 700; color: #100E18">#100E18</div>
+        <div class="body" style="font-size: 13px; color: #100E18; opacity: 0.72">Keyline · every outline</div>
+      </div></div>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px">
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <div class="lbl">Type</div>
+      <div class="display" style="font-size: 46px; color: #100E18; letter-spacing: -1.6px; line-height: 1">Archivo Black</div>
+      <div class="body" style="font-size: 24px; font-weight: 700; color: #100E18">Space Grotesk · Drop a competition.</div>
+      <div class="mono" style="font-size: 18px; font-weight: 700; color: #100E18">JetBrains Mono · VERIFIED</div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <div class="lbl">Off-register wordmark</div>
+      <div style="border: 4px solid #100E18; padding: 22px 24px; display: flex; align-items: center; justify-content: center; background: #F2E7D0">
+        <svg viewBox="0 0 74 17" style="height: 92px; display: block; image-rendering: pixelated" shape-rendering="crispEdges" role="img" aria-label="JOUST"><rect x="9" y="2" width="3" height="12" fill="#2B4FD9"/><rect x="2" y="13" width="10" height="3" fill="#2B4FD9"/><rect x="2" y="10" width="3" height="6" fill="#2B4FD9"/><rect x="17" y="2" width="3" height="14" fill="#2B4FD9"/><rect x="25" y="2" width="3" height="14" fill="#2B4FD9"/><rect x="17" y="2" width="11" height="3" fill="#2B4FD9"/><rect x="17" y="13" width="11" height="3" fill="#2B4FD9"/><rect x="32" y="2" width="3" height="14" fill="#2B4FD9"/><rect x="40" y="2" width="3" height="14" fill="#2B4FD9"/><rect x="32" y="13" width="11" height="3" fill="#2B4FD9"/><rect x="47" y="2" width="11" height="3" fill="#2B4FD9"/><rect x="47" y="2" width="3" height="8" fill="#2B4FD9"/><rect x="47" y="7" width="11" height="3" fill="#2B4FD9"/><rect x="55" y="7" width="3" height="9" fill="#2B4FD9"/><rect x="47" y="13" width="11" height="3" fill="#2B4FD9"/><rect x="62" y="2" width="11" height="3" fill="#2B4FD9"/><rect x="66" y="2" width="3" height="14" fill="#2B4FD9"/><rect x="8" y="1" width="3" height="12" fill="#E23140"/><rect x="1" y="12" width="10" height="3" fill="#E23140"/><rect x="1" y="9" width="3" height="6" fill="#E23140"/><rect x="16" y="1" width="3" height="14" fill="#E23140"/><rect x="24" y="1" width="3" height="14" fill="#E23140"/><rect x="16" y="1" width="11" height="3" fill="#E23140"/><rect x="16" y="12" width="11" height="3" fill="#E23140"/><rect x="31" y="1" width="3" height="14" fill="#E23140"/><rect x="39" y="1" width="3" height="14" fill="#E23140"/><rect x="31" y="12" width="11" height="3" fill="#E23140"/><rect x="46" y="1" width="11" height="3" fill="#E23140"/><rect x="46" y="1" width="3" height="8" fill="#E23140"/><rect x="46" y="6" width="11" height="3" fill="#E23140"/><rect x="54" y="6" width="3" height="9" fill="#E23140"/><rect x="46" y="12" width="11" height="3" fill="#E23140"/><rect x="61" y="1" width="11" height="3" fill="#E23140"/><rect x="65" y="1" width="3" height="14" fill="#E23140"/><rect x="7" y="0" width="3" height="12" fill="#100E18"/><rect x="0" y="11" width="10" height="3" fill="#100E18"/><rect x="0" y="8" width="3" height="6" fill="#100E18"/><rect x="15" y="0" width="3" height="14" fill="#100E18"/><rect x="23" y="0" width="3" height="14" fill="#100E18"/><rect x="15" y="0" width="11" height="3" fill="#100E18"/><rect x="15" y="11" width="11" height="3" fill="#100E18"/><rect x="30" y="0" width="3" height="14" fill="#100E18"/><rect x="38" y="0" width="3" height="14" fill="#100E18"/><rect x="30" y="11" width="11" height="3" fill="#100E18"/><rect x="45" y="0" width="11" height="3" fill="#100E18"/><rect x="45" y="0" width="3" height="8" fill="#100E18"/><rect x="45" y="5" width="11" height="3" fill="#100E18"/><rect x="53" y="5" width="3" height="9" fill="#100E18"/><rect x="45" y="11" width="11" height="3" fill="#100E18"/><rect x="60" y="0" width="11" height="3" fill="#100E18"/><rect x="64" y="0" width="3" height="14" fill="#100E18"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,130 +1,209 @@
 import os
 import sys
 
+# Runs from anywhere; writes beside itself.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from pixel_marks import *  # noqa: F403,E402
-
-# Write beside this file, not into whatever directory it was run from.
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
+from marks import *  # noqa: E402,F403
 
-# --------------------------------------------------------------- Main hero
-W, H, HORIZON = 160, 48, 34
-p = DUSK
-r = sky(W, H, p, HORIZON)
-r += pennant(45, 11, 23, p) + pennant(141, 9, 25, p, flag=p["tincture"])
-r += barrier(0, HORIZON + 4, W, p)
-r += [(0, HORIZON + 10, W, 4, p["dirt"]), (0, HORIZON + 12, W, 2, p["dirt2"])]
-r += shield(13, 5, p)
-r += word(62, 12, p["gold"], shadow=p["ink"])
+INK, PAPER = "#100E18", "#F2E7D0"
+RED, GOLD, BLUE, GREEN = "#E23140", "#F5B325", "#2B4FD9", "#2C8C5A"
+STEEL, STEEL_D = "#A8B8D8", "#63739B"
 
-hero = f"""<div style="position: relative; width: 1280px; height: 384px; background: {p['sky0']}; overflow: hidden">
-  <div class="pixel" style="position: absolute; inset: 0">{svg(r, W, H)}</div>
-  <div class="type" style="position: absolute; left: 496px; top: 232px; color: {p['parch']}; font-size: 19px; letter-spacing: 1px">Drop a competition. Joust it.</div>
-  <div class="type" style="position: absolute; left: 497px; top: 60px; color: {p["steel"]}; font-size: 13px; letter-spacing: 3px">A PERSISTENT AUTONOMOUS COMPETITION AGENT</div>
-</div>"""
-artboard("Main.dc.html", 1280, 384, hero)
+FONT = ('<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&amp;'
+        'family=Space+Grotesk:wght@500;700&amp;family=JetBrains+Mono:wght@700&amp;display=swap">')
+CSS = """
+    body { margin: 0; background: %s; }
+    .display { font-family: 'Archivo Black', 'Helvetica Neue', Helvetica, sans-serif; }
+    .body { font-family: 'Space Grotesk', 'Helvetica Neue', Helvetica, sans-serif; }
+    .mono { font-family: 'JetBrains Mono', 'Courier New', monospace; }
+    .lbl { font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 12px; font-weight: 700;
+           letter-spacing: 2px; text-transform: uppercase; color: %s; opacity: 0.62; }
+    a { color: %s; } a:hover { color: %s; }
+""" % (PAPER, INK, RED, BLUE)
 
-# ---------------------------------------------------------- Agent Index card
-CW, CH, CHZ = 150, 75, 54
-r = sky(CW, CH, p, CHZ)
-r += pennant(16, 22, 32, p) + pennant(132, 20, 34, p, flag=p["tincture"])
-r += barrier(0, CHZ + 5, CW, p)
-r += [(0, CHZ + 12, CW, 5, p["dirt"]), (0, CHZ + 15, CW, 3, p["dirt2"])]
-r += shield(59, 6, p)
-r += word(int((CW - WORD_W) / 2), 50, p["gold"], shadow=p["ink"])
 
-card = f"""<div style="position: relative; width: 1200px; height: 600px; background: {p['sky0']}; overflow: hidden">
-  <div class="pixel" style="position: absolute; inset: 0">{svg(r, CW, CH)}</div>
-  <div class="type" style="position: absolute; left: 0; right: 0; top: 520px; text-align: center; color: {p['parch']}; font-size: 22px; letter-spacing: 1px">Drop a competition. Joust it.</div>
-</div>"""
-artboard("IndexCard.dc.html", 1200, 600, card)
+def board(path, inner):
+    open(path, "w", encoding="utf-8").write(
+        "<!doctype html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n"
+        "  <script src=\"./support.js\"></script>\n</head>\n<body>\n<x-dc>\n<helmet>\n  "
+        + FONT + "\n  <style>" + CSS + "  </style>\n</helmet>\n" + inner
+        + "\n</x-dc>\n</body>\n</html>\n")
 
-# ------------------------------------------------------------- Icon / crest set
-names = ["shield", "lance", "pennant", "helm", "barrier", "cup"]
-labels = {"shield": "crest", "lance": "lance", "pennant": "pennant",
-          "helm": "helm", "barrier": "tilt", "cup": "prize"}
+
+def helm(scale, *, steel=STEEL, crest=RED, crest2=GOLD, band=PAPER, style=""):
+    return svg(HELM, {"K": INK, "S": steel, "B": band, "E": INK, "c": crest, "d": crest2},
+               scale=scale, style=style, label="Joust helm")
+
+
+def shield(scale, field, charge, charge_colour, *, style=""):
+    s = svg(SHIELD, {"K": INK, "f": field}, scale=scale, label="shield")
+    c = svg(CHARGES[charge], {"g": charge_colour}, scale=scale,
+            style=" position: absolute; left: 0; top: %dpx;" % (scale * 3))
+    return (f'<div style="position: relative; width: {16 * scale}px;{style}">{s}{c}</div>')
+
+
+def icon(art, scale, extra=None):
+    ink = {"K": INK, "g": GOLD, "w": PAPER, "r": RED}
+    ink.update(extra or {})
+    return svg(art, ink, scale=scale)
+
+
+# ------------------------------------------------------------------- Main
+mark, _ = wordmark("JOUST", [(2, 2, BLUE), (1, 1, RED), (0, 0, INK)], h=150)
+board("Main.dc.html", f"""
+<div style="position: relative; width: 1280px; height: 420px; background: {PAPER}; border: 9px solid {INK}; box-sizing: border-box; overflow: hidden; display: flex; align-items: center; gap: 54px; padding: 0 56px">
+  <div style="position: relative; display: flex; flex-direction: column; gap: 26px; flex: 1">
+    {mark}
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <div class="body" style="font-size: 27px; font-weight: 700; color: {INK}">Drop a competition. Joust it.</div>
+      <div style="display: flex; align-items: center; gap: 12px">
+        <div style="width: 72px; height: 11px; background: {RED}; border: 3px solid {INK}; box-sizing: border-box"></div>
+        <div class="body" style="font-size: 15px; font-weight: 500; color: {INK}; letter-spacing: 3px; text-transform: uppercase">A persistent autonomous competition agent</div>
+      </div>
+    </div>
+  </div>
+  <div style="flex: none">{helm(13)}</div>
+</div>""")
+
+# ------------------------------------------------------------------- Card
+cmark, _ = wordmark("JOUST", [(2, 2, BLUE), (1, 1, RED), (0, 0, INK)], h=126)
+board("Card.dc.html", f"""
+<div style="position: relative; width: 1200px; height: 630px; background: {PAPER}; border: 10px solid {INK}; box-sizing: border-box; overflow: hidden; display: flex; align-items: center; gap: 56px; padding: 0 66px">
+  <div style="position: relative; flex: none; width: 294px; height: 336px">
+    <div style="position: absolute; left: -18px; top: 42px; width: 282px; height: 282px; border-radius: 50%; background: {GOLD}; border: 9px solid {INK}; box-sizing: border-box"></div>
+    <div style="position: absolute; left: 0; top: 0">{helm(14)}</div>
+  </div>
+  <div style="position: relative; display: flex; flex-direction: column; gap: 26px">
+    {cmark}
+    <div class="body" style="font-size: 29px; font-weight: 700; color: {INK}">Drop a competition. Joust it.</div>
+    <div style="display: flex; align-items: center; gap: 12px">
+      <div style="width: 72px; height: 11px; background: {RED}; border: 3px solid {INK}; box-sizing: border-box"></div>
+      <div class="body" style="font-size: 15px; font-weight: 500; color: {INK}; letter-spacing: 3px; text-transform: uppercase">Autonomous competition agent</div>
+    </div>
+  </div>
+</div>""")
+
+# ---------------------------------------------------------------- Knights
+KNIGHTS = [
+    ("WILLIAM MARSHAL", "c.1147 – 1219", GOLD, "pale", GREEN, RED, GOLD,
+     "Made his name on the Anglo-French tournament circuit, taking horses and ransoms; ended as regent of England."),
+    ("RICHARD I", "1157 – 1199", RED, "cross", GOLD, GOLD, PAPER,
+     "Tournaments were suppressed in England under the Norman kings. In 1194 he licensed them again, at five sites, for a fee."),
+    ("ULRICH VON LIECHTENSTEIN", "c.1200 – 1275", BLUE, "fleur", PAPER, PAPER, BLUE,
+     "Styrian knight and poet. His Frauendienst tells of riding a tournament tour of the south in costume."),
+    ("GEOFFROI DE CHARNY", "c.1300 – 1356", GREEN, "saltire", PAPER, PAPER, GREEN,
+     "Wrote the Book of Chivalry, the plainest account of what the tournament was for. Died carrying the royal standard at Poitiers."),
+]
+panels = "".join(f"""
+  <div style="display: flex; flex-direction: column; gap: 16px; border: 4px solid {INK}; background: {PAPER}; padding: 22px 20px">
+    <div style="display: flex; align-items: flex-end; gap: 16px; height: 156px">
+      <div style="flex: none">{helm(5, steel=STEEL, crest=cr, crest2=cr2)}</div>
+      <div style="flex: none">{shield(7, field, charge, cc)}</div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 7px">
+      <div class="display" style="font-size: 17px; color: {INK}; letter-spacing: -0.3px; line-height: 1.25">{name}</div>
+      <div class="mono" style="font-size: 12px; font-weight: 700; color: {RED}; letter-spacing: 1px">{dates}</div>
+    </div>
+    <div class="body" style="font-size: 13px; font-weight: 500; color: {INK}; line-height: 1.65; opacity: 0.84">{note}</div>
+  </div>"""
+  for name, dates, field, charge, cc, cr, cr2, note in KNIGHTS)
+board("Knights.dc.html", f"""
+<div style="width: 1240px; height: 600px; background: {PAPER}; border: 9px solid {INK}; box-sizing: border-box; padding: 40px 44px; display: flex; flex-direction: column; gap: 28px">
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; border-bottom: 5px solid {INK}; padding-bottom: 18px">
+    <div class="display" style="font-size: 42px; color: {INK}; letter-spacing: -1.4px">THE ROSTER</div>
+    <div class="body" style="font-size: 15px; font-weight: 500; color: {INK}; max-width: 560px; text-align: right; line-height: 1.6">Four real figures of the European tournament. The devices are drawn in the period idiom — they are Joust's marks, not reconstructions of anyone's blazon.</div>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px">{panels}</div>
+</div>""")
+
+# ------------------------------------------------------------------ Icons
+ICONS = [("HELM", None), ("LANCE", LANCE), ("SHIELD", "shield"), ("BARRIER", BARRIER),
+         ("PENNON", PENNON), ("CROSSED", CROSSED), ("CHAPLET", CHAPLET)]
 cells = []
-for n in names:
-    art = [(x, y, w, h, c) for x, y, w, h, c in ICONS[n](p)]
-    cells.append(f"""<div style="display: flex; flex-direction: column; align-items: center; gap: 14px">
-      <div class="pixel" style="width: 96px; height: 96px">{svg(art, 16, 16)}</div>
-      <div class="pixel" style="width: 32px; height: 32px">{svg(art, 16, 16)}</div>
-      <div class="type" style="color: {p['steel']}; font-size: 12px; letter-spacing: 2px">{labels[n].upper()}</div>
+for label, art in ICONS:
+    if art is None:
+        big, small = helm(5), helm(2)
+    elif art == "shield":
+        big, small = shield(6, RED, "cross", GOLD), shield(2, RED, "cross", GOLD)
+    else:
+        big, small = icon(art, 5), icon(art, 2)
+    cells.append(f"""
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 14px">
+      <div style="height: 120px; display: flex; align-items: center">{big}</div>
+      <div style="height: 48px; display: flex; align-items: center">{small}</div>
+      <div class="lbl">{label}</div>
     </div>""")
+board("Icons.dc.html", f"""
+<div style="width: 1240px; height: 460px; background: {PAPER}; border: 9px solid {INK}; box-sizing: border-box; padding: 40px 44px; display: flex; flex-direction: column; gap: 28px">
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; border-bottom: 5px solid {INK}; padding-bottom: 18px">
+    <div class="display" style="font-size: 42px; color: {INK}; letter-spacing: -1.4px">THE MARKS</div>
+    <div class="body" style="font-size: 15px; font-weight: 500; color: {INK}; max-width: 520px; text-align: right; line-height: 1.6">Every mark is drawn on a 16-pixel grid, shown here at 5× and at 2×. Nothing is anti-aliased; the pixel is the unit.</div>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 16px; align-items: start">{''.join(cells)}</div>
+</div>""")
 
-crest_big = svg(shield(0, 0, p), 32, 38)
-sheet = f"""<div style="width: 1040px; height: 560px; background: {p['sky0']}; padding: 44px 48px; box-sizing: border-box; display: flex; flex-direction: column; gap: 36px">
-  <div style="display: flex; align-items: center; gap: 28px">
-    <div class="pixel" style="width: 118px; height: 140px">{crest_big}</div>
-    <div style="display: flex; flex-direction: column; gap: 10px">
-      <div class="type" style="color: {p['gold']}; font-size: 26px; letter-spacing: 3px">JOUST MARKS</div>
-      <div class="type" style="color: {p['steel']}; font-size: 13px; letter-spacing: 1px; max-width: 520px; line-height: 1.9">Per pale crimson and azure, a lance in pale gold. Every mark is drawn on a 16&nbsp;pixel grid and keeps its shape down to a favicon.</div>
+# ----------------------------------------------------------------- System
+sw = "".join(f"""
+      <div style="display: flex; flex-direction: column; gap: 9px">
+        <div style="height: 96px; background: {hexv}; border: 4px solid {INK}"></div>
+        <div class="mono" style="font-size: 13px; font-weight: 700; color: {INK}">{hexv}</div>
+        <div class="body" style="font-size: 13px; color: {INK}; opacity: 0.72">{role}</div>
+      </div>"""
+  for hexv, role in [(RED, "Lance red · the primary"), (GOLD, "Field gold · grounds and discs"),
+                     (BLUE, "Register blue · the offset plate"), (GREEN, "Vert · the fourth tincture"),
+                     (PAPER, "Paper · the ground"), (INK, "Keyline · every outline")])
+board("System.dc.html", f"""
+<div style="width: 1240px; height: 720px; background: {PAPER}; border: 9px solid {INK}; box-sizing: border-box; padding: 40px 44px; display: flex; flex-direction: column; gap: 30px">
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; border-bottom: 5px solid {INK}; padding-bottom: 18px">
+    <div class="display" style="font-size: 42px; color: {INK}; letter-spacing: -1.4px">THE SYSTEM</div>
+    <div class="body" style="font-size: 15px; font-weight: 500; color: {INK}; max-width: 540px; text-align: right; line-height: 1.6">Six tinctures, no gradients, no anti-aliasing. Depth comes from off-register plates — the pixel wordmark carries a red and a blue copy one pixel behind the black.</div>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 14px">
+    <div class="lbl">Tinctures</div>
+    <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px">{sw}</div>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px">
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <div class="lbl">Type</div>
+      <div class="display" style="font-size: 46px; color: {INK}; letter-spacing: -1.6px; line-height: 1">Archivo Black</div>
+      <div class="body" style="font-size: 24px; font-weight: 700; color: {INK}">Space Grotesk · Drop a competition.</div>
+      <div class="mono" style="font-size: 18px; font-weight: 700; color: {INK}">JetBrains Mono · VERIFIED</div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 14px">
+      <div class="lbl">Off-register wordmark</div>
+      <div style="border: 4px solid {INK}; padding: 22px 24px; display: flex; align-items: center; justify-content: center; background: {PAPER}">
+        {wordmark("JOUST", [(2, 2, BLUE), (1, 1, RED), (0, 0, INK)], h=92)[0]}
+      </div>
     </div>
   </div>
-  <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 24px; align-items: start">
-    {''.join(cells)}
-  </div>
-  <div style="display: flex; gap: 14px; align-items: center">
-    {''.join(f'<div style="display:flex;flex-direction:column;gap:8px;align-items:center"><div style="width:56px;height:34px;background:{p[k]}"></div><div class="type" style="color:{p["steel2"]};font-size:10px">{k}</div></div>' for k in ["crimson","gold","sky1","parch","steel","field","dirt","ink"])}
-  </div>
-</div>"""
-artboard("Crests.dc.html", 1040, 560, sheet)
+</div>""")
 
-
-# ------------------------------------------------------------- direction sketches
-def sketch(path, palette, label, note, width, starry=True, counterchange=False):
-    q = palette
-    sw, sh, hz = 160, 50, 36
-    rr = sky(sw, sh, q, hz, starry=starry)
-    rr += barrier(0, hz + 5, sw, q)
-    rr += shield(13, 6, q, counterchange=counterchange)
-    rr += word(62, 14, q["gold"], shadow=q["ink"] if q is not PARCH else None)
-    body = f"""<div style="position: relative; width: {width}px; height: {int(width * sh / sw)}px; background: {q['sky0']}; overflow: hidden">
-      <div class="pixel" style="position: absolute; inset: 0">{svg(rr, sw, sh)}</div>
-      <div class="type" style="position: absolute; left: {int(width * 62 / sw)}px; top: {int(width * 32 / sw)}px; color: {q['parch']}; font-size: 13px; letter-spacing: 1px">Drop a competition. Joust it.</div>
-    </div>
-    <div style="width: {width}px; padding: 14px 2px 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 6px">
-      <div class="type" style="color: #8a8aa0; font-size: 13px; letter-spacing: 2px">{label}</div>
-      <div style="font-family: 'Courier New', monospace; color: #6f6f86; font-size: 12px; line-height: 1.6">{note}</div>
-    </div>"""
-    artboard(path, width, 0, f'<div style="background:#0e0d15;padding:20px;display:inline-block">{body}</div>')
-
-
-sketch("DirectionB.dc.html", PARCH, "B · TOURNAMENT ROLL",
-       "Two inks on parchment, like a heraldic roll of arms.<br>Reads on any background and prints flat.<br>Tradeoff: no night drama, and it can look dry beside<br>the coloured agent cards on the index.", 620,
-       starry=False, counterchange=True)
-sketch("DirectionC.dc.html", ARCADE, "C · ARCADE LISTS",
-       "NES palette, pure black ground, high-saturation.<br>Loudest at thumbnail size on a crowded index page.<br>Tradeoff: reads as a game, not as an agent that does<br>real engineering work.", 620)
-
-canvas = {
+import json
+json.dump({
     "artboards": [
-        {"file": "Main.dc.html", "x": 0, "y": 0, "w": 1280, "h": 384},
-        {"file": "IndexCard.dc.html", "x": 1400, "y": 0, "w": 1200, "h": 600},
-        {"file": "Crests.dc.html", "x": 0, "y": 520, "w": 1040, "h": 560},
-        {"file": "DirectionB.dc.html", "x": 0, "y": 1220, "w": 660, "h": 340},
-        {"file": "DirectionC.dc.html", "x": 780, "y": 1220, "w": 660, "h": 340},
+        {"file": "Main.dc.html", "x": 0, "y": 0, "w": 1280, "h": 420},
+        {"file": "Card.dc.html", "x": 1400, "y": 0, "w": 1200, "h": 630},
+        {"file": "Knights.dc.html", "x": 0, "y": 560, "w": 1240, "h": 600},
+        {"file": "Icons.dc.html", "x": 0, "y": 1360, "w": 1240, "h": 460},
+        {"file": "System.dc.html", "x": 0, "y": 1960, "w": 1240, "h": 720},
     ],
     "annotations": [
-        {"id": "brief", "x": 0, "y": -200, "w": 520,
-         "text": "JOUST — pixel-art identity\nDirection A (built): dusk tournament field, per-pale crest, hand-drawn pixel wordmark.\nB and C below are low-fi alternates. Say which one and I build the set in it."},
-        {"id": "hero-note", "x": 1400, "y": 700, "w": 420,
-         "text": "Hero is 1280x384 (10:3) for the README.\nCard is 1200x632 for the Agent Index and link previews.\nExport either as PNG from the artboard toolbar."},
+        {"id": "brief", "x": 0, "y": -200, "w": 560,
+         "text": "JOUST — pixel identity.\nChunky pixel art on a 16px grid, off-register plates, six tinctures.\nMain is the README hero at 1280x420."}
     ],
     "launch": {"view": "canvas"},
-}
-with open("canvas.json", "w", encoding="utf-8") as fh:
-    json.dump(canvas, fh, indent=2)
-print("artboards:", sorted(f for f in os.listdir('.') if f.endswith('.dc.html')))
+}, open("canvas.json", "w"), indent=2)
+print("built:", sorted(f for f in __import__("os").listdir(".") if f.endswith(".dc.html")))
 
 
-# Standalone pages the PNG renderer captures, so the exported images are
-# reproducible rather than hand-exported from a design tool.
+# Standalone pages the PNG renderer captures.
 import re as _re
 
 _css = _re.search(r"<style>(.*?)</style>", open("Main.dc.html", encoding="utf-8").read(), _re.S).group(1)
-_font = ('<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
-         'family=Silkscreen:wght@400;700&display=swap">')
-for _src, _out in (("Main.dc.html", "shot-hero.html"), ("IndexCard.dc.html", "shot-card.html")):
+_font = ('<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&'
+         'family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@700&display=swap">')
+for _src, _out in (("Main.dc.html", "shot-hero.html"), ("Card.dc.html", "shot-card.html")):
     _body = open(_src, encoding="utf-8").read().split("</helmet>")[1].split("</x-dc>")[0]
     with open(_out, "w", encoding="utf-8") as _fh:
         _fh.write(f'<!doctype html><meta charset="utf-8">{_font}'
