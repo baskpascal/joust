@@ -101,13 +101,19 @@
     Index actually stored, recording that published is not Verified.
   - [ ] Both remain deterministic until a live rehearsal is authorized.
 
-- [ ] **9. Enable Hermes cron**
+- [~] **9. Enable Hermes cron**
   Spec ref: `Joust SDD > 4. Compete Loop; 6. Hermes and Plow`
   What to build: Schedule only the monitored runner after items 1-8 pass.
   Acceptance: Repeated triggers show lease exclusion, unchanged-state token
   avoidance, bounded retries, restart recovery, and continued competition after
   submission.
   Verify: Supervised container run across multiple scheduled intervals.
+
+  The narrow `verification_status` monitor is built and safe to schedule at a
+  30-minute interval once the handoff is delivered; an external error enters the
+  existing backoff rather than hammering the Index. The full competitive
+  monitoring set stays off until `eligible_to_win` is true, because only then
+  can an observation produce a competitive decision.
 
 - [ ] **10. Close and publish the MVP evidence**
   Spec ref: `Joust SDD > 1. Product Definition; 2. Product Promise`
@@ -155,14 +161,31 @@ repository, the install path is part of the gate.
   configurable and the doctor inspecting the configured path first.
 - [x] The install URL serves the current entry. The previous public release
   predated the Joust rename and was 165 commits behind, so a host following
-  the install path received an agent branded Galahad. Release
-  `a2a5e5a2e38240aef9d84aa46b33eae6b8e2648f` was reproduced from a clean clone
-  before publication and re-observed from an independent clone after it.
+  the install path received an agent branded Galahad.
+- [x] One candidate SHA holds across every surface. Verification installs and
+  runs this repository once, so the candidate, public `main`, what the install
+  URL serves, and the SHA named in the handoff must all be the same commit.
+  The current candidate is `fb7a22ebe20ec4bd7e27399b77ac79c5b1a7dc07`,
+  reproduced from a clean clone before publication and re-observed afterwards
+  from an independent clone of the install URL: HEAD matched, doctor healthy,
+  full suite green, branding `Joust`, 139 files.
+- [x] Exactly one verification request is live. The proposals naming superseded
+  candidates were denied through the approval contract rather than edited away,
+  so the event log keeps why each one was closed.
 - [x] The eligibility gate is clean except Verified.
 - [x] A verification request is proposed and durable, keyed on the candidate
   commit so a later candidate is a new request rather than a refusal.
+- [x] A `verification_status` monitor exists, with a fingerprint of
+  `verification:<agent_id>:<observed_status>`, a
+  `verification-monitor:<mission_id>` lease, and the shared retry backoff. It
+  is inert until a handoff is actually delivered, so scheduling it early reads
+  nothing: against the live mission it returns `UNCHANGED` after zero Agent
+  Index reads.
 - [ ] The handoff is delivered. Delivery runs through the community Discord,
-  which is unsolicited external communication and is not Joust's to send.
+  which is unsolicited external communication and is not Joust's to send. The
+  announcement gives a date for when verification opens but no time or
+  timezone, so the window is treated as unconfirmed until the option is
+  actually observable rather than inferred from a local date rollover.
 - [ ] Verified is observed and `eligible_to_win` becomes true.
 
 Only once `eligible_to_win` is true does the full competitive monitoring set

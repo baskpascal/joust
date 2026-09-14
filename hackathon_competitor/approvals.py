@@ -29,6 +29,16 @@ class ExternalActionVerificationError(RuntimeError):
     pass
 
 
+class ExternalObservationUnavailable(RuntimeError):
+    """The remote could not be read. This is not a remote that said no.
+
+    Marking an action FAILED because a network call timed out would be the
+    same mistake as reporting an unobserved source as unchanged: an action
+    waiting on a third party would be knocked permanently out of
+    AWAITING_EXTERNAL by one bad minute, and nothing would poll it again.
+    """
+
+
 class ExternalActionService:
     """Persist, authorize, execute, observe, and verify every remote mutation."""
 
@@ -164,6 +174,17 @@ class ExternalActionService:
                 action.updated_at = utcnow()
                 self.database.save_external_action(action)
             observed = observer(result)
+        except ExternalObservationUnavailable as exc:
+            # The status is left exactly as it was, so the next poll resumes.
+            action.last_error = str(exc) or type(exc).__name__
+            action.updated_at = utcnow()
+            self.database.save_external_action(action)
+            self.database.append_event(
+                action.mission_id,
+                "EXTERNAL_ACTION_OBSERVATION_UNAVAILABLE",
+                {"action_id": str(action.id), "error": action.last_error},
+            )
+            raise
         except BaseException as exc:
             action.status = ExternalActionStatus.FAILED
             action.last_error = str(exc) or type(exc).__name__

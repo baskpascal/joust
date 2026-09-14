@@ -1,5 +1,38 @@
 # Build notes
 
+## 2026-09-14 — One candidate SHA, and a monitor that knows it cannot read
+
+Verification installs and runs this repository once, so the entry now holds one
+invariant while it is under review: candidate SHA equals public `main` equals
+what the install URL serves equals the SHA named in the handoff. Release
+`fb7a22ebe20ec4bd7e27399b77ac79c5b1a7dc07` was published, then validated the way
+a host would meet it — cloned from the install URL, HEAD matching, doctor
+healthy, full suite green, branding `Joust`, the configurable credential mount
+and the reporter service present. The proposals naming superseded candidates
+were denied through the approval contract rather than deleted, so the log keeps
+why each was closed, and exactly one request is live.
+
+Building the `verification_status` monitor exposed a defect worse than the one
+it was written to avoid. Polling reads the public record inside the action
+service's observer, and that service treated every exception as a failed
+action. A single network timeout therefore moved a delivered handoff from
+AWAITING_EXTERNAL to FAILED permanently, and the monitor — which only watches
+actions that are awaiting an external party — went inert forever afterwards.
+The project had already learned this lesson one layer up, where a collection
+failure must never read as UNCHANGED; the action layer had not.
+
+`ExternalObservationUnavailable` now separates "the remote could not be read"
+from "the remote said no". The action's status is left exactly as it was, the
+event is recorded, and the next poll resumes. A test asserts that an unreadable
+Index leaves the action AWAITING_EXTERNAL.
+
+The monitor itself is deliberately dumb. It watches one flag, plans nothing,
+and reads nothing at all until a handoff has actually been delivered, which is
+what makes it safe to schedule before the request is sent: against the live
+mission it returns UNCHANGED after zero Agent Index reads. It carries the
+fingerprint, lease, and backoff the cron gate requires. The full competitive
+monitoring set stays off until `eligible_to_win` is true.
+
 ## 2026-09-14 — Entering the race: public identity, credential, and release
 
 The Plow account profile published the builder as `La brava`. `plow-agents
