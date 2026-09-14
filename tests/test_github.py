@@ -1,6 +1,8 @@
 import json
 
-from hackathon_competitor.github import GitHubCliAdapter
+from hackathon_competitor.github import GitHubCliAdapter, GitHubRuntimeObserver
+from hackathon_competitor.models import Mission
+from hackathon_competitor.storage import Database
 
 
 class FakeShell:
@@ -38,6 +40,46 @@ class FakeShell:
                                 "status": "completed",
                                 "conclusion": "success",
                                 "html_url": "https://github.com/owner/project/actions/runs/1",
+                            }
+                        ]
+                    }
+                )
+            if argv[-1] == "user":
+                return json.dumps({"login": "owner"})
+            if argv[-1] == "repos/owner/project":
+                return json.dumps(
+                    {
+                        "full_name": "owner/project",
+                        "html_url": "https://github.com/owner/project",
+                        "default_branch": "main",
+                        "permissions": {"pull": True, "push": True, "admin": False},
+                    }
+                )
+            if argv[-1] == "repos/owner/project/branches/main":
+                return json.dumps({"name": "main", "protected": True})
+            if "pulls?state=open" in argv[-1]:
+                return json.dumps(
+                    [
+                        {
+                            "number": 4,
+                            "state": "open",
+                            "head": {"ref": "joust/mission"},
+                            "base": {"ref": "main"},
+                            "html_url": "https://github.com/owner/project/pull/4",
+                        }
+                    ]
+                )
+            if "actions/runs" in argv[-1]:
+                return json.dumps(
+                    {
+                        "workflow_runs": [
+                            {
+                                "id": 7,
+                                "name": "CI",
+                                "status": "completed",
+                                "conclusion": "success",
+                                "head_sha": "abc123",
+                                "html_url": "https://github.com/owner/project/actions/runs/7",
                             }
                         ]
                     }
@@ -80,3 +122,29 @@ def test_github_adapter_keeps_repository_and_publish_operations_structured(tmp_p
     assert checks_call[0:4] == ["gh", "api", "-H", "Accept: application/vnd.github+json"]
     assert all(isinstance(argv, list) for argv, _ in shell.calls)
     assert all(timeout > 0 for _, timeout in shell.calls)
+
+
+def test_github_runtime_preflight_is_read_only_structured_and_evidenced(tmp_path):
+    database = Database(tmp_path / "state.db")
+    database.migrate()
+    mission = Mission(title="GitHub", objective="observe", workspace_path=str(tmp_path))
+    database.save_mission(mission)
+    adapter = GitHubCliAdapter(str(tmp_path))
+    shell = FakeShell()
+    adapter.shell = shell
+
+    snapshot = GitHubRuntimeObserver(database, adapter).observe(
+        mission.id, "owner/project", "abc123"
+    )
+
+    assert snapshot.authenticated_account == "owner"
+    assert snapshot.canonical_repository == "owner/project"
+    assert snapshot.repo_accessible
+    assert snapshot.push_permission
+    assert snapshot.branch_protected
+    assert snapshot.open_pull_requests[0]["number"] == 4
+    assert snapshot.checks[0]["state"] == "success"
+    assert snapshot.action_runs[0]["head_sha"] == "abc123"
+    assert any(item.source_type == "github_runtime" for item in database.list_evidence(mission.id))
+    assert all("create" not in argv for argv, _ in shell.calls)
+    assert all(argv[0:2] != ["git", "push"] for argv, _ in shell.calls)

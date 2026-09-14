@@ -457,6 +457,22 @@ class CompetitionMetricInterpretation(Contract):
     delta: CompetitionMetricsDelta
 
 
+class GitHubRuntimeSnapshot(Contract):
+    repository: str
+    canonical_repository: str
+    repository_url: str
+    ref: str
+    authenticated_account: str
+    repo_accessible: bool
+    push_permission: bool
+    default_branch: str
+    branch_protected: bool
+    open_pull_requests: list[dict[str, Any]] = Field(default_factory=list)
+    checks: list[dict[str, Any]] = Field(default_factory=list)
+    action_runs: list[dict[str, Any]] = Field(default_factory=list)
+    observed_at: datetime = Field(default_factory=utcnow)
+
+
 class CurrentCompetitionState(Contract):
     id: UUID = Field(default_factory=uuid4)
     mission_id: UUID

@@ -1,5 +1,35 @@
 # Build notes
 
+## 2026-09-14 — Competition Closed Loop: authenticated GitHub observation
+
+`GitHubRuntimeObserver` now performs a read-only preflight through the GitHub
+CLI adapter and persists the authenticated account, requested and canonical
+repository identities, repository URL, push permission, default branch and its
+protection state, open pull requests, check runs, and recent Actions runs as
+mission evidence. Adapter tests prove the path does not call push or PR-create
+operations.
+
+The runtime authenticated as `baskpascal`. Its GitHub CLI configuration is held
+in the persistent Hermes volume at `/var/lib/hermes/.config/gh`, with the files
+owned by the Hermes runtime user and mode `0600`. Because this container has no
+OS keyring, the credential is stored by `gh` in its protected configuration
+file; it is never baked into the image or printed by Joust. `GH_CONFIG_DIR` is
+fixed in both the image and Compose contract. After rebuilding and recreating
+`galahad-joust-recovery` with the existing volumes, `gh auth status` and Joust's
+runtime doctor both passed without an injected per-command config path.
+
+A live mission read at `2026-09-14T00:20:47.276872Z` proved repository access
+and push permission, an unprotected `main` branch, and empty PR, check, and
+Actions sets. Empty remote state is evidence, not a claim that CI passed. The
+same response revealed that the saved target `baskpascal/galahad` canonicalizes
+to `baskpascal/joust`; the current rehearsal target is therefore Joust's
+distribution repository rather than an independent competition entry. No push,
+PR, deploy, Agent Index update, verification request, or submission occurred.
+
+Verification: focused Ruff and pytest checks passed (11 tests). The rebuilt
+`joust-agent:latest` image has manifest-list digest
+`sha256:b8d523b010b314133c176437f90a8ded86cf851815813b44473be5f068bf443e`.
+
 ## 2026-09-13 — Competition Closed Loop: metrics change decisions
 
 `CompetitionMetricsAnalyzer` now turns consecutive snapshots into rank, user,

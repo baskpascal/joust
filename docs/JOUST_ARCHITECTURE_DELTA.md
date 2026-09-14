@@ -45,7 +45,7 @@ expired, user-stopped, or irrecoverably blocked.
 | Metrics drive strategy | `CompetitionMetricsAnalyzer` computes temporal rank/users/install/token deltas and persists a deterministic bottleneck/next action; eligibility takes precedence while Joust is unverified | PRESENT (deterministic example and live mission decision) |
 | EntrantProfile | Persisted reusable profile with GitHub/Discord/platform identities, mission attachment, export, and CLI entrypoint | PRESENT |
 | ProjectTarget fields | Owner/name, dev/lint commands, deployment requirement/target, and base/final commit SHA extend the existing mandatory target boundary | PRESENT |
-| GitHub live action | Adapter and approval/idempotency contracts exist; authenticated remote clone/push/PR has not been exercised for a mission | PARTIAL / EXTERNAL |
+| GitHub runtime | Runtime authentication persists in the Hermes volume; preflight observes the authenticated account, canonical repository, push permission, default-branch protection, open PRs, checks, and Actions state | PRESENT (read-only live evidence; mutation unrehearsed) |
 | Hermes model-backed coding | `HermesImplementer` completed a live model-backed action, created three project files, passed 16 generated tests, committed, and reproduced from a clean clone | PRESENT (live local E2E) |
 | Real research action | `RESEARCH` fetches bounded official URLs, removes script/style content, persists source evidence, and fails if no readable evidence exists; `CUSTOM` cannot claim research | PRESENT (live official pages) |
 | Planner resilience | Hermes planning runs without project rules/tools/plugins, has a 60-second bound, sees recent outcomes/project summary, and falls back to a deterministic safe action | PRESENT (live timeout/fallback) |
@@ -93,14 +93,17 @@ not a fixture-only controller:
   The repair was interrupted before it could manufacture a diff; restart now
   closes stale `RUNNING` actions durably, and verification-only changesets are
   explicitly supported.
-- GitHub checks use the compatible REST endpoint now, but the container has no
-  authenticated `gh` session or `GH_TOKEN`; remote check state therefore stays
-  an explicit uncertainty.
+- The rebuilt runtime has an authenticated `gh` session in the persistent Hermes
+  volume. A read-only preflight observed access and push permission, an
+  unprotected `main`, and empty PR/check/Actions sets. It also proved that the
+  saved `baskpascal/galahad` target canonicalizes to `baskpascal/joust`, exposing
+  that this mission still conflates the Joust distribution repository with its
+  competition entry. No remote mutation was attempted.
 
-The largest remaining architectural gap is no longer “can Joust run a loop?”
-It is whether observed evidence can automatically and conservatively change
-rules, score signals, strategy, and the next project action without repetition
-or fabricated certainty.
+The largest remaining closure gap is the verified external-action path: Joust
+must require a scoped policy decision, execute idempotently, observe the actual
+remote result, and persist evidence. Before a live rehearsal, the mission also
+needs a competition-entry target independent from the Joust distribution repo.
 
 ## Critical end-to-end path
 
@@ -120,10 +123,11 @@ competition URL
   -> reassess and build again while MissionStatus remains ACTIVE
 ```
 
-The repository proves the middle local segment and a live multi-cycle mission
-with restart/fallback behavior. It does not yet prove authenticated GitHub
-mutation, live deployment observation, structured leaderboard deltas, or a
-Hermes-cron schedule guarded by leases and observation fingerprints.
+The repository proves the middle local segment, a live multi-cycle mission with
+restart/fallback behavior, structured leaderboard deltas, and authenticated
+read-only GitHub observation. It does not yet prove GitHub mutation, live
+deployment observation, or a Hermes-cron schedule guarded by leases and
+observation fingerprints.
 
 ## Acceptance gates for the next architecture slice
 

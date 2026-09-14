@@ -60,7 +60,7 @@
   Verify: Deterministic strategy tests assert snapshot delta, interpretation, and
   action selection.
 
-- [ ] **6. Prove authenticated GitHub observation**
+- [x] **6. Prove authenticated GitHub observation**
   Spec ref: `Joust SDD > 5. Execution and Observation Planes`
   What to build: Separate local Git state from authenticated GitHub state and
   observe account, repository access, push permission, branch protection, PRs,
@@ -112,8 +112,8 @@
 - [x] Metrics change mission decisions.
 - [x] Monitor primitives provide fingerprint, lease, backoff, and last-success state.
 - [ ] Hermes cron runs safely.
-- [ ] GitHub runtime is authenticated.
-- [ ] Remote checks are observed.
+- [x] GitHub runtime is authenticated.
+- [x] Remote checks are observed (the current result is an evidence-backed empty set).
 - [ ] Push/PR/deploy/submission use approval actions.
 - [ ] Actual external results are verified.
 - [x] Product identity is Joust in local/runtime contracts.

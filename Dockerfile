@@ -21,7 +21,8 @@ RUN find /opt/joust -type d -exec chmod 0755 {} + \
 # carry that contract into every subprocess instead of letting a root-run
 # diagnostic silently revert the volume to 0700 root:root/root:hermes.
 ENV PYTHONPATH=/opt/joust \
-    HERMES_HOME_MODE=3770
+    HERMES_HOME_MODE=3770 \
+    GH_CONFIG_DIR=/var/lib/hermes/.config/gh
 
 COPY skills/ /opt/hermes/skills/
 RUN find /opt/hermes/skills -mindepth 1 -type d -exec chmod 0755 {} + \

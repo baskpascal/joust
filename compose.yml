@@ -3,6 +3,7 @@ services:
     build: .
     environment:
       AGENT_ID: ${AGENT_ID:?Set AGENT_ID to your stable Agent Index id}
+      GH_CONFIG_DIR: /var/lib/hermes/.config/gh
     volumes:
       - ./plow-credentials:/var/lib/plow/credentials.host:ro
       - agent-home:/var/lib/hermes

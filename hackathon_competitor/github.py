@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+from uuid import UUID
 from typing import Any, Protocol
 
+from .models import Evidence, GitHubRuntimeSnapshot
+from .storage import Database
 from .tool_gateway import LocalShellTool
 
 
@@ -19,6 +22,7 @@ class GitHubTool(Protocol):
         self, repository: str, *, head: str, base: str, title: str, body: str
     ) -> dict[str, Any]: ...
     def checks(self, repository: str, ref: str) -> list[dict[str, Any]]: ...
+    def runtime_snapshot(self, repository: str, ref: str) -> GitHubRuntimeSnapshot: ...
 
 
 class GitHubCliAdapter:
@@ -124,3 +128,102 @@ class GitHubCliAdapter:
                 }
             )
         return checks
+
+    def runtime_snapshot(self, repository: str, ref: str) -> GitHubRuntimeSnapshot:
+        user = self._gh_json(["api", "user"])
+        repo = self._gh_json(["api", f"repos/{repository}"])
+        if not isinstance(user, dict) or not isinstance(user.get("login"), str):
+            raise GitHubError("GitHub authentication did not return an account")
+        if not isinstance(repo, dict):
+            raise GitHubError("GitHub repository lookup returned a non-object")
+        permissions = repo.get("permissions")
+        default_branch = repo.get("default_branch")
+        canonical_repository = repo.get("full_name")
+        repository_url = repo.get("html_url")
+        if (
+            not isinstance(permissions, dict)
+            or not isinstance(default_branch, str)
+            or not isinstance(canonical_repository, str)
+            or not isinstance(repository_url, str)
+        ):
+            raise GitHubError("GitHub repository response omitted permissions or default branch")
+        branch = self._gh_json(["api", f"repos/{repository}/branches/{default_branch}"])
+        pulls = self._gh_json(["api", f"repos/{repository}/pulls?state=open&per_page=100"])
+        runs = self._gh_json(["api", f"repos/{repository}/actions/runs?per_page=20"])
+        if not isinstance(branch, dict):
+            raise GitHubError("GitHub branch response was not an object")
+        if not isinstance(pulls, list):
+            raise GitHubError("GitHub pull request response was not a list")
+        if not isinstance(runs, dict) or not isinstance(runs.get("workflow_runs"), list):
+            raise GitHubError("GitHub Actions response omitted workflow runs")
+        return GitHubRuntimeSnapshot(
+            repository=repository,
+            canonical_repository=canonical_repository,
+            repository_url=repository_url,
+            ref=ref,
+            authenticated_account=user["login"],
+            repo_accessible=True,
+            push_permission=permissions.get("push") is True,
+            default_branch=default_branch,
+            branch_protected=branch.get("protected") is True,
+            open_pull_requests=[
+                {
+                    "number": item.get("number"),
+                    "state": item.get("state"),
+                    "head": (item.get("head") or {}).get("ref"),
+                    "base": (item.get("base") or {}).get("ref"),
+                    "url": item.get("html_url"),
+                }
+                for item in pulls
+                if isinstance(item, dict)
+            ],
+            checks=self.checks(repository, ref),
+            action_runs=[
+                {
+                    "id": item.get("id"),
+                    "name": item.get("name"),
+                    "status": item.get("status"),
+                    "conclusion": item.get("conclusion"),
+                    "head_sha": item.get("head_sha"),
+                    "url": item.get("html_url"),
+                }
+                for item in runs["workflow_runs"]
+                if isinstance(item, dict)
+            ],
+        )
+
+
+class GitHubRuntimeObserver:
+    def __init__(self, database: Database, github: GitHubTool):
+        self.database = database
+        self.github = github
+
+    def observe(self, mission_id: UUID, repository: str, ref: str) -> GitHubRuntimeSnapshot:
+        snapshot = self.github.runtime_snapshot(repository, ref)
+        evidence = Evidence(
+            mission_id=mission_id,
+            claim=f"Authenticated GitHub runtime observed {repository}@{ref}",
+            source_type="github_runtime",
+            source_uri=f"{snapshot.repository_url}/commit/{ref}",
+            excerpt=snapshot.model_dump_json(),
+            confidence=1.0,
+            authority="github-api",
+            retrieved_at=snapshot.observed_at,
+        )
+        self.database.save_evidence(evidence)
+        self.database.append_event(
+            mission_id,
+            "GITHUB_RUNTIME_OBSERVED",
+            {
+                "evidence_id": str(evidence.id),
+                "repository": repository,
+                "canonical_repository": snapshot.canonical_repository,
+                "ref": ref,
+                "authenticated_account": snapshot.authenticated_account,
+                "push_permission": snapshot.push_permission,
+                "branch_protected": snapshot.branch_protected,
+                "checks": len(snapshot.checks),
+                "action_runs": len(snapshot.action_runs),
+            },
+        )
+        return snapshot
