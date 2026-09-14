@@ -1,6 +1,6 @@
 ---
 name: hackathon-research
-description: Research a hackathon, lock rules, record evidence, and surface contradictions for an active Galahad mission.
+description: Research a hackathon, lock rules, record evidence, and surface contradictions for an active Joust mission.
 ---
 
 # Hackathon research

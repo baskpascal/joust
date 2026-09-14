@@ -52,7 +52,7 @@ def build_demo_project(
     )
     tool.write_text(
         "README.md",
-        "# Galahad mission demo\n\nRun `python demo.py mission-status.json`.\n",
+        "# Joust mission demo\n\nRun `python demo.py mission-status.json`.\n",
     )
     return root / "demo.py"
 

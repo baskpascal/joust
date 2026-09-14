@@ -51,7 +51,7 @@ class SourceFetcher:
             return local_candidate.read_text(encoding="utf-8")
         parsed = urlparse(uri)
         if parsed.scheme in {"http", "https"}:
-            request = Request(uri, headers={"User-Agent": "Galahad/0.1 (+safe-research)"})
+            request = Request(uri, headers={"User-Agent": "Joust/0.1 (+safe-research)"})
             with urlopen(request, timeout=timeout) as response:
                 content_length = int(response.headers.get("Content-Length", "0") or 0)
                 if content_length > MAX_SOURCE_BYTES:
@@ -83,6 +83,7 @@ class _SemanticHTMLParser(HTMLParser):
         self._block_buffer: list[str] = []
         self._anchor_href: str | None = None
         self._anchor_buffer: list[str] = []
+        self._ignored_depth = 0
 
     def _resolve_link(self, href: str) -> str:
         base = urlparse(self.result.uri)
@@ -91,6 +92,11 @@ class _SemanticHTMLParser(HTMLParser):
         return urljoin(self.result.uri, href)
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in {"script", "style", "noscript", "template"}:
+            self._ignored_depth += 1
+            return
+        if self._ignored_depth:
+            return
         values = {key: value or "" for key, value in attrs}
         if tag == "body":
             self.result.title = values.get("data-hackathon-name", self.result.title)
@@ -120,6 +126,11 @@ class _SemanticHTMLParser(HTMLParser):
             self._anchor_buffer = []
 
     def handle_endtag(self, tag: str) -> None:
+        if tag in {"script", "style", "noscript", "template"}:
+            self._ignored_depth = max(0, self._ignored_depth - 1)
+            return
+        if self._ignored_depth:
+            return
         if self._capture and tag in {"li", "p", "section"}:
             kind, values = self._capture
             text = " ".join(" ".join(self._buffer).split())
@@ -162,6 +173,8 @@ class _SemanticHTMLParser(HTMLParser):
             self._anchor_buffer = []
 
     def handle_data(self, data: str) -> None:
+        if self._ignored_depth:
+            return
         clean = html.unescape(data).strip()
         if clean:
             self._text.append(clean)
@@ -220,9 +233,7 @@ def _infer_rule_candidates(blocks: list[str]) -> list[dict[str, str]]:
             r"\b(eligible|eligibility|minimum age|team size|must be|to rank)\b", lower
         ):
             kind = "eligibility"
-        elif re.search(
-            r"\b(must use|required to use|built with|build with)\b", lower
-        ) or re.search(
+        elif re.search(r"\b(must use|required to use|built with|build with)\b", lower) or re.search(
             r"\bcopy\b.*\b(client|service)\b|\breport(?:ing)?\b.*\bleaderboard\b", lower
         ):
             kind = "required-technology"

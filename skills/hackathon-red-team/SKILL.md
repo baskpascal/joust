@@ -1,6 +1,6 @@
 ---
 name: hackathon-red-team
-description: Adversarially evaluate a Galahad project for product, technical, rule, security, demo, and evidence failures.
+description: Adversarially evaluate a Joust project for product, technical, rule, security, demo, and evidence failures.
 ---
 
 # Hackathon red team

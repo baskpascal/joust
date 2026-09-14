@@ -28,9 +28,9 @@ def _commit_distribution_fixture(root: Path) -> None:
         [
             "git",
             "-c",
-            "user.name=Galahad Test",
+            "user.name=Joust Test",
             "-c",
-            "user.email=galahad@example.invalid",
+            "user.email=joust@example.invalid",
             "commit",
             "-qm",
             "fixture",
@@ -44,13 +44,13 @@ def test_public_bundle_uses_committed_tree_and_export_ignores_internal_metadata(
     _commit_distribution_fixture(tmp_path)
     (tmp_path / "plow-credentials").write_text("secret", encoding="utf-8")
 
-    summary = build_public_bundle(tmp_path, tmp_path / "dist/galahad.zip")
+    summary = build_public_bundle(tmp_path, tmp_path / "dist/joust.zip")
 
     assert summary["files"] == 7
     assert len(summary["sha256"]) == 64
     with zipfile.ZipFile(summary["path"]) as archive:
-        assert "galahad/plow-credentials" not in archive.namelist()
-        assert "galahad/.knightwatch/siblings" not in archive.namelist()
+        assert "joust/plow-credentials" not in archive.namelist()
+        assert "joust/.knightwatch/siblings" not in archive.namelist()
 
 
 def test_public_bundle_rejects_secret_bearing_path(tmp_path):
@@ -64,9 +64,13 @@ def test_public_bundle_rejects_secret_bearing_path(tmp_path):
             "pyproject.toml",
             "vendor/client.pin",
         ):
-            content = "MIT License\n" if name == "LICENSE" else "Docker Compose docker build plow-credentials AGENT_ID\n"
-            archive.writestr(f"galahad/{name}", content)
-        archive.writestr("galahad/plow-credentials", "secret")
+            content = (
+                "MIT License\n"
+                if name == "LICENSE"
+                else "Docker Compose docker build plow-credentials AGENT_ID\n"
+            )
+            archive.writestr(f"joust/{name}", content)
+        archive.writestr("joust/plow-credentials", "secret")
 
     with pytest.raises(ValueError, match="forbidden paths"):
         validate_public_bundle(bundle)

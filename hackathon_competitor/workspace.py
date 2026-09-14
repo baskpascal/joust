@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 
 from .tool_gateway import LocalShellTool
@@ -8,13 +9,13 @@ from .tool_gateway import LocalShellTool
 class GitWorkspace:
     """Small Git boundary for a mission-owned project directory."""
 
-    def __init__(self, root: str | Path):
+    def __init__(self, root: str | Path, *, environment: Mapping[str, str] | None = None):
         self.root = Path(root).resolve()
-        self.shell = LocalShellTool(self.root)
+        self.shell = LocalShellTool(self.root, environment=environment)
 
-    def initialize(self) -> None:
+    def initialize(self, *, default_branch: str = "main") -> None:
         if not (self.root / ".git").is_dir():
-            self.shell.run(["git", "init"], timeout_seconds=30)
+            self.shell.run(["git", "init", "-b", default_branch], timeout_seconds=30)
 
     def checkpoint(self, message: str) -> str:
         if not message.strip():
@@ -27,9 +28,11 @@ class GitWorkspace:
                 [
                     "git",
                     "-c",
-                    "user.name=Galahad Mission Agent",
+                    "core.editor=true",
                     "-c",
-                    "user.email=galahad@localhost",
+                    "user.name=Joust Mission Agent",
+                    "-c",
+                    "user.email=joust@localhost",
                     "commit",
                     "-m",
                     message,

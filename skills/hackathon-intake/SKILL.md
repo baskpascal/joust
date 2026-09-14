@@ -1,6 +1,6 @@
 ---
 name: hackathon-intake
-description: Create or resume a Galahad mission when a user supplies a hackathon URL, brief, rules file, repository, or competition request.
+description: Create or resume a Joust mission when a user supplies a hackathon URL, brief, rules file, repository, or competition request.
 ---
 
 # Hackathon intake

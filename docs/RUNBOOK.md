@@ -25,7 +25,20 @@ creation returns an inspectable `BLOCKED` status with `quality_blockers` rather
 than a traceback. Add or refresh from a richer official rules source; do not
 override the gate with community claims.
 
+## GitHub runtime authentication
+
+The container uses `GH_CONFIG_DIR=/var/lib/hermes/.config/gh`, inside the
+persistent Hermes volume. Authenticate interactively with `gh auth login`; never
+bake GitHub credentials into the image or commit them. When the container has no
+OS keyring, `gh` stores its credential in `hosts.yml`; keep that file owned by the
+Hermes runtime user with mode `0600` and keep the containing directory
+owner-only. Use `gh auth logout` to revoke the stored session.
+
+Authentication proves identity and access, but it is not action approval. Push,
+PR creation, deployment, Agent Index updates, verification requests, and final
+submission remain approval-bound external actions.
+
 ## Submission safety
 
-Galahad may prepare artifacts automatically. Publishing or submitting remains
+Joust may prepare artifacts automatically. Publishing or submitting remains
 a confirmation-gated external action.

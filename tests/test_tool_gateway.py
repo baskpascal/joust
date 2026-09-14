@@ -1,3 +1,4 @@
+import os
 import sys
 
 import pytest
@@ -25,6 +26,23 @@ def test_local_shell_uses_argument_vector_without_shell_expansion(tmp_path):
         timeout_seconds=5,
     )
     assert output.strip() == "$(unsafe)"
+
+
+def test_local_shell_can_run_with_a_filtered_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("PLOW_AGENT_TOKEN", "must-not-leak")
+    tool = LocalShellTool(
+        tmp_path,
+        environment={"PATH": os.environ["PATH"], "JOUST_SAFE": "yes"},
+    )
+    output = tool.run(
+        [
+            sys.executable,
+            "-c",
+            "import os; print(os.getenv('PLOW_AGENT_TOKEN', 'absent')); print(os.getenv('JOUST_SAFE'))",
+        ],
+        timeout_seconds=5,
+    )
+    assert output.splitlines() == ["absent", "yes"]
 
 
 def test_local_shell_surfaces_nonzero_exit(tmp_path):

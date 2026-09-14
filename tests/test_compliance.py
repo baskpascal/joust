@@ -47,3 +47,22 @@ def test_all_blockers_must_pass():
     rules = rules_from_spec(fixture_spec())
     report = evaluate_compliance(rules, {rule.id: RuleStatus.PASS for rule in rules})
     assert report.ready
+
+
+def test_v0_submission_cannot_claim_readiness_for_unbound_project_target():
+    rules = rules_from_spec(fixture_spec())
+    report = evaluate_compliance(rules, {rule.id: RuleStatus.PASS for rule in rules})
+    gate = submission_gate(
+        report,
+        install_tested=True,
+        demo_tested=True,
+        claims_match=True,
+        license_present=True,
+        required_fields_accounted=True,
+        project_target_attached=True,
+        project_target_validated=False,
+        project_submission_bound=False,
+    )
+    assert not gate.passed
+    assert "attached project target has no validated change set" in gate.blocking_findings
+    assert "submission pack is not bound to the target commit" in gate.blocking_findings

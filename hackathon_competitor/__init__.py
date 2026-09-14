@@ -1,4 +1,4 @@
-"""Galahad's durable hackathon mission kernel."""
+"""Joust's durable hackathon mission kernel."""
 
 from .models import Mission, MissionState, Task, TaskStatus
 

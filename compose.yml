@@ -3,8 +3,12 @@ services:
     build: .
     environment:
       AGENT_ID: ${AGENT_ID:?Set AGENT_ID to your stable Agent Index id}
+      GH_CONFIG_DIR: /var/lib/hermes/.config/gh
     volumes:
-      - ./plow-credentials:/var/lib/plow/credentials.host:ro
+      # Overridable so the token can live on a filesystem that honours
+      # POSIX modes. A repository checkout on a Windows drive mounted
+      # under WSL reports 0777 no matter what chmod is asked for.
+      - ${PLOW_CREDENTIALS_PATH:-./plow-credentials}:/var/lib/plow/credentials.host:ro
       - agent-home:/var/lib/hermes
     stop_grace_period: 35s
 

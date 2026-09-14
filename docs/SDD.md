@@ -2927,3 +2927,82 @@ And when useful additional reasoning can materially improve the result, it shoul
 **North star:**
 
 > **Give it a hackathon. It tries to win it.**
+
+# 71. Real project execution extension
+
+The first vertical slice ends at a PRD by design. The product promise also
+requires a second, executable slice that proves the selected strategy can
+become a real competition project. Keep the agent's distribution repository
+separate from the mission's project repository.
+
+## 71.1 Project target contract
+
+Every build-capable mission attaches one `ProjectTarget` containing:
+
+- `mode`: `existing_repo`, `new_repo`, or `local_only`;
+- mission-confined local path;
+- optional GitHub repository URL;
+- default branch and mission working branch;
+- explicit install, build, test, run, and deploy commands;
+- language/framework metadata used by planning and validation;
+- an optional allowlist of non-sensitive environment variable names.
+
+Project commands and the configured coding-agent command receive a reduced
+environment containing only platform basics (for example `PATH`, temp and
+home directories) plus the explicit allowlist. Names that look like tokens,
+passwords, API keys, credentials, or private keys are rejected. Plow and
+GitHub credentials therefore remain outside the target build boundary. The
+loop also rejects credential-shaped command arguments before they can enter
+durable `BuildRun` logs.
+
+The target is persisted independently from `HackathonSpec`. A mission may
+research one competition while building in a different repository, and the
+Agent Index repository must never be inferred as the project target.
+
+## 71.2 Build loop
+
+The execution capability must perform this durable loop:
+
+```text
+inspect clean target
+ -> create mission branch
+ -> implement one coherent slice
+ -> commit change set
+ -> run install/build/test/run smoke commands
+ -> red-team the actual diff and reports
+ -> repair a blocking finding
+ -> repeat within a bounded attempt count
+ -> record validated commit
+```
+
+Each command produces a `BuildRun` with its commit, phase, exit status, error,
+and log path. A declared `run` command must be a bounded, non-interactive
+smoke/demo command; long-running servers belong behind a separate deployment
+adapter. Each implementation produces a `ChangeSet` with base SHA, diff hash,
+changed files, and resulting commit SHA. A dirty existing workspace is a hard
+failure until the user explicitly creates a clean target or preserves the
+changes elsewhere.
+
+## 71.3 GitHub boundary
+
+Local Git operations and GitHub operations are separate ports. The GitHub port
+supports repository lookup, read-only clone/bootstrap, branch creation, push,
+pull-request creation, and check retrieval. Push and pull-request creation require an explicit approval
+bound to the repository, branch, commit/diff hash, and idempotency key. The
+default target is a mission branch; direct pushes to the default branch are not
+allowed by the build loop.
+
+## 71.4 Real-build acceptance gate
+
+The MVP cannot claim a working project when only the deterministic demo passes.
+Gate C additionally requires a target repository, a recorded implementation
+commit, project-specific build/test evidence, and a clean-clone reproduction.
+Gate D maps every submission claim to the validated target commit and blocks
+when the project has not completed the repair loop or when its GitHub state is
+unknown. The original V0 distribution/demo pack is never accepted as a
+substitute when a real `ProjectTarget` is attached; a target-bound submission
+pack must name its repository, branch, commit SHA, and reproduction evidence.
+The `prepare-project-submission` path owns this pack and may enter
+`READY_FOR_SUBMISSION` only after the final target review, known-deadline
+compliance, declared test/demo commands, and their clean-clone counterparts
+all pass.

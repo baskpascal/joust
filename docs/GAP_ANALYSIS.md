@@ -2,7 +2,7 @@
 
 ## Starting point
 
-`D:\Projects\Galahad` was empty. The official
+`D:\Projects\Galahad` was the original workspace. The official
 `plow-pbc/plow-hermes-agent` repository was inspected at commit
 `8710797b6409c77df560c6198407765d138ea617`, together with the current
 `plow-pbc/life-assistant-hermes-agent` variant pattern and the official
@@ -25,7 +25,7 @@
 ## Required delta
 
 The repository must be a downstream variant, not a modified copy of the base.
-It therefore needs an immutable `FROM` reference, Galahad-only persona/skills,
+It therefore needs an immutable `FROM` reference, Joust-only persona/skills,
 an Agent Index service with an integrity-checked client, and the complete
 mission/evidence/task/artifact spine. The first implementation slice proves
 the URL-to-PRD path before the deeper backlog is added.
@@ -58,3 +58,27 @@ organizer-verified Agent Index listing. Verified eligibility is a separate
 external step expected to open on 2026-09-14. Real-user activation and
 rehearsal against the event's live official source remain explicit mission
 tasks.
+
+## Current SDD audit — 2026-09-13
+
+The attached SDD is the source specification. The repository's `docs/SDD.md`
+contains that text plus the real-project execution extension in section 71.
+The current evidence boundary is:
+
+| Requirement | Current evidence | Status |
+|---|---|---|
+| V0 mission/research/strategy/planning/evaluation/submission spine | 91-test suite, fixture E2E, persisted SQLite state, artifact graph, and local readiness path | PASS (local) |
+| Runtime, Plow ownership, MIT hygiene, pinned Agent Index client | Docker build, image contract tests, healthy `doctor`, pinned `vendor/client.pin`, and public entry | PASS (local/live where noted) |
+| Real target project, not only Joust's demo | `ProjectTarget`, mission branch, explicit argv commands, `ChangeSet`, `BuildRun`, actual diff review, and clean-clone reproduction | PASS (local E2E) |
+| Build failure and red-team repair | Bounded repair loop retries command failures and blocking findings; final evidence is scoped to the repaired commit | PASS (local contract) |
+| Credential/command boundary | Explicit argv, reduced environment, sensitive-name rejection, and command-argument validation are covered by local tests | PASS (local contract) |
+| GitHub project connection | Typed `gh` adapter supports lookup, read-only clone/bootstrap, branches, push, PR, and checks; publication is approval-bound | PARTIAL (live clone/push/PR not exercised) |
+| Coding agent integration | Dedicated `HermesImplementer` plus a live Joust cycle created and validated a three-file Python project with 16 generated tests and clean-clone reproduction | PASS (live model-backed local E2E) |
+| Target-bound submission pack | `prepare-project-submission` generates repository/branch/SHA/diff-bound artifacts and requires final review, compliance, tests, demo, and clean-clone evidence | PASS (local E2E) |
+| One-click Plow deploy, demo media, Verified | External organizer/Plow steps, not represented by local code | EXTERNAL / PENDING |
+
+The remaining partial rows are deliberate authority boundaries, not hidden claims:
+the local build can prove a commit and reproducibility without pretending that a
+remote GitHub write happened. The next implementation milestone is live,
+approval-bound GitHub execution and continued observation; only then can the
+remote execution path be marked complete.

@@ -8,14 +8,49 @@ import stat
 import subprocess
 import sys
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
 from uuid import UUID
 
+from .agent_index import (
+    AgentIndexService,
+    PinnedCliAgentIndexClient,
+    observe_license_spdx,
+)
+from .build_loop import CommandImplementer, HermesImplementer, project_environment
+from .competition_actions import (
+    CompetitionActionDispatcher,
+    RealBuildActionExecutor,
+    RealResearchActionExecutor,
+)
+from .competition_runner import CompetitionIterationRunner
 from .distribution import build_public_bundle
 from .exporter import export_mission_bundle
-from .models import MissionState
+from .github import GitHubCliAdapter
+from .hermes_planner import (
+    HermesCompetitionPlanner,
+    HermesOneShotReasoner,
+    ObservationOnlyExecutor,
+    ReadinessMeasurer,
+)
+from .identity import identity_from_environment
+from .metrics import MetricsUnavailable, PlowMetricsReader
+from .models import (
+    CompetitionActionType,
+    EntrantProfile,
+    MissionState,
+    ProjectMode,
+    ProjectTarget,
+)
+from .observation import CompetitionObserver
 from .orchestrator import MissionOrchestrator
-from .pipeline import complete_v0, mission_status, run_vertical_slice
+from .pipeline import (
+    build_project_for_mission,
+    complete_v0,
+    mission_status,
+    prepare_project_submission,
+    run_vertical_slice,
+)
 from .registry import default_registry
 from .rule_updates import refresh_official_rules
 from .storage import MIGRATIONS, Database
@@ -28,13 +63,16 @@ def default_home() -> Path:
     runtime_home = Path("/var/lib/hermes")
     if runtime_home.is_dir():
         return runtime_home / "hackathon_competitor"
-    return Path.home() / ".galahad"
+    return Path.home() / ".joust"
 
 
 def runtime(home: Path | None = None) -> MissionOrchestrator:
     root = (home or default_home()).resolve()
     database = Database(root / "state.db")
     database.migrate()
+    identity = identity_from_environment()
+    if identity is not None:
+        database.bind_agent_identity(identity)
     return MissionOrchestrator(
         database,
         root / "missions",
@@ -47,6 +85,57 @@ def _runtime_marker_present(path: Path) -> bool:
         return path.is_file() and path.stat().st_size > 0
     except OSError:
         return False
+
+
+def _parse_command_vectors(values: list[str]) -> list[list[str]]:
+    commands: list[list[str]] = []
+    for value in values:
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"command must be a JSON argv list: {value!r}") from exc
+        if (
+            not isinstance(parsed, list)
+            or not parsed
+            or any(not isinstance(argument, str) or not argument for argument in parsed)
+        ):
+            raise ValueError("command must be a non-empty JSON list of non-empty strings")
+        commands.append(parsed)
+    return commands
+
+
+def credential_candidates(
+    repository_root: Path,
+    environment: Mapping[str, str] | None = None,
+) -> list[Path]:
+    """Where the Plow token may live, most specific first.
+
+    PLOW_CREDENTIALS_PATH is what Compose mounts, so it is what the doctor must
+    inspect. Without it, a checkout on a filesystem that cannot hold POSIX
+    modes would keep failing this check while the token the container actually
+    reads is correctly protected somewhere else.
+    """
+
+    values = environment if environment is not None else os.environ
+    configured = values.get("PLOW_CREDENTIALS_PATH", "").strip()
+    candidates = [Path(configured)] if configured else []
+    candidates.append(repository_root / "plow-credentials")
+    candidates.append(Path("/var/lib/plow/credentials"))
+    return candidates
+
+
+def credential_check(candidates: list[Path]) -> dict[str, object]:
+    """The Plow token must not be readable by anyone else on the machine."""
+
+    credential = next((path for path in candidates if path.exists()), None)
+    if credential is None:
+        return {"ok": True, "present": False}
+    mode = stat.S_IMODE(credential.stat().st_mode)
+    return {
+        "ok": os.name == "nt" or mode in {0o400, 0o600},
+        "present": True,
+        "mode": oct(mode),
+    }
 
 
 def doctor(home: Path | None = None) -> tuple[dict[str, dict[str, object]], bool]:
@@ -101,9 +190,16 @@ def doctor(home: Path | None = None) -> tuple[dict[str, dict[str, object]], bool
         "ok": plow_tools_available,
         "available": plow_tools_available,
     }
+    configured_identity = identity_from_environment()
+    bound_identity = database.get_agent_identity()
+    identity_matches = configured_identity is not None and (
+        bound_identity is None or bound_identity.agent_id == configured_identity.agent_id
+    )
     checks["agent_id"] = {
-        "ok": bool(os.environ.get("AGENT_ID")),
-        "present": bool(os.environ.get("AGENT_ID")),
+        "ok": identity_matches,
+        "present": configured_identity is not None,
+        "bound": bound_identity is not None,
+        "matches_bound_identity": identity_matches,
     }
     service_candidates = [
         repo_root / "image/s6-overlay/s6-rc.d/agent-index/run",
@@ -139,23 +235,13 @@ def doctor(home: Path | None = None) -> tuple[dict[str, dict[str, object]], bool
     else:
         checks["agent_index_client_smoke"] = {"ok": True, "available": False}
 
-    credential_candidates = [repo_root / "plow-credentials", Path("/var/lib/plow/credentials")]
-    credential = next((path for path in credential_candidates if path.exists()), None)
-    if credential is None:
-        checks["credentials"] = {"ok": True, "present": False}
-    else:
-        mode = stat.S_IMODE(credential.stat().st_mode)
-        checks["credentials"] = {
-            "ok": os.name == "nt" or mode in {0o400, 0o600},
-            "present": True,
-            "mode": oct(mode),
-        }
+    checks["credentials"] = credential_check(credential_candidates(repo_root))
     healthy = all(check["ok"] for check in checks.values())
     return checks, healthy
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="galahad")
+    parser = argparse.ArgumentParser(prog="joust")
     parser.add_argument("--home", type=Path, help="state directory override")
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -173,13 +259,80 @@ def build_parser() -> argparse.ArgumentParser:
     refresh = mission_commands.add_parser("refresh-rules")
     refresh.add_argument("mission_id", type=UUID)
     refresh.add_argument("--url", required=True)
+    entrant = mission_commands.add_parser("attach-entrant")
+    entrant.add_argument("mission_id", type=UUID)
+    entrant.add_argument("--display-name", required=True)
+    entrant.add_argument("--attribution-name")
+    entrant.add_argument("--github-identity")
+    entrant.add_argument("--discord-identity")
+    entrant.add_argument("--team-member", action="append", default=[])
+    entrant.add_argument("--default-public-attribution")
+    attach = mission_commands.add_parser("attach-project")
+    attach.add_argument("mission_id", type=UUID)
+    attach.add_argument("--path", required=True)
+    attach.add_argument(
+        "--mode",
+        choices=[mode.value for mode in ProjectMode],
+        default=ProjectMode.EXISTING_REPO.value,
+    )
+    attach.add_argument("--repo")
+    attach.add_argument("--repo-owner")
+    attach.add_argument("--repo-name")
+    attach.add_argument("--default-branch", default="main")
+    attach.add_argument(
+        "--install-command",
+        action="append",
+        default=[],
+        metavar="JSON_ARGV",
+        help='repeatable JSON argv, e.g. ["python","-m","pip","install","-e", "."]',
+    )
+    attach.add_argument("--build-command", action="append", default=[], metavar="JSON_ARGV")
+    attach.add_argument("--dev-command", action="append", default=[], metavar="JSON_ARGV")
+    attach.add_argument("--test-command", action="append", default=[], metavar="JSON_ARGV")
+    attach.add_argument("--lint-command", action="append", default=[], metavar="JSON_ARGV")
+    attach.add_argument("--run-command", action="append", default=[], metavar="JSON_ARGV")
+    attach.add_argument("--deployment-requirement")
+    attach.add_argument("--deploy-target")
+    attach.add_argument(
+        "--environment-name",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="repeatable non-sensitive host environment name approved for project commands",
+    )
+    build = mission_commands.add_parser("build-project")
+    build.add_argument("mission_id", type=UUID)
+    implementer = build.add_mutually_exclusive_group(required=True)
+    implementer.add_argument("--implementation-command", metavar="JSON_ARGV")
+    implementer.add_argument("--hermes", action="store_true")
+    build.add_argument("--hermes-model")
+    build.add_argument("--hermes-reasoning")
+    build.add_argument("--spec")
+    build.add_argument("--max-repairs", type=int, default=0)
+    prepare = mission_commands.add_parser("prepare-project-submission")
+    prepare.add_argument("mission_id", type=UUID)
+    compete = mission_commands.add_parser("compete-run")
+    compete.add_argument("mission_id", type=UUID)
+    compete.add_argument("--hermes-model")
+    compete.add_argument("--hermes-reasoning")
+    compete.add_argument("--max-repairs", type=int, default=1)
+
+    eligibility = mission_commands.add_parser("index-eligibility")
+    eligibility.add_argument("mission_id", type=UUID)
+    eligibility.add_argument("--agent", required=True)
+    verification = mission_commands.add_parser("request-verification")
+    verification.add_argument("mission_id", type=UUID)
+    verification.add_argument("--agent", required=True)
+    verification.add_argument("--contact", required=True)
+    verification.add_argument("--repo-url", required=True)
+    verification.add_argument("--commit", required=True)
 
     db = commands.add_parser("db")
     db_commands = db.add_subparsers(dest="db_command", required=True)
     db_commands.add_parser("migrate")
     commands.add_parser("doctor")
     bundle = commands.add_parser("bundle")
-    bundle.add_argument("--output", type=Path, default=Path("dist/galahad-public.zip"))
+    bundle.add_argument("--output", type=Path, default=Path("dist/joust-public.zip"))
     return parser
 
 
@@ -200,6 +353,167 @@ def main(argv: list[str] | None = None) -> int:
     if args.mission_command == "create":
         mission = run_vertical_slice(app, args.url, workspace_path=args.workspace)
         print(json.dumps(mission_status(app, mission), indent=2))
+        return 0
+    if args.mission_command == "attach-project":
+        # Validate the names at attachment time so a credential-shaped name
+        # cannot be persisted as a future build permission.
+        project_environment(args.environment_name)
+        target = ProjectTarget(
+            mission_id=args.mission_id,
+            mode=ProjectMode(args.mode),
+            local_path=str(Path(args.path).resolve()),
+            repository_url=args.repo,
+            repository_owner=args.repo_owner,
+            repository_name=args.repo_name,
+            default_branch=args.default_branch,
+            install_commands=_parse_command_vectors(args.install_command),
+            dev_commands=_parse_command_vectors(args.dev_command),
+            build_commands=_parse_command_vectors(args.build_command),
+            test_commands=_parse_command_vectors(args.test_command),
+            lint_commands=_parse_command_vectors(args.lint_command),
+            run_commands=_parse_command_vectors(args.run_command),
+            deployment_requirement=args.deployment_requirement,
+            deploy_target=args.deploy_target,
+            environment_allowlist=list(args.environment_name),
+        )
+        app.attach_project_target(target)
+        print(json.dumps(target.model_dump(mode="json"), indent=2))
+        return 0
+    if args.mission_command == "attach-entrant":
+        profile = EntrantProfile(
+            display_name=args.display_name,
+            attribution_name=args.attribution_name,
+            github_identity=args.github_identity,
+            discord_identity=args.discord_identity,
+            team_members=list(args.team_member),
+            default_public_attribution=args.default_public_attribution,
+        )
+        app.attach_entrant_profile(args.mission_id, profile)
+        print(json.dumps(profile.model_dump(mode="json"), indent=2))
+        return 0
+    if args.mission_command == "build-project":
+        if args.max_repairs < 0:
+            raise ValueError("--max-repairs cannot be negative")
+        target = app.database.get_project_target_for_mission(args.mission_id)
+        if args.hermes:
+            implementer = HermesImplementer(
+                model=args.hermes_model,
+                reasoning=args.hermes_reasoning,
+            )
+        else:
+            implementation_command = _parse_command_vectors([args.implementation_command])[0]
+            implementer = CommandImplementer(implementation_command)
+        specification = args.spec
+        if specification and Path(specification).is_file():
+            specification = Path(specification).read_text(encoding="utf-8")
+        change_set = build_project_for_mission(
+            app,
+            args.mission_id,
+            implementer,
+            specification=specification,
+            max_repairs=args.max_repairs,
+            # Git operations (including an approval-bound push) must run
+            # inside the target checkout, not its parent directory.
+            github=GitHubCliAdapter(str(Path(target.local_path).resolve())),
+        )
+        print(json.dumps(change_set.model_dump(mode="json"), indent=2))
+        return 0
+    if args.mission_command in {"index-eligibility", "request-verification"}:
+        repository_root = Path(__file__).resolve().parents[1]
+        service = AgentIndexService(
+            app.database,
+            client=PinnedCliAgentIndexClient(workspace=str(repository_root)),
+        )
+        # Both inputs are observed, never assumed: the license comes off this
+        # repository and the reporting signal off the live Index. Either one
+        # that cannot be read stays unknown in the report.
+        try:
+            active_days = PlowMetricsReader(args.agent).snapshot().active_days
+        except MetricsUnavailable:
+            active_days = None
+        report = service.eligibility(
+            args.agent,
+            license_spdx=observe_license_spdx(repository_root),
+            reporting_active_days=active_days,
+        )
+        if args.mission_command == "index-eligibility":
+            print(json.dumps(report.model_dump(mode="json"), indent=2))
+            return 0 if report.eligible_to_win else 1
+        action = service.request_verification(
+            args.mission_id,
+            agent_id=args.agent,
+            eligibility=report,
+            contact_route=args.contact,
+            repository_url=args.repo_url,
+            commit_sha=args.commit,
+            idempotency_key=f"verification:{args.agent}",
+        )
+        # The proposal is durable and unapproved. Delivery is a separate,
+        # approved step, so printing this never publishes anything.
+        print(action.payload["handoff"])
+        print(json.dumps({"action_id": str(action.id), "approval_id": str(action.approval_id)}))
+        return 0
+    if args.mission_command == "prepare-project-submission":
+        prepared = prepare_project_submission(app, args.mission_id)
+        print(json.dumps(mission_status(app, prepared), indent=2))
+        return 0 if prepared.state == MissionState.READY_FOR_SUBMISSION else 1
+    if args.mission_command == "compete-run":
+        if args.max_repairs < 0:
+            raise ValueError("--max-repairs cannot be negative")
+        mission = app.database.get_mission(args.mission_id)
+        try:
+            target = app.database.get_project_target_for_mission(mission.id)
+        except KeyError:
+            target = None
+        github = (
+            GitHubCliAdapter(str(Path(target.local_path).resolve()))
+            if target is not None and target.repository_url
+            else None
+        )
+        reasoner = HermesOneShotReasoner(
+            target.local_path if target is not None else mission.workspace_path,
+            model=args.hermes_model,
+            reasoning=args.hermes_reasoning,
+        )
+        allowed = {CompetitionActionType.CUSTOM, CompetitionActionType.RESEARCH}
+        executors = {
+            CompetitionActionType.CUSTOM: ObservationOnlyExecutor(),
+            CompetitionActionType.RESEARCH: RealResearchActionExecutor(app.database),
+        }
+        if target is not None:
+            allowed.add(CompetitionActionType.BUILD_PROJECT)
+            executors[CompetitionActionType.BUILD_PROJECT] = RealBuildActionExecutor(
+                app.database,
+                app.artifact_root,
+                HermesImplementer(
+                    model=args.hermes_model,
+                    reasoning=args.hermes_reasoning,
+                ),
+                github=github,
+            )
+        next_cycle = CompetitionIterationRunner(
+            app.database,
+            CompetitionObserver(app.database, github=github),
+            HermesCompetitionPlanner(
+                app.database,
+                reasoner,
+                allowed_action_types=allowed,
+                max_repairs=args.max_repairs,
+            ),
+            CompetitionActionDispatcher(app.database, executors),
+            ReadinessMeasurer(),
+        ).run(mission.id)
+        print(
+            json.dumps(
+                {
+                    "mission": str(mission.id),
+                    "status": app.database.get_mission(mission.id).status.value,
+                    "next_cycle": str(next_cycle.id) if next_cycle else None,
+                    "next_stage": next_cycle.stage.value if next_cycle else None,
+                },
+                indent=2,
+            )
+        )
         return 0
     if args.mission_command == "resume":
         resumed = app.resume_mission(args.mission_id)

@@ -4,6 +4,7 @@ import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import TypeVar
 from uuid import UUID
@@ -11,18 +12,40 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from .models import (
+    ActionExecution,
+    AgentIdentity,
     Approval,
     Artifact,
+    BuildRun,
+    ChangeSet,
+    CompetitionCycle,
+    CurrentCompetitionState,
+    DeadlineSignal,
     CompetitionMemory,
+    CompetitionObservation,
+    CompetitionRule,
     Decision,
+    EntrantProfile,
     Evaluation,
     Evidence,
+    ExternalActionObservation,
+    Extraction,
     Experiment,
     HackathonSpec,
     Idea,
     Mission,
     MissionState,
+    LeaderboardSignal,
+    MetricSignal,
+    MonitorBackoffState,
+    ProjectTarget,
+    ProposedExternalAction,
+    RepositorySnapshot,
+    RuleObservation,
+    SourceObservation,
     SourceRecord,
+    StructuredSignal,
+    StructuredSignalType,
     Task,
     utcnow,
 )
@@ -128,6 +151,153 @@ MIGRATIONS: tuple[str, ...] = (
     CREATE INDEX IF NOT EXISTS idx_competition_memory_category
       ON competition_memory(category);
     """,
+    """
+    CREATE TABLE IF NOT EXISTS project_targets (
+        id TEXT PRIMARY KEY, mission_id TEXT NOT NULL, mode TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_project_targets_mission
+      ON project_targets(mission_id);
+    CREATE TABLE IF NOT EXISTS repository_snapshots (
+        id TEXT PRIMARY KEY, mission_id TEXT NOT NULL, project_target_id TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS build_runs (
+        id TEXT PRIMARY KEY, mission_id TEXT NOT NULL, project_target_id TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS change_sets (
+        id TEXT PRIMARY KEY, mission_id TEXT NOT NULL, project_target_id TEXT NOT NULL,
+        status TEXT NOT NULL, payload TEXT NOT NULL
+    );
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS entrant_profiles (
+        id TEXT PRIMARY KEY, payload TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS competition_rules (
+        id TEXT PRIMARY KEY, mission_id TEXT NOT NULL, status TEXT NOT NULL,
+        observed_at TEXT NOT NULL, payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_competition_rules_mission
+      ON competition_rules(mission_id, observed_at);
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS competition_cycles (
+        id TEXT PRIMARY KEY, mission_id TEXT NOT NULL, sequence INTEGER NOT NULL,
+        stage TEXT NOT NULL, payload TEXT NOT NULL,
+        UNIQUE(mission_id, sequence)
+    );
+    CREATE INDEX IF NOT EXISTS idx_competition_cycles_mission
+      ON competition_cycles(mission_id, sequence);
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS competition_observations (
+        id TEXT PRIMARY KEY, mission_id TEXT NOT NULL, cycle_id TEXT NOT NULL,
+        observed_at TEXT NOT NULL, payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_competition_observations_mission
+      ON competition_observations(mission_id, observed_at);
+    CREATE INDEX IF NOT EXISTS idx_competition_observations_cycle
+      ON competition_observations(cycle_id);
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS action_executions (
+        id TEXT PRIMARY KEY, mission_id TEXT NOT NULL, cycle_id TEXT NOT NULL,
+        status TEXT NOT NULL, started_at TEXT NOT NULL, payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_action_executions_mission
+      ON action_executions(mission_id, started_at);
+    CREATE INDEX IF NOT EXISTS idx_action_executions_cycle
+      ON action_executions(cycle_id);
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS agent_identity (
+        singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+        agent_id TEXT NOT NULL UNIQUE,
+        payload TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS observation_fingerprints (
+        fingerprint TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        monitor_type TEXT NOT NULL,
+        observation_id TEXT,
+        first_seen_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_observation_fingerprints_mission
+      ON observation_fingerprints(mission_id, monitor_type, first_seen_at);
+    CREATE TABLE IF NOT EXISTS monitor_leases (
+        lease_key TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        holder TEXT NOT NULL,
+        acquired_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS monitor_backoff (
+        mission_id TEXT NOT NULL,
+        monitor_type TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        PRIMARY KEY(mission_id, monitor_type)
+    );
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS source_observations (
+        id TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        source_uri TEXT NOT NULL,
+        observed_at TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_source_observations_mission
+      ON source_observations(mission_id, observed_at);
+    CREATE TABLE IF NOT EXISTS extractions (
+        id TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        source_observation_id TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS structured_signals (
+        id TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        extraction_id TEXT NOT NULL,
+        signal_type TEXT NOT NULL,
+        observed_at TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_structured_signals_mission
+      ON structured_signals(mission_id, signal_type, observed_at);
+    CREATE TABLE IF NOT EXISTS current_competition_states (
+        id TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        reconciled_at TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        UNIQUE(mission_id, version)
+    );
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS proposed_external_actions (
+        id TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        status TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_external_actions_mission
+      ON proposed_external_actions(mission_id, created_at);
+    CREATE TABLE IF NOT EXISTS external_action_observations (
+        id TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        action_id TEXT NOT NULL,
+        verified INTEGER NOT NULL,
+        observed_at TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_external_action_observations_action
+      ON external_action_observations(action_id, observed_at);
+    """,
 )
 
 
@@ -175,6 +345,131 @@ class Database:
                 "SELECT COALESCE(MAX(version), 0) FROM schema_migrations"
             ).fetchone()
             return int(row[0])
+
+    def bind_agent_identity(self, identity: AgentIdentity) -> AgentIdentity:
+        """Bind the external id once and reject later attempts to replace it."""
+
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT payload FROM agent_identity WHERE singleton = 1"
+            ).fetchone()
+            if row is not None:
+                bound = AgentIdentity.model_validate_json(row[0])
+                if bound.agent_id != identity.agent_id:
+                    raise ValueError(
+                        "AGENT_ID is immutable after binding: "
+                        f"expected {bound.agent_id!r}, got {identity.agent_id!r}"
+                    )
+                return bound
+            connection.execute(
+                "INSERT INTO agent_identity(singleton, agent_id, payload) VALUES (1, ?, ?)",
+                (identity.agent_id, self._payload(identity)),
+            )
+        return identity
+
+    def get_agent_identity(self) -> AgentIdentity | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT payload FROM agent_identity WHERE singleton = 1"
+            ).fetchone()
+        return AgentIdentity.model_validate_json(row[0]) if row is not None else None
+
+    def reserve_observation_fingerprint(
+        self,
+        *,
+        fingerprint: str,
+        mission_id: UUID | str,
+        monitor_type: str,
+        observation_id: UUID | str | None,
+        first_seen_at: datetime,
+    ) -> bool:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                "INSERT OR IGNORE INTO observation_fingerprints"
+                "(fingerprint, mission_id, monitor_type, observation_id, first_seen_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    fingerprint,
+                    str(mission_id),
+                    monitor_type,
+                    str(observation_id) if observation_id else None,
+                    first_seen_at.isoformat(),
+                ),
+            )
+            return cursor.rowcount == 1
+
+    def has_observation_fingerprint(self, fingerprint: str) -> bool:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM observation_fingerprints WHERE fingerprint = ?",
+                (fingerprint,),
+            ).fetchone()
+        return row is not None
+
+    def acquire_monitor_lease(
+        self,
+        *,
+        lease_key: str,
+        mission_id: UUID | str,
+        holder: str,
+        acquired_at: datetime,
+        expires_at: datetime,
+    ) -> bool:
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT holder, expires_at FROM monitor_leases WHERE lease_key = ?",
+                (lease_key,),
+            ).fetchone()
+            available = (
+                row is None
+                or row["holder"] == holder
+                or datetime.fromisoformat(row["expires_at"]) <= acquired_at
+            )
+            if not available:
+                return False
+            connection.execute(
+                "INSERT INTO monitor_leases"
+                "(lease_key, mission_id, holder, acquired_at, expires_at) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(lease_key) DO UPDATE SET mission_id=excluded.mission_id, "
+                "holder=excluded.holder, acquired_at=excluded.acquired_at, "
+                "expires_at=excluded.expires_at",
+                (
+                    lease_key,
+                    str(mission_id),
+                    holder,
+                    acquired_at.isoformat(),
+                    expires_at.isoformat(),
+                ),
+            )
+            return True
+
+    def release_monitor_lease(self, *, lease_key: str, holder: str) -> bool:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM monitor_leases WHERE lease_key = ? AND holder = ?",
+                (lease_key, holder),
+            )
+            return cursor.rowcount == 1
+
+    def get_monitor_backoff(self, mission_id: UUID | str, monitor_type: str) -> MonitorBackoffState:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT payload FROM monitor_backoff WHERE mission_id = ? AND monitor_type = ?",
+                (str(mission_id), monitor_type),
+            ).fetchone()
+        if row is None:
+            return MonitorBackoffState(mission_id=mission_id, monitor_type=monitor_type)
+        return MonitorBackoffState.model_validate_json(row[0])
+
+    def save_monitor_backoff(self, state: MonitorBackoffState) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                "INSERT INTO monitor_backoff(mission_id, monitor_type, payload) VALUES (?, ?, ?) "
+                "ON CONFLICT(mission_id, monitor_type) DO UPDATE SET payload=excluded.payload",
+                (str(state.mission_id), state.monitor_type, self._payload(state)),
+            )
 
     @staticmethod
     def _payload(model: BaseModel) -> str:
@@ -333,6 +628,214 @@ class Database:
             category=memory.category,
         )
 
+    def save_entrant_profile(self, profile: EntrantProfile) -> None:
+        self._save("entrant_profiles", profile)
+
+    def get_entrant_profile(self, profile_id: UUID | str) -> EntrantProfile:
+        return self._get("entrant_profiles", profile_id, EntrantProfile)
+
+    def list_entrant_profiles(self) -> list[EntrantProfile]:
+        return self._list("entrant_profiles", EntrantProfile)
+
+    def attach_entrant_profile(self, mission_id: UUID | str, profile_id: UUID | str) -> Mission:
+        mission = self.get_mission(mission_id)
+        profile = self.get_entrant_profile(profile_id)
+        mission.entrant_profile_id = profile.id
+        self.save_mission(mission)
+        return mission
+
+    def save_competition_rule(self, rule: CompetitionRule) -> None:
+        self._save(
+            "competition_rules",
+            rule,
+            mission_id=rule.mission_id,
+            status=rule.status.value,
+            observed_at=rule.observed_at.isoformat(),
+        )
+
+    def list_competition_rules(self, mission_id: UUID | str) -> list[CompetitionRule]:
+        return self._list_for_mission("competition_rules", mission_id, CompetitionRule)
+
+    def save_source_observation(self, observation: SourceObservation) -> None:
+        self._save(
+            "source_observations",
+            observation,
+            mission_id=observation.mission_id,
+            source_uri=observation.source_uri,
+            observed_at=observation.observed_at.isoformat(),
+        )
+
+    def list_source_observations(self, mission_id: UUID | str) -> list[SourceObservation]:
+        return self._list_for_mission("source_observations", mission_id, SourceObservation)
+
+    def get_source_observation(self, observation_id: UUID | str) -> SourceObservation:
+        return self._get("source_observations", observation_id, SourceObservation)
+
+    def save_extraction(self, extraction: Extraction) -> None:
+        self._save(
+            "extractions",
+            extraction,
+            mission_id=extraction.mission_id,
+            source_observation_id=extraction.source_observation_id,
+        )
+
+    def list_extractions(self, mission_id: UUID | str) -> list[Extraction]:
+        return self._list_for_mission("extractions", mission_id, Extraction)
+
+    def save_structured_signal(self, signal: StructuredSignal) -> None:
+        self._save(
+            "structured_signals",
+            signal,
+            mission_id=signal.mission_id,
+            extraction_id=signal.extraction_id,
+            signal_type=signal.signal_type.value,
+            observed_at=signal.observed_at.isoformat(),
+        )
+
+    def list_structured_signals(self, mission_id: UUID | str) -> list[StructuredSignal]:
+        model_by_type = {
+            StructuredSignalType.RULE.value: RuleObservation,
+            StructuredSignalType.METRIC.value: MetricSignal,
+            StructuredSignalType.DEADLINE.value: DeadlineSignal,
+            StructuredSignalType.LEADERBOARD.value: LeaderboardSignal,
+        }
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT signal_type, payload FROM structured_signals "
+                "WHERE mission_id = ? ORDER BY observed_at, rowid",
+                (str(mission_id),),
+            ).fetchall()
+        return [
+            model_by_type[row["signal_type"]].model_validate_json(row["payload"]) for row in rows
+        ]
+
+    def save_current_competition_state(self, state: CurrentCompetitionState) -> None:
+        self._save(
+            "current_competition_states",
+            state,
+            mission_id=state.mission_id,
+            version=state.version,
+            reconciled_at=state.reconciled_at.isoformat(),
+        )
+
+    def list_current_competition_states(
+        self, mission_id: UUID | str
+    ) -> list[CurrentCompetitionState]:
+        return self._list_for_mission(
+            "current_competition_states", mission_id, CurrentCompetitionState
+        )
+
+    def get_current_competition_state(self, mission_id: UUID | str) -> CurrentCompetitionState:
+        states = self.list_current_competition_states(mission_id)
+        if not states:
+            raise KeyError(f"no reconciled competition state for mission: {mission_id}")
+        return max(states, key=lambda item: item.version)
+
+    def save_competition_cycle(self, cycle: CompetitionCycle) -> None:
+        self._save(
+            "competition_cycles",
+            cycle,
+            mission_id=cycle.mission_id,
+            sequence=cycle.sequence,
+            stage=cycle.stage.value,
+        )
+
+    def get_competition_cycle(self, cycle_id: UUID | str) -> CompetitionCycle:
+        return self._get("competition_cycles", cycle_id, CompetitionCycle)
+
+    def list_competition_cycles(self, mission_id: UUID | str) -> list[CompetitionCycle]:
+        return self._list_for_mission("competition_cycles", mission_id, CompetitionCycle)
+
+    def save_competition_observation(self, observation: CompetitionObservation) -> None:
+        self._save(
+            "competition_observations",
+            observation,
+            mission_id=observation.mission_id,
+            cycle_id=observation.cycle_id,
+            observed_at=observation.observed_at.isoformat(),
+        )
+
+    def list_competition_observations(self, mission_id: UUID | str) -> list[CompetitionObservation]:
+        return self._list_for_mission(
+            "competition_observations", mission_id, CompetitionObservation
+        )
+
+    def save_action_execution(self, execution: ActionExecution) -> None:
+        self._save(
+            "action_executions",
+            execution,
+            mission_id=execution.mission_id,
+            cycle_id=execution.cycle_id,
+            status=execution.status.value,
+            started_at=execution.started_at.isoformat(),
+        )
+
+    def list_action_executions(self, mission_id: UUID | str) -> list[ActionExecution]:
+        return self._list_for_mission("action_executions", mission_id, ActionExecution)
+
+    def save_project_target(self, target: ProjectTarget) -> None:
+        self._save(
+            "project_targets",
+            target,
+            mission_id=target.mission_id,
+            mode=target.mode.value,
+        )
+
+    def attach_project_target(self, mission_id: UUID | str, target_id: UUID | str) -> Mission:
+        mission = self.get_mission(mission_id)
+        target = self.get_project_target(target_id)
+        if target.mission_id != mission.id:
+            raise ValueError("project target belongs to a different mission")
+        mission.project_target_id = target.id
+        self.save_mission(mission)
+        return mission
+
+    def get_project_target(self, target_id: UUID | str) -> ProjectTarget:
+        return self._get("project_targets", target_id, ProjectTarget)
+
+    def get_project_target_for_mission(self, mission_id: UUID | str) -> ProjectTarget:
+        items = self._list_for_mission("project_targets", mission_id, ProjectTarget)
+        if not items:
+            raise KeyError(f"no project target for mission: {mission_id}")
+        return items[-1]
+
+    def list_project_targets(self, mission_id: UUID | str) -> list[ProjectTarget]:
+        return self._list_for_mission("project_targets", mission_id, ProjectTarget)
+
+    def save_repository_snapshot(self, snapshot: RepositorySnapshot) -> None:
+        self._save(
+            "repository_snapshots",
+            snapshot,
+            mission_id=snapshot.mission_id,
+            project_target_id=snapshot.project_target_id,
+        )
+
+    def list_repository_snapshots(self, mission_id: UUID | str) -> list[RepositorySnapshot]:
+        return self._list_for_mission("repository_snapshots", mission_id, RepositorySnapshot)
+
+    def save_build_run(self, run: BuildRun) -> None:
+        self._save(
+            "build_runs",
+            run,
+            mission_id=run.mission_id,
+            project_target_id=run.project_target_id,
+        )
+
+    def list_build_runs(self, mission_id: UUID | str) -> list[BuildRun]:
+        return self._list_for_mission("build_runs", mission_id, BuildRun)
+
+    def save_change_set(self, change_set: ChangeSet) -> None:
+        self._save(
+            "change_sets",
+            change_set,
+            mission_id=change_set.mission_id,
+            project_target_id=change_set.project_target_id,
+            status=change_set.status,
+        )
+
+    def list_change_sets(self, mission_id: UUID | str) -> list[ChangeSet]:
+        return self._list_for_mission("change_sets", mission_id, ChangeSet)
+
     def list_competition_memory(self, *, category: str | None = None) -> list[CompetitionMemory]:
         if category is None:
             return self._list("competition_memory", CompetitionMemory, "rowid")
@@ -357,6 +860,58 @@ class Database:
 
     def list_approvals(self, mission_id: UUID | str) -> list[Approval]:
         return self._list_for_mission("approvals", mission_id, Approval)
+
+    def save_external_action(self, action: ProposedExternalAction) -> None:
+        self._save(
+            "proposed_external_actions",
+            action,
+            mission_id=action.mission_id,
+            kind=action.kind.value,
+            status=action.status.value,
+            idempotency_key=action.idempotency_key,
+            created_at=action.created_at.isoformat(),
+        )
+
+    def get_external_action(self, action_id: UUID | str) -> ProposedExternalAction:
+        return self._get("proposed_external_actions", action_id, ProposedExternalAction)
+
+    def get_external_action_by_idempotency_key(
+        self, idempotency_key: str
+    ) -> ProposedExternalAction | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT payload FROM proposed_external_actions WHERE idempotency_key = ?",
+                (idempotency_key,),
+            ).fetchone()
+        if row is None:
+            return None
+        return ProposedExternalAction.model_validate_json(row[0])
+
+    def list_external_actions(self, mission_id: UUID | str) -> list[ProposedExternalAction]:
+        return self._list_for_mission(
+            "proposed_external_actions", mission_id, ProposedExternalAction
+        )
+
+    def save_external_action_observation(self, observation: ExternalActionObservation) -> None:
+        self._save(
+            "external_action_observations",
+            observation,
+            mission_id=observation.mission_id,
+            action_id=observation.action_id,
+            verified=int(observation.matches_expected),
+            observed_at=observation.observed_at.isoformat(),
+        )
+
+    def list_external_action_observations(
+        self, action_id: UUID | str
+    ) -> list[ExternalActionObservation]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT payload FROM external_action_observations "
+                "WHERE action_id = ? ORDER BY observed_at",
+                (str(action_id),),
+            ).fetchall()
+        return [ExternalActionObservation.model_validate_json(row[0]) for row in rows]
 
     def add_artifact_dependency(
         self, parent_id: UUID, child_id: UUID, dependency_type: str
@@ -480,6 +1035,49 @@ class Database:
                 item.model_dump(mode="json")
                 for item in self.list_competition_memory()
                 if item.mission_id == mission.id
+            ],
+            "entrant_profile": (
+                self.get_entrant_profile(mission.entrant_profile_id).model_dump(mode="json")
+                if mission.entrant_profile_id
+                else None
+            ),
+            "competition_rules": [
+                item.model_dump(mode="json") for item in self.list_competition_rules(mission.id)
+            ],
+            "source_observations": [
+                item.model_dump(mode="json") for item in self.list_source_observations(mission.id)
+            ],
+            "extractions": [
+                item.model_dump(mode="json") for item in self.list_extractions(mission.id)
+            ],
+            "structured_signals": [
+                item.model_dump(mode="json") for item in self.list_structured_signals(mission.id)
+            ],
+            "competition_states": [
+                item.model_dump(mode="json")
+                for item in self.list_current_competition_states(mission.id)
+            ],
+            "competition_cycles": [
+                item.model_dump(mode="json") for item in self.list_competition_cycles(mission.id)
+            ],
+            "competition_observations": [
+                item.model_dump(mode="json")
+                for item in self.list_competition_observations(mission.id)
+            ],
+            "action_executions": [
+                item.model_dump(mode="json") for item in self.list_action_executions(mission.id)
+            ],
+            "project_targets": [
+                item.model_dump(mode="json") for item in self.list_project_targets(mission.id)
+            ],
+            "repository_snapshots": [
+                item.model_dump(mode="json") for item in self.list_repository_snapshots(mission.id)
+            ],
+            "build_runs": [
+                item.model_dump(mode="json") for item in self.list_build_runs(mission.id)
+            ],
+            "change_sets": [
+                item.model_dump(mode="json") for item in self.list_change_sets(mission.id)
             ],
             "telemetry": self.metrics(mission.id),
             "events": self.events(mission.id),

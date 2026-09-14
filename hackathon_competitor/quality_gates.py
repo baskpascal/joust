@@ -45,6 +45,9 @@ def submission_gate(
     claims_match: bool,
     license_present: bool,
     required_fields_accounted: bool,
+    project_target_attached: bool = False,
+    project_target_validated: bool = True,
+    project_submission_bound: bool = True,
 ) -> QualityGateResult:
     findings = [
         *[f"rule failed: {item}" for item in compliance.blocker_failures],
@@ -57,5 +60,12 @@ def submission_gate(
         "MIT license is missing": license_present,
         "required fields are not accounted for": required_fields_accounted,
     }
+    if project_target_attached:
+        checks.update(
+            {
+                "attached project target has no validated change set": project_target_validated,
+                "submission pack is not bound to the target commit": project_submission_bound,
+            }
+        )
     findings.extend(message for message, passed in checks.items() if not passed)
     return QualityGateResult(name="submission", passed=not findings, blocking_findings=findings)

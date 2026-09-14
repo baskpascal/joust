@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .artifact_graph import ArtifactGraph
+from .build_loop import Implementer, RealBuildLoop
 from .capabilities.evaluation import implementation_panel, improvement_tasks
 from .capabilities.execution import build_demo_project, validate_demo_project
 from .capabilities.planning import (
@@ -37,8 +38,8 @@ from .capabilities.strategy import (
     screen_ideas,
     select_strategy,
 )
-from .capabilities.submission import submission_documents
-from .compliance import evaluate_compliance, rules_from_spec
+from .capabilities.submission import project_submission_documents, submission_documents
+from .compliance import evaluate_compliance, inspect_project_target, rules_from_spec
 from .install_validation import validate_install_run_documentation
 from .models import (
     Artifact,
@@ -53,6 +54,7 @@ from .models import (
     Task,
 )
 from .orchestrator import MissionOrchestrator
+from .project_review import review_project_change
 from .quality_gates import rules_gate, strategy_gate, submission_gate
 from .workspace import GitWorkspace
 
@@ -183,6 +185,7 @@ def run_vertical_slice(
         )
     orchestrator.database.save_spec(spec)
     mission.hackathon_spec_id = spec.id
+    mission.competition_id = spec.id
     mission.deadline_at = spec.deadline_at
     orchestrator.database.save_mission(mission)
     mission_dir = orchestrator.artifact_root / str(mission.id) / "artifacts"
@@ -325,6 +328,7 @@ def run_vertical_slice(
         {"decision_id": str(decision.id), "selected": decision.selected_option},
     )
     mission.selected_strategy_id = decision.id
+    mission.active_strategy_id = decision.id
     orchestrator.database.save_mission(mission)
     selected = next(idea for idea in finalists if str(idea.id) == decision.selected_option)
     runner_up = next(idea for idea in finalists if str(idea.id) == decision.options[1]["id"])
@@ -402,6 +406,16 @@ def mission_status(orchestrator: MissionOrchestrator, mission: Mission) -> dict:
         for event in orchestrator.database.events(mission.id)
         if event["event_type"] == "QUALITY_GATE_FAILED"
     ]
+    project_compliance = [
+        event["payload"]
+        for event in orchestrator.database.events(mission.id)
+        if event["event_type"] == "PROJECT_COMPLIANCE_EVALUATED"
+    ]
+    project_reviews = [
+        event["payload"]
+        for event in orchestrator.database.events(mission.id)
+        if event["event_type"] == "PROJECT_REVIEW_COMPLETED"
+    ]
     metric_totals: dict[str, float] = {}
     for metric in orchestrator.database.metrics(mission.id):
         name = str(metric["metric"])
@@ -410,7 +424,15 @@ def mission_status(orchestrator: MissionOrchestrator, mission: Mission) -> dict:
         "mission": str(mission.id),
         "title": mission.title,
         "state": mission.state.value,
+        "phase": mission.state.value,
+        "status": mission.status.value,
         "deadline": mission.deadline_at.isoformat() if mission.deadline_at else None,
+        "current_bottleneck": mission.current_bottleneck,
+        "current_best_action": mission.current_best_action,
+        "mission_score": mission.mission_score,
+        "confidence": mission.confidence,
+        "blockers": mission.blockers,
+        "unresolved_questions": mission.unresolved_questions,
         "selected_strategy": decisions[-1].selected_option if decisions else None,
         "tasks_total": len(tasks),
         "tasks_succeeded": sum(task.status.value == "SUCCEEDED" for task in tasks),
@@ -426,7 +448,254 @@ def mission_status(orchestrator: MissionOrchestrator, mission: Mission) -> dict:
         "last_error": failed[-1].error if failed else None,
         "quality_blockers": gate_failures[-1]["findings"] if gate_failures else [],
         "next_ready_tasks": [task.type for task in ready],
+        "project_target": str(mission.project_target_id) if mission.project_target_id else None,
+        "build_runs": len(orchestrator.database.list_build_runs(mission.id)),
+        "change_sets": len(orchestrator.database.list_change_sets(mission.id)),
+        "project_compliance": project_compliance[-1] if project_compliance else None,
+        "project_review": project_reviews[-1] if project_reviews else None,
     }
+
+
+def build_project_for_mission(
+    orchestrator: MissionOrchestrator,
+    mission_id,
+    implementer: Implementer,
+    *,
+    specification: str | None = None,
+    max_repairs: int = 1,
+    github=None,
+):
+    """Execute the real project build path for an attached mission target."""
+
+    mission = orchestrator.resume_mission(mission_id)
+    target = orchestrator.database.get_project_target_for_mission(mission.id)
+    if specification is None:
+        plans = [
+            item
+            for item in orchestrator.database.list_artifacts(mission.id)
+            if item.kind == "implementation_plan" and not item.stale
+        ]
+        if not plans:
+            raise RuntimeError("an implementation plan is required before building the project")
+        specification = Path(plans[-1].path).read_text(encoding="utf-8")
+    if mission.state == MissionState.PLANNING:
+        mission = orchestrator.transition_state(mission, MissionState.BUILDING)
+    if mission.state != MissionState.BUILDING:
+        raise RuntimeError(f"project build requires BUILDING state, got {mission.state.value}")
+    change_set = RealBuildLoop(
+        orchestrator.database, orchestrator.artifact_root, github=github
+    ).run(
+        target,
+        specification,
+        implementer,
+        max_repairs=max_repairs,
+    )
+    review = review_project_change(
+        target,
+        change_set,
+        orchestrator.database.list_build_runs(mission.id),
+    )
+    orchestrator.database.append_event(
+        mission.id,
+        "PROJECT_REVIEW_COMPLETED",
+        review,
+    )
+    if review["blocking_findings"]:
+        change_set.status = "review_failed"
+        orchestrator.database.save_change_set(change_set)
+        raise RuntimeError(
+            "project review blocked the change set: "
+            + "; ".join(str(item) for item in review["blocking_findings"])
+        )
+    try:
+        spec = orchestrator.database.get_spec_for_mission(mission.id)
+    except KeyError:
+        spec = None
+    if spec is not None:
+        report = inspect_project_target(
+            spec,
+            target,
+            build_runs=orchestrator.database.list_build_runs(mission.id),
+        )
+        orchestrator.database.append_event(
+            mission.id,
+            "PROJECT_COMPLIANCE_EVALUATED",
+            {
+                "ready": report.ready,
+                "blocker_failures": report.blocker_failures,
+                "blocker_unknowns": report.blocker_unknowns,
+            },
+        )
+    refreshed = orchestrator.database.get_mission(mission.id)
+    if refreshed.state == MissionState.BUILDING:
+        orchestrator.transition_state(refreshed, MissionState.VALIDATING)
+    return change_set
+
+
+def prepare_project_submission(orchestrator: MissionOrchestrator, mission_id) -> Mission:
+    """Create a target-bound submission pack after a real project build."""
+
+    mission = orchestrator.resume_mission(mission_id)
+    if mission.state != MissionState.VALIDATING:
+        raise RuntimeError(
+            f"project submission requires VALIDATING state, got {mission.state.value}"
+        )
+    target = orchestrator.database.get_project_target_for_mission(mission.id)
+    validated = [
+        item
+        for item in orchestrator.database.list_change_sets(mission.id)
+        if item.status == "validated" and item.commit_sha
+    ]
+    if not validated:
+        orchestrator.database.append_event(
+            mission.id,
+            "PROJECT_SUBMISSION_BLOCKED",
+            {"findings": ["no validated project change set exists"]},
+        )
+        return orchestrator.transition_state(mission, MissionState.BLOCKED)
+    change_set = validated[-1]
+    runs = orchestrator.database.list_build_runs(mission.id)
+    review = review_project_change(target, change_set, runs)
+    if review["blocking_findings"]:
+        orchestrator.database.append_event(
+            mission.id,
+            "PROJECT_SUBMISSION_BLOCKED",
+            {"findings": review["blocking_findings"], "commit_sha": change_set.commit_sha},
+        )
+        return orchestrator.transition_state(mission, MissionState.BLOCKED)
+    try:
+        spec = orchestrator.database.get_spec_for_mission(mission.id)
+        decision = orchestrator.database.list_decisions(mission.id)[-1]
+        selected = next(
+            idea
+            for idea in orchestrator.database.list_ideas(mission.id)
+            if str(idea.id) == decision.selected_option
+        )
+    except (KeyError, IndexError, StopIteration) as exc:
+        raise RuntimeError("strategy and rules are required before project submission") from exc
+
+    compliance = inspect_project_target(spec, target, build_runs=runs)
+    if not compliance.ready:
+        orchestrator.database.append_event(
+            mission.id,
+            "PROJECT_SUBMISSION_BLOCKED",
+            {
+                "findings": [
+                    *compliance.blocker_failures,
+                    *compliance.blocker_unknowns,
+                ],
+                "commit_sha": change_set.commit_sha,
+            },
+        )
+        return orchestrator.transition_state(mission, MissionState.BLOCKED)
+
+    mission = orchestrator.transition_state(mission, MissionState.OPTIMIZING)
+    mission = orchestrator.transition_state(mission, MissionState.SUBMISSION_PREP)
+    task = Task(
+        mission_id=mission.id,
+        type="project_submission_pack",
+        capability="submission_copy",
+        priority=20,
+        depth_level=4,
+    )
+    orchestrator.tasks.add_tasks([task])
+    submission_root = orchestrator.artifact_root / str(mission.id) / "project-submission"
+    ready = orchestrator.tasks.refresh_ready(mission.id)
+    if task.id not in {item.id for item in ready}:
+        raise RuntimeError("project submission task did not become ready")
+    orchestrator.tasks.claim(task.id)
+    try:
+        documents = project_submission_documents(
+            spec,
+            selected,
+            decision,
+            compliance,
+            target,
+            change_set,
+            runs,
+        )
+        submission_artifacts: list[Artifact] = []
+        for filename, (kind, content) in documents.items():
+            submission_artifacts.append(
+                _save_text_artifact(
+                    orchestrator,
+                    mission,
+                    task,
+                    kind=kind,
+                    path=submission_root / filename,
+                    content=content,
+                    depends_on=[],
+                )
+            )
+    except Exception as exc:
+        orchestrator.tasks.fail(task.id, str(exc), retryable=False)
+        raise
+
+    declared_phases = {
+        phase
+        for phase, commands in (
+            ("install", target.install_commands),
+            ("lint", target.lint_commands),
+            ("build", target.build_commands),
+            ("test", target.test_commands),
+            ("run", target.run_commands),
+        )
+        if commands
+    }
+
+    def phase_reproduced(phase: str) -> bool:
+        return any(
+            run.commit_sha == change_set.commit_sha and run.phase == phase and run.passed
+            for run in runs
+        ) and any(
+            run.commit_sha == change_set.commit_sha
+            and run.phase == f"reproduce_{phase}"
+            and run.passed
+            for run in runs
+        )
+
+    install_tested = all(phase_reproduced(phase) for phase in declared_phases)
+    demo_tested = bool(target.run_commands) and phase_reproduced("run")
+    gate = submission_gate(
+        compliance,
+        install_tested=install_tested,
+        demo_tested=demo_tested,
+        claims_match=bool(review["passed"]),
+        license_present=(
+            (Path(target.local_path).resolve() / "LICENSE").is_file()
+            and (Path(target.local_path).resolve() / "LICENSE")
+            .read_text(encoding="utf-8", errors="replace")
+            .lstrip()
+            .startswith("MIT License")
+        ),
+        required_fields_accounted=all(
+            rule.status == RuleStatus.PASS
+            for rule in compliance.rules
+            if rule.type == RuleType.SUBMISSION
+        ),
+        project_target_attached=True,
+        project_target_validated=True,
+        project_submission_bound=True,
+    )
+    if not gate.passed:
+        orchestrator.tasks.fail(task.id, "; ".join(gate.blocking_findings), retryable=False)
+        orchestrator.database.append_event(
+            mission.id,
+            "PROJECT_SUBMISSION_BLOCKED",
+            {"findings": gate.blocking_findings, "commit_sha": change_set.commit_sha},
+        )
+        return orchestrator.transition_state(mission, MissionState.BLOCKED)
+    orchestrator.tasks.succeed(task.id)
+    orchestrator.database.append_event(
+        mission.id,
+        "PROJECT_SUBMISSION_READY",
+        {
+            "commit_sha": change_set.commit_sha,
+            "diff_hash": change_set.diff_hash,
+            "artifacts": [str(item.id) for item in submission_artifacts],
+        },
+    )
+    return orchestrator.transition_state(mission, MissionState.READY_FOR_SUBMISSION)
 
 
 def _save_text_artifact(
@@ -738,6 +1007,13 @@ def complete_v0(orchestrator: MissionOrchestrator, mission_id) -> Mission:
         importlib.util.find_spec("hackathon_competitor") is not None
         and "exit_code=0" in install_validation
     )
+    target_attached = mission.project_target_id is not None
+    target_validated = False
+    if target_attached:
+        target_validated = any(
+            item.status == "validated"
+            for item in orchestrator.database.list_change_sets(mission.id)
+        )
     gate = submission_gate(
         compliance,
         install_tested=install_tested,
@@ -749,6 +1025,11 @@ def complete_v0(orchestrator: MissionOrchestrator, mission_id) -> Mission:
             for rule in compliance.rules
             if rule.type == RuleType.SUBMISSION
         ),
+        project_target_attached=target_attached,
+        project_target_validated=target_validated,
+        # This V0 writer describes Joust's distribution demo. A real target
+        # needs a separate pack that names its repository, branch, and commit.
+        project_submission_bound=not target_attached,
     )
     ready_tasks = orchestrator.tasks.refresh_ready(mission.id)
     if readiness.id not in {task.id for task in ready_tasks}:
