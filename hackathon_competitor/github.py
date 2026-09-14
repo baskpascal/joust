@@ -117,7 +117,7 @@ class GitHubCliAdapter:
         if not branch or branch.startswith("-"):
             raise ValueError("invalid push branch")
         return self.shell.run(
-            ["git", "push", remote, f"HEAD:{branch}"], timeout_seconds=120
+            ["git", "push", remote, f"HEAD:refs/heads/{branch}"], timeout_seconds=120
         ).strip()
 
     def create_pull_request(

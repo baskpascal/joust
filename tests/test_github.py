@@ -120,6 +120,8 @@ def test_github_adapter_keeps_repository_and_publish_operations_structured(tmp_p
         "joust/mission"
     )
     assert adapter.push("origin", "joust/mission") == "pushed"
+    push_call = next(argv for argv, _ in shell.calls if argv[0:2] == ["git", "push"])
+    assert push_call[-1] == "HEAD:refs/heads/joust/mission"
     pull_request = adapter.create_pull_request(
         "owner/project",
         head="joust/mission",
