@@ -333,6 +333,12 @@ def build_parser() -> argparse.ArgumentParser:
     compete.add_argument("mission_id", type=UUID)
     compete.add_argument("--hermes-model")
     compete.add_argument("--hermes-reasoning")
+    compete.add_argument(
+        "--claude",
+        action="store_true",
+        help="plan and implement with the Claude Code CLI instead of the hosted Hermes runtime",
+    )
+    compete.add_argument("--claude-model", default="default")
     compete.add_argument("--max-repairs", type=int, default=1)
 
     eligibility = mission_commands.add_parser("index-eligibility")
@@ -541,10 +547,15 @@ def main(argv: list[str] | None = None) -> int:
             if target is not None and target.repository_url
             else None
         )
-        reasoner = HermesOneShotReasoner(
-            target.local_path if target is not None else mission.workspace_path,
-            model=args.hermes_model,
-            reasoning=args.hermes_reasoning,
+        workdir = target.local_path if target is not None else mission.workspace_path
+        reasoner = (
+            ClaudeCliReasoner(model=args.claude_model, workdir=workdir)
+            if args.claude
+            else HermesOneShotReasoner(
+                workdir,
+                model=args.hermes_model,
+                reasoning=args.hermes_reasoning,
+            )
         )
         allowed = {CompetitionActionType.CUSTOM, CompetitionActionType.RESEARCH}
         executors = {
@@ -556,7 +567,9 @@ def main(argv: list[str] | None = None) -> int:
             executors[CompetitionActionType.BUILD_PROJECT] = RealBuildActionExecutor(
                 app.database,
                 app.artifact_root,
-                HermesImplementer(
+                ClaudeCodeImplementer(model=args.claude_model)
+                if args.claude
+                else HermesImplementer(
                     model=args.hermes_model,
                     reasoning=args.hermes_reasoning,
                 ),
