@@ -4,7 +4,10 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 process.chdir(dirname(fileURLToPath(import.meta.url)));
 const CHROME = process.env.CHROME || process.env.HOME + "/.cache/ms-playwright/chromium-1217/chrome-linux64/chrome";
-const jobs = [["shot-hero.html", "joust-hero.png", 1280, 420], ["shot-card.html", "joust-card.png", 1200, 630]];
+const jobs = [["shot-hero.html", "joust-hero.png", 1280, 420],
+              ["shot-card.html", "joust-card.png", 1200, 630],
+              ["shot-duel.html", "joust-duel.png", 1260, 468],
+              ["shot-marks.html", "joust-marks.png", 1240, 460]];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const chrome = spawn(CHROME, ["--headless=new","--disable-gpu","--no-sandbox","--hide-scrollbars",
   "--remote-debugging-port=9366","--remote-allow-origins=*","about:blank"], { stdio: "ignore" });

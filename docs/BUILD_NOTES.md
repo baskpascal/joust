@@ -1,5 +1,39 @@
 # Build notes
 
+## 2026-09-14 — A README you can finish, and a pixel identity that reads
+
+The README was rewritten down to a hero, a paragraph, three commands, and the
+single idea that separates Joust from an agent that merely says it succeeded.
+Verification means the hosts install and run this repository, and a reviewer
+who has to wade through a wall of developer commands to find out what the thing
+is has already been badly served. Windows, standalone image builds, and
+credential paths moved into a disclosure so they stop taxing the common path.
+
+The identity settled on pixel after a pop-art screenprint pass. Both directions
+are kept: the screenprint taught the type and the off-register plates, and the
+pixel version inherits them — the wordmark carries a red and a blue copy one
+pixel behind the black. The helm is the same great helm in both, so the
+directions are one agent rather than two.
+
+Rendering every pass and looking at it is what made this work. The lance read
+as a candle until it was couched on the diagonal; a maned lion's face read as a
+strawberry until it was replaced with the geometry early heraldry actually
+used; the crest was an antenna, then a horizontal smear, before it rose at the
+right angle; and a gold disc behind the helm was being cut square by the frame
+in both the hero and the card until the sprite's nine columns of empty padding
+were trimmed and the compositions re-centred.
+
+The roster on the canvas is four real figures of the European tournament —
+Marshal on the Anglo-French circuit, Richard I relicensing tournaments in
+England in 1194 after the Norman suppression, Ulrich von Liechtenstein, and
+Geoffroi de Charny. Their devices are geometric and drawn in the period idiom,
+labelled as Joust's marks rather than reconstructions, because attributing an
+invented blazon to a real man would be a fabrication like any other.
+
+Candidate `d806783a0fc602145d0615ff86be088dde8e351a` carries all of it and was
+validated from the install URL: HEAD matching, doctor healthy, full suite
+green, hero present. Five superseded proposals are denied; one is live.
+
 ## 2026-09-14 — The install path gets a face, and the knights do not ship
 
 The freeze was reopened once, deliberately, before the handoff was delivered.

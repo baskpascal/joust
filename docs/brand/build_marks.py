@@ -84,6 +84,14 @@ board("Card.dc.html", f"""
   </div>
 </div>""")
 
+# ------------------------------------------------------------------- Duel
+from duel import scene as _duel_scene  # noqa: E402
+
+board("Duel.dc.html", f"""
+<div style="width: 1260px; height: 468px; background: {INK}; overflow: hidden">
+  {_duel_scene().svg(scale=6, label="Two knights colliding at the tilt")}
+</div>""")
+
 # ---------------------------------------------------------------- Knights
 KNIGHTS = [
     ("WILLIAM MARSHAL", "c.1147 – 1219", GOLD, "pale", GREEN, RED, GOLD,
@@ -184,6 +192,7 @@ json.dump({
     "artboards": [
         {"file": "Main.dc.html", "x": 0, "y": 0, "w": 1280, "h": 420},
         {"file": "Card.dc.html", "x": 1400, "y": 0, "w": 1200, "h": 630},
+        {"file": "Duel.dc.html", "x": 1400, "y": 790, "w": 1260, "h": 468},
         {"file": "Knights.dc.html", "x": 0, "y": 560, "w": 1240, "h": 600},
         {"file": "Icons.dc.html", "x": 0, "y": 1360, "w": 1240, "h": 460},
         {"file": "System.dc.html", "x": 0, "y": 1960, "w": 1240, "h": 720},
@@ -203,9 +212,10 @@ import re as _re
 _css = _re.search(r"<style>(.*?)</style>", open("Main.dc.html", encoding="utf-8").read(), _re.S).group(1)
 _font = ('<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&'
          'family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@700&display=swap">')
-for _src, _out in (("Main.dc.html", "shot-hero.html"), ("Card.dc.html", "shot-card.html")):
+for _src, _out in (("Main.dc.html", "shot-hero.html"), ("Card.dc.html", "shot-card.html"),
+                   ("Duel.dc.html", "shot-duel.html"), ("Icons.dc.html", "shot-marks.html")):
     _body = open(_src, encoding="utf-8").read().split("</helmet>")[1].split("</x-dc>")[0]
     with open(_out, "w", encoding="utf-8") as _fh:
         _fh.write(f'<!doctype html><meta charset="utf-8">{_font}'
                   f"<style>{_css} html,body{{margin:0;padding:0}}</style>{_body}")
-print("render pages: shot-hero.html, shot-card.html")
+print("render pages written")
