@@ -348,3 +348,27 @@ def test_final_submission_fails_when_the_index_drops_the_repo(tmp_path):
     _grant(service, action)
     with pytest.raises(ExternalActionVerificationError, match="did not store"):
         service.submit(action.id)
+
+
+def test_a_new_candidate_is_a_new_verification_request(tmp_path):
+    _database, mission, service, _client, _http = _setup(tmp_path)
+    report = service.eligibility(
+        "galahad-hackathon", license_spdx="MIT", reporting_active_days=2
+    )
+
+    def propose(commit):
+        return service.request_verification(
+            mission.id,
+            agent_id="galahad-hackathon",
+            eligibility=report,
+            contact_route="Plow Discord",
+            repository_url="https://github.com/baskpascal/joust",
+            commit_sha=commit,
+            idempotency_key=f"verification:galahad-hackathon:{commit}",
+        )
+
+    first = propose("aaaaaaa")
+    # Same candidate, same request.
+    assert propose("aaaaaaa").id == first.id
+    # Different candidate, different request rather than a permanent refusal.
+    assert propose("bbbbbbb").id != first.id

@@ -446,7 +446,11 @@ def main(argv: list[str] | None = None) -> int:
             contact_route=args.contact,
             repository_url=args.repo_url,
             commit_sha=args.commit,
-            idempotency_key=f"verification:{args.agent}",
+            # Keyed on the candidate, not just the agent: re-requesting for the
+            # same commit is idempotent, while a new candidate is a genuinely
+            # new request. Keying on the agent alone would bind the first
+            # handoff forever and refuse every later one.
+            idempotency_key=f"verification:{args.agent}:{args.commit}",
         )
         # The proposal is durable and unapproved. Delivery is a separate,
         # approved step, so printing this never publishes anything.

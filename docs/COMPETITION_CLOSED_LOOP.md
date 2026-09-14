@@ -141,6 +141,34 @@
 
 `AGENT_ID` is an immutable external identifier. It is not the product name.
 
+## Milestone: enter the race
+
+Eligibility is the binding constraint, and the official page states the rule
+directly: "Verified agents are installed and run by the hosts, and only
+verified agents can win the hackathon", with verification starting
+2026-09-14. Because verification means the hosts install and run this
+repository, the install path is part of the gate.
+
+- [x] Builder is `p_ascal`, observed on the public record.
+- [x] Agent display name is `Joust`; `AGENT_ID` remains `galahad-hackathon`.
+- [x] The credential is `0600` outside the repository, with the host path
+  configurable and the doctor inspecting the configured path first.
+- [x] The install URL serves the current entry. The previous public release
+  predated the Joust rename and was 165 commits behind, so a host following
+  the install path received an agent branded Galahad. Release
+  `a2a5e5a2e38240aef9d84aa46b33eae6b8e2648f` was reproduced from a clean clone
+  before publication and re-observed from an independent clone after it.
+- [x] The eligibility gate is clean except Verified.
+- [x] A verification request is proposed and durable, keyed on the candidate
+  commit so a later candidate is a new request rather than a refusal.
+- [ ] The handoff is delivered. Delivery runs through the community Discord,
+  which is unsolicited external communication and is not Joust's to send.
+- [ ] Verified is observed and `eligible_to_win` becomes true.
+
+Only once `eligible_to_win` is true does the full competitive monitoring set
+earn its tokens. A narrow `verification_status` monitor is useful before that,
+as soon as the request rests in `AWAITING_EXTERNAL`.
+
 ## Observed competitive state
 
 Eligibility, not cron, is the current bottleneck. The published Plow gate is
@@ -151,7 +179,7 @@ Eligibility, not cron, is the current bottleneck. The published Plow gate is
 license MIT        true
 registered         true
 reporting healthy  true   (token usage reaching the Index across 2 active days)
-verified           false  (blessed_at is "")
+verified           false  (blessed_at is ""; 1 of 34 agents is verified)
 eligible_to_win    false
 rank               none   (ranking is computed over verified agents only)
 users              1
