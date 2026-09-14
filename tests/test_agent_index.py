@@ -255,3 +255,96 @@ def test_license_observation_reads_the_repository_and_stays_unknown_when_absent(
     assert observe_license_spdx(tmp_path) == "MIT"
     (tmp_path / "LICENSE").write_text("Apache License\n")
     assert observe_license_spdx(tmp_path) == "Apache License"
+
+
+def test_hosting_handoff_waits_for_plow_and_never_re_delivers(tmp_path):
+    _database, mission, service, _client, http = _setup(tmp_path)
+    deliveries = []
+    action = service.request_hosting_handoff(
+        mission.id,
+        agent_id="galahad-hackathon",
+        image_digest="sha256:abc",
+        contact_route="Plow Discord",
+        idempotency_key="deploy-1",
+    )
+    _grant(service, action)
+
+    def deliver(agent_id, handoff):
+        deliveries.append(agent_id)
+        return {"reference": "discord-thread-9"}
+
+    observed = service.deliver_hosting_handoff(action.id, deliver=deliver)
+    assert observed["deployable"] is False
+    assert (
+        service.database.get_external_action(action.id).status
+        == ExternalActionStatus.AWAITING_EXTERNAL
+    )
+
+    service.deliver_hosting_handoff(action.id, deliver=deliver)
+    assert len(deliveries) == 1
+
+    http.record["deployable_at"] = "2026-09-21T00:00:00Z"
+    final = service.deliver_hosting_handoff(action.id, deliver=deliver)
+    assert final["deployable"] is True
+    assert len(deliveries) == 1
+    assert service.database.get_external_action(action.id).status == ExternalActionStatus.VERIFIED
+
+
+def test_hosting_handoff_is_refused_when_already_deployable(tmp_path):
+    _database, mission, service, _client, _http = _setup(
+        tmp_path,
+        record={
+            "agent_id": "galahad-hackathon",
+            "name": "Joust",
+            "blessed_at": "",
+            "deployable_at": "2026-09-01T00:00:00Z",
+        },
+    )
+    with pytest.raises(AgentIndexError, match="already marked deployable"):
+        service.request_hosting_handoff(
+            mission.id,
+            agent_id="galahad-hackathon",
+            image_digest="sha256:abc",
+            contact_route="Plow Discord",
+            idempotency_key="deploy-2",
+        )
+
+
+def test_final_submission_publishes_and_is_not_verification(tmp_path):
+    _database, mission, service, client, _http = _setup(tmp_path)
+    action = service.request_final_submission(
+        mission.id,
+        agent_id="galahad-hackathon",
+        repository_url="https://github.com/baskpascal/joust",
+        install_url="https://github.com/baskpascal/joust#readme",
+        commit_sha="00d924c",
+        idempotency_key="submit-1",
+    )
+
+    with pytest.raises(ApprovalRequired):
+        service.submit(action.id)
+    assert client.calls == []
+
+    _grant(service, action)
+    observed = service.submit(action.id)
+    assert observed["repo"] == "https://github.com/baskpascal/joust"
+    assert observed["commit_sha"] == "00d924c"
+    # Published is not Verified, and the mission does not end here.
+    assert observed["verified"] is False
+    assert service.database.get_external_action(action.id).status == ExternalActionStatus.VERIFIED
+
+
+def test_final_submission_fails_when_the_index_drops_the_repo(tmp_path):
+    _database, mission, service, client, _http = _setup(tmp_path)
+    client.stored = {"repo": "", "install_url": "https://github.com/baskpascal/joust#readme"}
+    action = service.request_final_submission(
+        mission.id,
+        agent_id="galahad-hackathon",
+        repository_url="https://github.com/baskpascal/joust",
+        install_url="https://github.com/baskpascal/joust#readme",
+        commit_sha="00d924c",
+        idempotency_key="submit-2",
+    )
+    _grant(service, action)
+    with pytest.raises(ExternalActionVerificationError, match="did not store"):
+        service.submit(action.id)

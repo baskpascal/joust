@@ -30,7 +30,9 @@ class AgentIndexError(RuntimeError):
     pass
 
 
-class VerificationDelivery(Protocol):
+class HandoffDelivery(Protocol):
+    """Delivers a prepared handoff to a third party and returns a reference."""
+
     def __call__(self, agent_id: str, handoff: dict[str, Any]) -> dict[str, Any]: ...
 
 
@@ -102,10 +104,10 @@ class AgentIndexReader:
         return payload
 
 
-def _blessed(record: dict[str, Any]) -> bool:
-    # The Index marks verification with a timestamp and uses "" for "not yet".
+def _marked(record: dict[str, Any], field: str) -> bool:
+    # The Index records these states as timestamps and uses "" for "not yet".
     # Presence of the key is not the signal; a non-empty value is.
-    value = record.get("blessed_at")
+    value = record.get(field)
     return isinstance(value, str) and bool(value.strip())
 
 
@@ -140,7 +142,7 @@ class AgentIndexService:
         reporting_healthy = (
             reporting_active_days > 0 if reporting_active_days is not None else None
         )
-        verified = _blessed(record)
+        verified = _marked(record, "blessed_at")
         registered = bool(str(record.get("name", "")).strip())
         blockers: list[str] = []
         if license_is_mit is None:
@@ -288,43 +290,184 @@ class AgentIndexService:
         self,
         action_id: UUID,
         *,
-        deliver: VerificationDelivery,
+        deliver: HandoffDelivery,
     ) -> dict[str, Any]:
+        return self._deliver_handoff(
+            action_id,
+            deliver=deliver,
+            marker_field="blessed_at",
+            state_key="verified",
+            achieved="the Agent Index marks {agent} Verified",
+            pending="the verification request for {agent} is delivered; "
+            "the Agent Index has not marked it Verified yet",
+        )
+
+    # -- hosted deployment handoff --------------------------------------
+
+    def request_hosting_handoff(
+        self,
+        mission_id: UUID,
+        *,
+        agent_id: str,
+        image_digest: str,
+        contact_route: str,
+        idempotency_key: str,
+    ) -> ProposedExternalAction:
+        """Propose hosted deployment. Only Plow can flip `deployable_at`."""
+
+        if not image_digest.strip():
+            raise AgentIndexError("a hosting handoff must name the image digest to deploy")
+        record = self.reader.read(agent_id)
+        if _marked(record, "deployable_at"):
+            raise AgentIndexError("the agent is already marked deployable")
+        return self.external.propose(
+            mission_id,
+            kind=ExternalActionKind.DEPLOY,
+            target=agent_id,
+            description=(
+                f"deliver the Plow hosting handoff for {agent_id} "
+                f"at {image_digest} via {contact_route}"
+            ),
+            risk=ExternalActionRisk.PRODUCTION_MUTATION,
+            approval_level=ApprovalLevel.CONFIRM,
+            idempotency_key=idempotency_key,
+            payload={"contact_route": contact_route, "image_digest": image_digest},
+            expected_state={"agent_id": agent_id, "deployable": True},
+        )
+
+    def deliver_hosting_handoff(
+        self,
+        action_id: UUID,
+        *,
+        deliver: HandoffDelivery,
+    ) -> dict[str, Any]:
+        return self._deliver_handoff(
+            action_id,
+            deliver=deliver,
+            marker_field="deployable_at",
+            state_key="deployable",
+            achieved="the Agent Index marks {agent} deployable",
+            pending="the hosting handoff for {agent} is delivered; "
+            "Plow has not enabled hosted deployment yet",
+        )
+
+    def _deliver_handoff(
+        self,
+        action_id: UUID,
+        *,
+        deliver: HandoffDelivery,
+        marker_field: str,
+        state_key: str,
+        achieved: str,
+        pending: str,
+    ) -> dict[str, Any]:
+        """Deliver a handoff Joust cannot complete, then observe the marker."""
+
         proposed = self.database.get_external_action(action_id)
         agent_id = proposed.target
         contact_route = proposed.payload.get("contact_route")
         if not isinstance(contact_route, str) or not contact_route.strip():
-            raise AgentIndexError("the verification proposal has no contact route")
+            raise AgentIndexError("the handoff proposal has no contact route")
 
         def execute(_key: str) -> dict[str, Any]:
             receipt = deliver(agent_id, dict(proposed.payload))
+            # Without a reference there is nothing to tie the delivery to, and
+            # an unreferenced handoff is indistinguishable from none at all.
             if not isinstance(receipt, dict) or not str(receipt.get("reference", "")).strip():
-                raise AgentIndexError(
-                    "verification delivery returned no reference to observe against"
-                )
+                raise AgentIndexError("handoff delivery returned no reference to observe against")
             return receipt
 
         def observe(result: Any) -> ObservedExternalResult:
             record = self.reader.read(agent_id)
-            verified = _blessed(record)
+            done = _marked(record, marker_field)
             actual = {
                 "agent_id": agent_id,
-                "verified": verified,
-                "blessed_at": record.get("blessed_at") or None,
+                state_key: done,
+                marker_field: record.get(marker_field) or None,
                 "delivery": result.get("reference") if isinstance(result, dict) else None,
             }
             return ObservedExternalResult(
                 actual_state=actual,
-                matches_expected=verified,
-                pending_external=not verified,
+                matches_expected=done,
+                pending_external=not done,
                 source_uri=self.reader.public_url(agent_id),
                 summary=(
-                    f"the Agent Index marks {agent_id} Verified"
-                    if verified
-                    else (
-                        f"the verification request for {agent_id} is delivered; "
-                        "the Agent Index has not marked it Verified yet"
-                    )
+                    achieved.format(agent=agent_id) if done else pending.format(agent=agent_id)
+                ),
+            )
+
+        return self.external.execute(action_id, executor=execute, observer=observe).actual_state
+
+    # -- final submission -----------------------------------------------
+
+    def request_final_submission(
+        self,
+        mission_id: UUID,
+        *,
+        agent_id: str,
+        repository_url: str,
+        install_url: str,
+        commit_sha: str,
+        idempotency_key: str,
+    ) -> ProposedExternalAction:
+        if not commit_sha.strip():
+            raise AgentIndexError("a final submission must name the candidate commit")
+        return self.external.propose(
+            mission_id,
+            kind=ExternalActionKind.FINAL_SUBMISSION,
+            target=agent_id,
+            description=(
+                f"submit {agent_id} at {commit_sha} with repo {repository_url} "
+                f"and install {install_url}"
+            ),
+            risk=ExternalActionRisk.IRREVERSIBLE_SUBMISSION,
+            approval_level=ApprovalLevel.CONFIRM,
+            idempotency_key=idempotency_key,
+            payload={
+                "metadata": {"repo": repository_url, "install_url": install_url},
+                "commit_sha": commit_sha,
+            },
+            expected_state={
+                "agent_id": agent_id,
+                "repo": repository_url,
+                "install_url": install_url,
+            },
+        )
+
+    def submit(self, action_id: UUID) -> dict[str, Any]:
+        """Publish the entry's public record and observe what the Index kept."""
+
+        proposed = self.database.get_external_action(action_id)
+        metadata = proposed.payload.get("metadata")
+        commit_sha = proposed.payload.get("commit_sha")
+        if not isinstance(metadata, dict) or not metadata:
+            raise AgentIndexError("the submission proposal carries no public metadata")
+        agent_id = proposed.target
+
+        def execute(_key: str) -> dict[str, Any]:
+            return self.client.register(agent_id, metadata)
+
+        def observe(_result: Any) -> ObservedExternalResult:
+            record = self.reader.read(agent_id)
+            mismatched = [
+                field for field, expected in metadata.items() if record.get(field) != expected
+            ]
+            actual = {
+                "agent_id": agent_id,
+                **{field: record.get(field) for field in metadata},
+                "commit_sha": commit_sha,
+                # Publication is not verification and not finalization. The
+                # submission is an event in the mission, never its end.
+                "verified": _marked(record, "blessed_at"),
+            }
+            return ObservedExternalResult(
+                actual_state=actual,
+                matches_expected=not mismatched,
+                source_uri=self.reader.public_url(agent_id),
+                summary=(
+                    f"the public record for {agent_id} carries the submitted repo and install URL"
+                    if not mismatched
+                    else "the Index did not store: " + ", ".join(sorted(mismatched))
                 ),
             )
 

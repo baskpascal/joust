@@ -95,8 +95,11 @@
     re-reads the public record and fails when the Index drops a field.
   - [x] Verification request has an executor, an eligibility precondition, and
     an observer that reads `blessed_at`.
-  - [ ] Deployment execution and health observation (no executor yet).
-  - [ ] Submission-state execution/observation (no executor yet).
+  - [x] Hosted deployment is an approval-bound handoff observed through
+    `deployable_at`; it rests in `AWAITING_EXTERNAL` until Plow enables it.
+  - [x] Final submission publishes the public record and verifies what the
+    Index actually stored, recording that published is not Verified.
+  - [ ] Both remain deterministic until a live rehearsal is authorized.
 
 - [ ] **9. Enable Hermes cron**
   Spec ref: `Joust SDD > 4. Compete Loop; 6. Hermes and Plow`
@@ -125,13 +128,14 @@
 - [ ] Hermes cron runs safely.
 - [x] GitHub runtime is authenticated.
 - [x] Remote checks are observed (the current result is an evidence-backed empty set).
-- [~] Push/PR/deploy/submission use the unified approval-action contract. The
-  contract is kind-agnostic, but a kind is only closed once an executor and a
-  remote observer exist for it. Closed: `REPOSITORY_CREATE`, `PUSH`,
-  `PULL_REQUEST`, `AGENT_INDEX_UPDATE`, `VERIFICATION_REQUEST`. Still declared
-  without an executor: `DEPLOY`, `FINAL_SUBMISSION`.
-- [ ] Actual external results are verified end to end (GitHub creation/push/PR pass;
-  deployment and submission remain pending).
+- [x] Push/PR/deploy/submission use the unified approval-action contract. A kind
+  counts as covered only once an executor and a remote observer exist for it,
+  which is now true of all seven: `REPOSITORY_CREATE`, `PUSH`, `PULL_REQUEST`,
+  `AGENT_INDEX_UPDATE`, `VERIFICATION_REQUEST`, `DEPLOY`, `FINAL_SUBMISSION`.
+- [ ] Actual external results are verified end to end. GitHub repository
+  creation, push, and PR are observed live. Agent Index update, verification,
+  hosting, and submission are covered deterministically and await an authorized
+  live rehearsal.
 - [x] Product identity is Joust in local/runtime contracts.
 - [x] `AGENT_ID` identity remains stable in durable installation state.
 

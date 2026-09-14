@@ -46,7 +46,7 @@ expired, user-stopped, or irrecoverably blocked.
 | EntrantProfile | Persisted reusable profile with GitHub/Discord/platform identities, mission attachment, export, and CLI entrypoint | PRESENT |
 | ProjectTarget fields | Owner/name, dev/lint commands, deployment requirement/target, and base/final commit SHA extend the existing mandatory target boundary | PRESENT |
 | GitHub runtime | Runtime authentication persists in the Hermes volume; preflight observes the authenticated account, canonical repository, push permission, default-branch protection, open PRs, checks, and Actions state | PRESENT (read-only live evidence; mutation unrehearsed) |
-| External-action verification | One durable proposal/approval/idempotent-execution/remote-observation/evidence contract, kind-agnostic by construction. Executors and remote observers exist for `REPOSITORY_CREATE`, `PUSH`, `PULL_REQUEST`, `AGENT_INDEX_UPDATE`, and `VERIFICATION_REQUEST`; live repository creation, branch push, and PR creation were independently observed | PARTIAL (`DEPLOY` and `FINAL_SUBMISSION` are declared kinds with no executor) |
+| External-action verification | One durable proposal/approval/idempotent-execution/remote-observation/evidence contract, kind-agnostic by construction. Executors and remote observers exist for all seven kinds; live repository creation, branch push, and PR creation were independently observed | PRESENT (GitHub live; Agent Index deterministic pending an authorized live rehearsal) |
 | Third-party-pending actions | `AWAITING_EXTERNAL` separates "Joust delivered its side and the other party has not acted" from success and from failure; re-running such an action re-observes the remote instead of re-delivering the handoff | PRESENT |
 | Agent Index eligibility | `license_is_mit and registered and reporting_healthy and verified` observed from the repository's own LICENSE and the live public record; unobserved inputs stay `None` rather than becoming `False` | PRESENT (live: verification is the only open gate) |
 | Hermes model-backed coding | `HermesImplementer` completed a live model-backed action, created three project files, passed 16 generated tests, committed, and reproduced from a clean clone | PRESENT (live local E2E) |
@@ -103,10 +103,10 @@ not a fixture-only controller:
   that this mission still conflates the Joust distribution repository with its
   competition entry. No remote mutation was attempted.
 
-The largest remaining closure gap is deployment and submission execution
-through the verified external-action path, followed by safe Hermes cron. Those
-two kinds are declared in `ExternalActionKind` but have no executor or observer
-anywhere, so the contract covers them only in principle. GitHub
+The largest remaining closure gap is now a live rehearsal of the Agent Index
+actions, followed by safe Hermes cron. Every declared kind has an executor and
+a remote observer; what is untested is the authorized live path, not the
+contract. GitHub
 repository creation, push, and PR now require a scoped policy decision, execute
 with a stable idempotency key, observe the actual remote result, and persist
 evidence against an independent competition-entry target.

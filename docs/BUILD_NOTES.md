@@ -25,6 +25,15 @@ action re-observes the remote instead of re-delivering the handoff. Reporting a
 delivered verification request as `FAILED` would have been as wrong as
 reporting it as `VERIFIED`.
 
+`DEPLOY` and `FINAL_SUBMISSION` followed. Hosted deployment is the same shape
+as verification, so both now share one delivery path parameterized by the
+public timestamp they wait on, `deployable_at` and `blessed_at`. Final
+submission is different: publishing the record is something Joust can do and
+therefore verify immediately, by re-reading what the Index actually stored, and
+its observation records that published is not Verified so the submission stays
+an event in the mission rather than its end. All seven declared kinds now have
+an executor and a remote observer.
+
 Live observation of `galahad-hackathon` on this date: MIT, registered, and
 reporting healthy across two active days with 3,119,664 tokens, `blessed_at` is
 `""`, and rank is absent because ranking is computed over verified agents only.
