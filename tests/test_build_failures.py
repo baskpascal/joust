@@ -111,3 +111,30 @@ def test_a_dirty_workspace_says_which_files_are_blocking(tmp_path):
         loop.run(target, "spec", ClaudeCodeImplementer())
 
     assert "generated-output.csv" in str(caught.value)
+
+
+def test_a_missing_build_wrapper_is_a_captured_failure_not_a_crash(tmp_path):
+    """A live build hit this exactly: the AI's plan declared `./gradlew test`,
+    but the wrapper script was never generated, so the command didn't exist.
+    `LocalShellTool.run` raises FileNotFoundError for a missing executable —
+    a narrower `except` clause here let it escape uncaught, crashing the
+    whole build-project invocation instead of recording a repairable
+    failure."""
+
+    project = tmp_path / "project"
+    project.mkdir()
+    loop, database = _loop(tmp_path)
+    target = _target(project, {"test_commands": [["./gradlew", "test"]]})
+    workspace = GitWorkspace(project)
+    workspace.initialize(default_branch="main")
+    (project / "keep.txt").write_text("x", encoding="utf-8")
+    workspace.checkpoint("seed")
+    git = LocalGitTool(project, shell=workspace.shell)
+
+    passed, failure = loop._run_commands(target, [("test", target.test_commands[0])], git)
+
+    assert passed is False
+    assert "[test]" in failure
+    assert "FileNotFoundError" in failure
+    run = database.list_build_runs(target.mission_id)[0]
+    assert run.passed is False

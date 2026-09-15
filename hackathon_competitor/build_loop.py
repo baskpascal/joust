@@ -421,8 +421,14 @@ class RealBuildLoop:
             try:
                 output = shell.run(argv, timeout_seconds=300)
                 passed = True
-            except (RuntimeError, TimeoutError) as exc:
-                error = str(exc)
+            except Exception as exc:  # noqa: BLE001 - see competition_actions.execute_selected
+                # A missing binary (a build wrapper never generated, a tool
+                # not on PATH) raises OSError/FileNotFoundError from
+                # subprocess itself, which the narrower tuple here used to
+                # let escape uncaught — crashing the whole build-project
+                # invocation instead of recording a legible, repairable
+                # failure. Only a real interrupt still propagates.
+                error = f"{type(exc).__name__}: {exc}"
                 failures.append(f"[{phase}] {' '.join(argv)}\n{error}")
                 exit_code = 1
             # A target can declare more than one command for the same phase
@@ -492,8 +498,8 @@ class RealBuildLoop:
                 try:
                     output = shell.run(argv, timeout_seconds=300)
                     passed = True
-                except (RuntimeError, TimeoutError) as exc:
-                    error = str(exc)
+                except Exception as exc:  # noqa: BLE001 - see competition_actions.execute_selected
+                    error = f"{type(exc).__name__}: {exc}"
                     exit_code = 1
                 log_path = (
                     self.artifact_root / str(target.mission_id) / "build" / f"reproduce-{phase}.log"
