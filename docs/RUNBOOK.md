@@ -11,8 +11,18 @@ Generate `plow-credentials` locally with `plow-agents login`, send the printed
 activation phrase by SMS/iMessage, list lines, and mint a free line. Choose a
 stable `AGENT_ID` yourself (for example, `galahad-hackathon`); Plow does not
 assign it. Build and start with Docker Compose, keeping the credential file
-out of the image and Git. Verified status is a separate eligibility request
-that becomes available on the organizer's stated September 14 opening date.
+out of the image and Git. Verified status is a separate eligibility request;
+the agent is eligible for the competition only after the Agent Index shows it
+in the Verified section.
+
+## Operational chat channel
+
+The live product channel for this installation is the Plow phone line provided
+by `hermes-plow-plugin`, reached through SMS. iMessage may be used during line
+activation where supported. A browser ChatGPT or custom-GPT conversation is a
+separate interface; it does not prove that the SMS agent received or executed
+the message. End-to-end acceptance tests must send the messages through the
+live SMS line and then verify the container's durable state.
 
 ## Recovery
 

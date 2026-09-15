@@ -47,7 +47,8 @@ docker compose up --build -d
 
 ## First mission
 
-In Plow Chat, send the competition and three words:
+In the operational Plow Chat phone line (SMS; iMessage may be used for line
+activation), send the competition and three words:
 
 ```text
 https://some-hackathon.devpost.com/rules

@@ -1478,6 +1478,27 @@ push, PR, deployment, submission, account mutation, or Verified request was
 performed. The complete local suite now collects 300 tests and passes with
 Ruff and `git diff --check` (line-ending notices only).
 
+## 2026-09-15 — Plow channel correction and SMS runtime rebuild
+
+The operational Plow Chat channel for this installation is the phone line
+provided by `hermes-plow-plugin`, reached through SMS. The open browser
+ChatGPT/custom-GPT conversation is a separate interface; it is not the live
+agent channel and cannot be used as evidence that an SMS message executed a
+Joust action. Earlier notes that called that browser conversation a live Plow
+Chat retest are corrected by this entry.
+
+The checkout was already at `galahad/competitor-agent` commit `f7b9ac2`.
+The image was rebuilt from that checkout and the service was recreated without
+removing the persistent `galahad_agent-home` volume. The new container contains
+`hackathon_competitor/lifecycle.py`, exposes `mission pause`, `mission cancel`,
+and `mission resume`, and `joust doctor` is healthy with Plow tools available,
+the Agent Index client registered, and the line credential promoted with mode
+`0600`. The browser/ChatGPT conversation was not used to claim an SMS result.
+
+The live SMS pause/cancel sequence still needs to be sent and verified after
+this rebuild. Until that happens, this project records the SMS path as ready,
+not as a completed real-user lifecycle acceptance test.
+
 ## 2026-09-15 — Mission lifecycle control incident
 
 Plow Chat exposed implementation details when an operator asked “Can we cancel
