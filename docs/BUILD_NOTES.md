@@ -1,5 +1,57 @@
 # Build notes
 
+## 2026-09-15 — Three missions at once: clean isolation, one more crash site found
+
+Three competitions run truly concurrently — the same shared `state.db`, the
+same shared project-pool directory, overlapping `claude -p` subprocesses —
+against genuinely unseen ground: Amazon's Developer Hackathon, RevenueCat's
+Shipaton, and (once a wrong first guess at its URL produced an honest
+`SOURCE_UNREADABLE` 404) DevNetwork's API+Cloud+AI Hackathon, whose deadline
+had already passed. `joust mission joust-it` ran all three at once;
+`build-project` then ran two of them at once against real, distinct
+`ClaudeCodeImplementer` specifications.
+
+**Isolation held.** Every check that could show contamination came back
+clean: each mission's three `ModelInvocation` records (generation, selection,
+planning) carried exactly its own `mission_id`, with no cross-wiring. The two
+concurrent coding-agent processes ran against a Kotlin/Gradle expense-split
+domain module and a TypeScript/MCP check-in server respectively, each
+correctly `--add-dir`-scoped to its own project directory, with zero bleed
+of one specification into the other's files. `PRAGMA integrity_check`
+returned clean after all of it. The one soft finding: all three missions
+share the same `Mission.workspace_path` (the operator's cwd, since none was
+started with an explicit `--workspace`) — inert here because
+`--projects-root` was passed explicitly every time, but a real gap if
+anything ever resolved a path from `workspace_path` directly. Devnetwork's
+already-closed competition produced `RULES_NOT_EXTRACTABLE` rather than a
+built strategy — an honest failure, not proof Joust noticed the deadline had
+passed (the page's own rule-prose likely fell under the same-page
+extraction, not a checked date).
+
+**One more crash site, same class as the last one.** ClassSplit's own plan
+declared `./gradlew` as its test command; the coding agent never generated
+the wrapper script, so the very first `./gradlew --version` raised
+`FileNotFoundError`. `RealBuildLoop._run_commands` and `_reproduce` — a
+different pair of call sites than the `competition_actions.execute_selected`
+one fixed earlier today, but the identical bug — only caught
+`(RuntimeError, TimeoutError)`, so it escaped uncaught and crashed the whole
+`build-project` invocation on attempt one, never reaching repair. Broadened
+both to `except Exception`, the same reasoning as before: an operational
+failure becomes a captured, evidenced `BuildRun` that can trigger a real
+repair; only a genuine interrupt still propagates. Confirmed live: the exact
+same mission, re-run unchanged, now completes a full 3-attempt repair cycle
+with the real `FileNotFoundError` in its failure record — the coding agent
+still never generated the wrapper across either repair attempt, which is a
+real, separate reliability gap in that implementer worth its own
+investigation, not something patched over here.
+
+Kinkeeper's build failed too, for an unrelated and already-correctly-handled
+reason (`eslint.config.*` vs the installed ESLint v10's expected format) —
+three genuine repair attempts, all exhausted, a legitimate implementer
+shortcoming rather than a Joust defect.
+
+235 tests passing, ruff clean.
+
 ## 2026-09-15 — A pivot that changed the record but not the repository
 
 A validation program run against the frozen `3c33afa` commit (zero code
