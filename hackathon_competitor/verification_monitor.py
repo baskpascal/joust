@@ -136,6 +136,13 @@ class VerificationMonitor:
         action_id: UUID,
         captured_at: datetime,
     ) -> MonitorRunResult:
+        mission = self.database.get_mission(mission_id)
+        if mission.state.value in {"PAUSED", "CANCELLED"}:
+            return MonitorRunResult(
+                outcome=MonitorOutcome.UNCHANGED,
+                mission_id=mission_id,
+                monitor_type=self.monitor_type,
+            )
         observed = self.service.poll_handoff(action_id)
         verified = bool(observed.get("verified"))
         fingerprint = self.fingerprint("VERIFIED" if verified else "UNVERIFIED")

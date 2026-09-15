@@ -137,6 +137,13 @@ class MonitoredCompetitionRunner:
             self.database.release_monitor_lease(lease_key=lease_key, holder=holder)
 
     def _run_acquired(self, mission_id: UUID, now: datetime) -> MonitorRunResult:
+        mission = self.database.get_mission(mission_id)
+        if mission.state in {MissionState.PAUSED, MissionState.CANCELLED}:
+            return MonitorRunResult(
+                outcome=MonitorOutcome.UNCHANGED,
+                mission_id=mission_id,
+                monitor_type=self.monitor_type,
+            )
         cycles = self.database.list_competition_cycles(mission_id)
         cycle = cycles[-1] if cycles and cycles[-1].completed_at is None else None
         if cycle is None:
@@ -195,6 +202,16 @@ class MonitoredCompetitionRunner:
         else:
             raise RuntimeError("advanced competition cycle has no durable observation")
 
+        mission = self.database.get_mission(mission_id)
+        if mission.state in {MissionState.PAUSED, MissionState.CANCELLED}:
+            return MonitorRunResult(
+                outcome=MonitorOutcome.UNCHANGED,
+                mission_id=mission_id,
+                monitor_type=self.monitor_type,
+                cycle_id=cycle.id,
+                observation_id=observation.id,
+                fingerprint=fingerprint,
+            )
         self.runner.run(mission_id)
         self._record_success(mission_id, last_observation_id=observation.id)
         return MonitorRunResult(
