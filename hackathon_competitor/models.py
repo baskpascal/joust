@@ -304,6 +304,13 @@ class ProjectTarget(Contract):
     # The default environment is intentionally reduced to a small, non-secret
     # base set by ``build_loop.project_environment``.
     environment_allowlist: list[str] = Field(default_factory=list)
+    # Set when a strategy pivot (``ai_mission.redirect``) replaces this target
+    # with a new one for the same mission. A superseded target's evidence
+    # (build runs, change sets) stays exactly as it is; nothing reads or
+    # writes to it once superseded, and it is never returned by
+    # ``get_project_target_for_mission``.
+    superseded_at: datetime | None = None
+    superseded_reason: str | None = None
 
 
 class RepositorySnapshot(Contract):

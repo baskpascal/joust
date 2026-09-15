@@ -19,10 +19,11 @@ from pathlib import Path
 from uuid import UUID
 
 from .ai import InvocationRecorder, ModelUnavailable, Reasoner, json_object
-from .capabilities.ai_strategy import StrategyRejected, plan_project, strategize
+from .capabilities.ai_strategy import plan_project, strategize
 from .capabilities.research import SourceFetcher, SourceUnreadable, discover_sources, extract_spec
 from .models import (
     AIDecision,
+    CompetitionSpec,
     Decision,
     Mission,
     MissionState,
@@ -30,6 +31,7 @@ from .models import (
     ProjectTarget,
     SourceRecord,
     StrategyCandidate,
+    utcnow,
 )
 from .orchestrator import MissionOrchestrator
 
@@ -121,12 +123,14 @@ def joust_it(
 
     recorder = InvocationRecorder(orchestrator.database, mission.id)
     try:
-        candidates, selected, ai_decision, analysis = strategize(
-            spec, evidence, reasoner, recorder
-        )
+        candidates, selected, ai_decision, analysis = strategize(spec, evidence, reasoner, recorder)
     except ModelUnavailable as error:
         raise _block(orchestrator, mission, error.code, error.detail)
-    except StrategyRejected as error:
+    except ValueError as error:
+        # StrategyRejected is-a ValueError; so is the plain ValueError
+        # `json_object` raises when the model's answer is not JSON at all.
+        # Both are the same class of problem from here — an unusable model
+        # answer — and both must stop the mission visibly rather than crash.
         raise _block(orchestrator, mission, "AI_STRATEGY_REJECTED", str(error))
 
     mission = orchestrator.transition_state(mission, MissionState.STRATEGY_SELECTION)
@@ -173,12 +177,46 @@ def joust_it(
 
     mission = orchestrator.transition_state(mission, MissionState.PLANNING)
     try:
-        plan, _ = plan_project(spec, selected, reasoner, recorder)
+        target, _plan = _plan_and_attach_project_target(
+            orchestrator,
+            mission,
+            spec,
+            selected,
+            reasoner,
+            recorder,
+            projects_root=projects_root,
+            workspace=workspace,
+        )
     except ModelUnavailable as error:
         raise _block(orchestrator, mission, error.code, error.detail)
-    except StrategyRejected as error:
+    except ValueError as error:
         raise _block(orchestrator, mission, "AI_PROJECT_PLAN_REJECTED", str(error))
 
+    mission = orchestrator.transition_state(mission, MissionState.BUILDING)
+    return mission, selected, decision, target
+
+
+def _plan_and_attach_project_target(
+    orchestrator: MissionOrchestrator,
+    mission: Mission,
+    spec: CompetitionSpec,
+    selected: StrategyCandidate,
+    reasoner: Reasoner,
+    recorder: InvocationRecorder,
+    *,
+    projects_root: str | Path | None,
+    workspace: str,
+) -> tuple[ProjectTarget, dict]:
+    """Plan a project for one strategy and make it the mission's active target.
+
+    Shared by the initial mission (`joust_it`) and a later pivot (`redirect`):
+    both cases are "a chosen strategy needs a real project to become the
+    thing that gets built", and a pivot handled any other way risks the
+    strategy and the target drifting apart, which is exactly the defect this
+    was written to close.
+    """
+
+    plan, _ = plan_project(spec, selected, reasoner, recorder)
     root = Path(projects_root or Path(workspace).parent) / plan["repository_name"]
     root.mkdir(parents=True, exist_ok=True)
     target = ProjectTarget(
@@ -200,6 +238,7 @@ def joust_it(
             "project_target_id": str(target.id),
             "repository_name": plan["repository_name"],
             "language": plan["language"],
+            "strategy_candidate_id": str(selected.id),
         },
     )
     specification_path = orchestrator.artifact_root / str(mission.id) / "artifacts"
@@ -207,8 +246,7 @@ def joust_it(
     (specification_path / "FIRST_SLICE.md").write_text(
         plan["first_slice_specification"], encoding="utf-8"
     )
-    mission = orchestrator.transition_state(mission, MissionState.BUILDING)
-    return mission, selected, decision, target
+    return target, plan
 
 
 def _mission_facts(orchestrator: MissionOrchestrator, mission: Mission) -> dict:
@@ -230,19 +268,16 @@ def _mission_facts(orchestrator: MissionOrchestrator, mission: Mission) -> dict:
         target = None
     candidates = database.list_strategy_candidates(mission.id)
     ai_decisions = database.list_ai_decisions(mission.id)
-    active = {
-        str(candidate.id): candidate
-        for candidate in candidates
-    }
+    active = {str(candidate.id): candidate for candidate in candidates}
     selected_ids = [
         decision.selected_option
         for decision in ai_decisions
         if decision.decision_type in {"strategy_selection", "strategy_reassessment"}
     ]
     current = active.get(selected_ids[-1]) if selected_ids else None
-    change_sets = database.list_change_sets(mission.id) if hasattr(
-        database, "list_change_sets"
-    ) else []
+    change_sets = (
+        database.list_change_sets(mission.id) if hasattr(database, "list_change_sets") else []
+    )
     return {
         "mission_id": str(mission.id),
         "state": mission.state.value,
@@ -323,6 +358,8 @@ def redirect(
     mission_id: UUID,
     instruction: str,
     reasoner: Reasoner,
+    *,
+    projects_root: str | Path | None = None,
 ) -> tuple[StrategyCandidate, AIDecision]:
     """Take a new constraint from the operator without losing the mission.
 
@@ -341,6 +378,7 @@ def redirect(
             "this mission has no stored strategy candidates",
         )
     facts = _mission_facts(orchestrator, mission)
+    previous_strategy_id = facts.get("current_strategy")
     listing = [
         {
             "id": str(candidate.id),
@@ -397,7 +435,11 @@ def redirect(
         mission_id=mission.id,
         question=f"What should this mission pursue now? ({instruction.strip()[:120]})",
         options=[
-            {"id": item["id"], "title": item["product_thesis"][:120], "summary": item["recurring_job"]}
+            {
+                "id": item["id"],
+                "title": item["product_thesis"][:120],
+                "summary": item["recurring_job"],
+            }
             for item in listing
         ],
         selected_option=str(selected.id),
@@ -422,6 +464,61 @@ def redirect(
             "what_still_stands": str(payload.get("what_still_stands") or "")[:500],
         },
     )
+
+    # A reassessment that only relabels the mission's stated strategy, while
+    # the project on disk keeps being the one built for the strategy it
+    # replaced, is the exact defect this closes: the intelligence changes its
+    # mind and the body keeps working the old mission. If the new strategy is
+    # the one already being built, there is nothing to move.
+    if previous_strategy_id is not None and previous_strategy_id == str(selected.id):
+        return selected, ai_decision
+
+    try:
+        spec = orchestrator.database.get_spec_for_mission(mission.id)
+    except KeyError:
+        # Nothing was ever locked in enough to plan a project from; the
+        # strategy record still stands, there is just no execution to move.
+        return selected, ai_decision
+    try:
+        previous_target = orchestrator.database.get_project_target_for_mission(mission.id)
+    except KeyError:
+        previous_target = None
+
+    try:
+        new_target, _plan = _plan_and_attach_project_target(
+            orchestrator,
+            mission,
+            spec,
+            selected,
+            reasoner,
+            recorder,
+            projects_root=projects_root,
+            workspace=mission.workspace_path,
+        )
+    except (ModelUnavailable, ValueError) as error:
+        # ValueError covers StrategyRejected and the plain ValueError
+        # `json_object` raises for a non-JSON answer — see the matching
+        # comment in `joust_it`.
+        code = error.code if isinstance(error, ModelUnavailable) else "AI_PROJECT_REPLAN_REJECTED"
+        detail = error.detail if isinstance(error, ModelUnavailable) else str(error)
+        # The strategy decision already stands; what failed is giving it a
+        # project. Leaving that inconsistent silently is worse than stopping
+        # the mission where an operator can see exactly what did not land.
+        raise _block(orchestrator, mission, code, detail) from error
+
+    if previous_target is not None:
+        previous_target.superseded_at = utcnow()
+        previous_target.superseded_reason = f"strategy pivot: {instruction.strip()}"[:500]
+        orchestrator.database.save_project_target(previous_target)
+        orchestrator.database.append_event(
+            mission.id,
+            "PROJECT_TARGET_SUPERSEDED",
+            {
+                "previous_project_target_id": str(previous_target.id),
+                "new_project_target_id": str(new_target.id),
+                "reason": previous_target.superseded_reason,
+            },
+        )
     return selected, ai_decision
 
 

@@ -38,8 +38,22 @@ def review_project_change(
             if any(pattern.search(content) for pattern in _SECRET_PATTERNS):
                 blockers.append(f"possible secret in changed file: {relative}")
 
-    if not changed and not change_set.verification_only:
-        blockers.append("validated change set contains no changed files")
+    if not changed:
+        # This function only ever runs after the commit already passed every
+        # declared check twice — once in the working tree, once from a clean
+        # clone (see RealBuildLoop.run). A validated commit with no changed
+        # files is not evidence of nothing happening; it is evidence of an
+        # ENVIRONMENT_REPAIR or EXTERNAL_ACTION outcome (a dependency
+        # reinstalled, a service reconnected, a credential renewed) rather
+        # than a CODE_CHANGE one. Requiring the caller to have predicted this
+        # in advance via `verification_only` — before the build even ran and
+        # therefore before anyone could know whether it would produce a diff
+        # — is exactly what blocked a legitimate repair here once already.
+        findings.append(
+            "no source files changed: this is an environment/configuration "
+            "outcome, not a missing code fix, since the change set already "
+            "passed every declared check in a clean-clone reproduction"
+        )
     if changed and not any(Path(item).name.lower().startswith("test") for item in changed):
         findings.append("no changed test file was found")
     if changed and not any(Path(item).name.lower() == "readme.md" for item in changed):

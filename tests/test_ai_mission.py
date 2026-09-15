@@ -42,9 +42,9 @@ def _generation() -> dict:
     }
 
 
-def _plan() -> dict:
+def _plan(repository_name: str = "red-build-triage") -> dict:
     return {
-        "repository_name": "red-build-triage",
+        "repository_name": repository_name,
         "language": "Python",
         "framework": "none",
         "install_commands": [["python3", "-m", "venv", ".venv"]],
@@ -167,8 +167,9 @@ def test_a_redirect_changes_course_without_losing_the_record(app, tmp_path):
             "rationale": "installation is the failing step and this one needs no account " * 2,
             "what_still_stands": "the rules evidence and the project scaffold",
         },
+        _plan(repository_name="index-ready-packager"),
     )
-    mission, first_choice, first_decision, _ = joust_it(
+    mission, first_choice, first_decision, first_target = joust_it(
         app,
         _rules_page(tmp_path),
         reasoner,
@@ -181,6 +182,7 @@ def test_a_redirect_changes_course_without_losing_the_record(app, tmp_path):
         mission.id,
         "Users are failing installation; pursue the one that installs without an account.",
         reasoner,
+        projects_root=tmp_path / "projects",
     )
 
     assert selected.id != first_choice.id
@@ -200,6 +202,56 @@ def test_a_redirect_changes_course_without_losing_the_record(app, tmp_path):
         if item["event_type"] == "STRATEGY_REASSESSED"
     ]
     assert events and events[-1]["payload"]["what_still_stands"]
+
+    # The bug this closes: the intelligence changing its mind must move the
+    # body, not just the record. A changed strategy has to be a changed
+    # ProjectTarget, or "now pursuing X" is a claim nothing downstream acts on.
+    current_target = app.database.get_project_target_for_mission(mission.id)
+    assert current_target.id != first_target.id
+    assert current_target.local_path.endswith("index-ready-packager")
+    old_target = app.database.get_project_target(first_target.id)
+    assert old_target.superseded_at is not None
+    assert "Users are failing installation" in old_target.superseded_reason
+    superseded_events = [
+        item
+        for item in app.database.events(mission.id)
+        if item["event_type"] == "PROJECT_TARGET_SUPERSEDED"
+    ]
+    assert superseded_events
+    assert superseded_events[-1]["payload"]["previous_project_target_id"] == str(first_target.id)
+    assert superseded_events[-1]["payload"]["new_project_target_id"] == str(current_target.id)
+
+
+def test_a_redirect_that_reconfirms_the_same_strategy_moves_nothing(app, tmp_path):
+    """Reassessing and landing on the same candidate is not a pivot: nothing
+    downstream should be replanned, and no second plan_project call happens."""
+
+    reasoner = ScriptedReasoner(
+        _generation(),
+        {"selected_index": 0, "rationale": "r" * 60, "rejected": []},
+        _plan(),
+        {
+            "selected_index": 0,
+            "rationale": "the new constraint does not change which candidate wins " * 2,
+            "what_still_stands": "everything",
+        },
+    )
+    mission, first_choice, _, first_target = joust_it(
+        app,
+        _rules_page(tmp_path),
+        reasoner,
+        workspace_path=str(tmp_path / "work"),
+        projects_root=tmp_path / "projects",
+    )
+
+    selected, _ = redirect(app, mission.id, "a constraint that changes nothing", reasoner)
+
+    assert selected.id == first_choice.id
+    current_target = app.database.get_project_target_for_mission(mission.id)
+    assert current_target.id == first_target.id
+    assert current_target.superseded_at is None
+    # No extra plan_project call was made: the scripted reasoner would have
+    # returned "{}" for it and this would already have raised.
 
 
 def test_a_redirect_that_picks_nothing_valid_is_refused(app, tmp_path):

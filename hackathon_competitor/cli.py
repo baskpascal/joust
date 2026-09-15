@@ -277,6 +277,7 @@ def build_parser() -> argparse.ArgumentParser:
     redirect_parser.add_argument("mission_id", type=UUID)
     redirect_parser.add_argument("instruction")
     redirect_parser.add_argument("--claude-model", default="default")
+    redirect_parser.add_argument("--projects-root")
     export = mission_commands.add_parser("export")
     export.add_argument("mission_id", type=UUID)
     export.add_argument("--bundle", type=Path)
@@ -475,10 +476,26 @@ def main(argv: list[str] | None = None) -> int:
                 args.mission_id,
                 args.instruction,
                 ClaudeCliReasoner(model=args.claude_model, workdir=Path.cwd()),
+                projects_root=args.projects_root,
             )
         except MissionBlocked as blocked:
-            print(json.dumps({"boundary": blocked.code, "detail": blocked.detail}, indent=2))
+            print(
+                json.dumps(
+                    {
+                        "mission_id": str(blocked.mission_id),
+                        "state": "BLOCKED",
+                        "boundary": blocked.code,
+                        "detail": blocked.detail,
+                    },
+                    indent=2,
+                )
+            )
             return 2
+        try:
+            current_target = app.database.get_project_target_for_mission(args.mission_id)
+            project_path = current_target.local_path
+        except KeyError:
+            project_path = None
         print(
             json.dumps(
                 {
@@ -487,6 +504,7 @@ def main(argv: list[str] | None = None) -> int:
                     "winning_mechanism": selected.winning_mechanism,
                     "because": ai_decision.rationale,
                     "ai_decision_id": str(ai_decision.id),
+                    "project_path": project_path,
                 },
                 indent=2,
             )

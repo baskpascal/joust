@@ -873,9 +873,13 @@ class Database:
         return self._get("project_targets", target_id, ProjectTarget)
 
     def get_project_target_for_mission(self, mission_id: UUID | str) -> ProjectTarget:
-        items = self._list_for_mission("project_targets", mission_id, ProjectTarget)
+        items = [
+            item
+            for item in self._list_for_mission("project_targets", mission_id, ProjectTarget)
+            if item.superseded_at is None
+        ]
         if not items:
-            raise KeyError(f"no project target for mission: {mission_id}")
+            raise KeyError(f"no active project target for mission: {mission_id}")
         return items[-1]
 
     def list_project_targets(self, mission_id: UUID | str) -> list[ProjectTarget]:

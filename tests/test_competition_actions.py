@@ -29,6 +29,16 @@ class FailingExecutor:
         raise RuntimeError("executor unavailable")
 
 
+class UnanticipatedFailureExecutor:
+    """Raises an exception type outside {RuntimeError, TypeError, ValueError,
+    TimeoutError} — exactly the class of error a narrower `except` clause let
+    through uncaught, leaving the execution stuck RUNNING until a later
+    cycle's orphan-recovery closed it instead of failing this one cleanly."""
+
+    def execute(self, mission, target, action):
+        raise FileNotFoundError(2, "No such file or directory", ".venv/bin/pip")
+
+
 def _selected_cycle(database, mission, action):
     loop = CompeteLoop(database)
     cycle = loop.create_cycle(mission.id)
@@ -111,7 +121,7 @@ def test_failed_action_is_durable_and_advances_to_verification(tmp_path):
     ).execute_selected(cycle.id)
 
     assert execution.status == ActionExecutionStatus.FAILED
-    assert execution.error == "executor unavailable"
+    assert execution.error == "RuntimeError: executor unavailable"
     stored_cycle = database.get_competition_cycle(cycle.id)
     assert stored_cycle.stage.value == "VERIFY"
     assert stored_cycle.execution_succeeded is False
@@ -146,6 +156,49 @@ def test_running_action_from_interrupted_process_is_closed_durably(tmp_path):
     assert "ended before a durable result" in execution.error
     assert database.get_competition_cycle(cycle.id).stage.value == "VERIFY"
     assert any(
+        event["event_type"] == "COMPETITION_ACTION_INTERRUPTED"
+        for event in database.events(mission.id)
+    )
+
+
+def test_an_unanticipated_exception_type_still_reaches_a_terminal_state(tmp_path):
+    """A FileNotFoundError from a build-loop crash must fail this execution
+    immediately, not leave it RUNNING for a later cycle to clean up."""
+
+    database = Database(tmp_path / "state.db")
+    database.migrate()
+    mission = Mission(title="Unanticipated failure", objective="win", workspace_path=str(tmp_path))
+    database.save_mission(mission)
+    action = ActionCandidate(
+        name="Repair",
+        description="Repair the build",
+        action_type=CompetitionActionType.BUILD_PROJECT,
+        parameters={"specification": "repair"},
+        expected_outcome_improvement=0.5,
+        time_cost=1.0,
+        technical_risk=0.1,
+        regression_probability=0.1,
+    )
+    cycle = _selected_cycle(database, mission, action)
+
+    execution = CompetitionActionDispatcher(
+        database,
+        {CompetitionActionType.BUILD_PROJECT: UnanticipatedFailureExecutor()},
+    ).execute_selected(cycle.id)
+
+    assert execution.status == ActionExecutionStatus.FAILED
+    assert execution.error.startswith("FileNotFoundError:")
+    stored_cycle = database.get_competition_cycle(cycle.id)
+    assert stored_cycle.stage.value == "VERIFY"
+    assert stored_cycle.execution_succeeded is False
+    # Resuming the same cycle again must not find a dangling RUNNING
+    # execution behind it — there is nothing left for orphan-recovery to do.
+    again = CompetitionActionDispatcher(
+        database,
+        {CompetitionActionType.BUILD_PROJECT: UnanticipatedFailureExecutor()},
+    ).execute_selected(cycle.id)
+    assert again.id == execution.id
+    assert not any(
         event["event_type"] == "COMPETITION_ACTION_INTERRUPTED"
         for event in database.events(mission.id)
     )

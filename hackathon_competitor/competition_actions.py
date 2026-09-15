@@ -244,20 +244,30 @@ class CompetitionActionDispatcher:
         )
         try:
             result = executor.execute(mission, target, action)
-        except (RuntimeError, TypeError, ValueError, TimeoutError) as exc:
+        except Exception as exc:  # noqa: BLE001 - an executor is not trusted to fail narrowly
+            # A narrower tuple here previously let an exception type the
+            # authors had not anticipated (a stale-checkout FileNotFoundError,
+            # for one) escape uncaught, leaving this execution stuck RUNNING
+            # until a later cycle's orphan-recovery closed it — spending a
+            # whole cycle on cleanup instead of the actual retry. Any
+            # operational failure from an executor belongs to this mission's
+            # evidence and this cycle's outcome; only a real interrupt
+            # (KeyboardInterrupt, SystemExit) should still propagate past it,
+            # which `except Exception` does not touch.
+            error_text = f"{type(exc).__name__}: {exc}"
             execution.status = ActionExecutionStatus.FAILED
-            execution.error = str(exc)
+            execution.error = error_text[:2000]
             execution.finished_at = utcnow()
             self.database.save_action_execution(execution)
             CompeteLoop(self.database).record_execution(
                 cycle.id,
-                result=f"{action.name} failed: {exc}",
+                result=f"{action.name} failed: {error_text}",
                 succeeded=False,
             )
             self.database.append_event(
                 mission.id,
                 "COMPETITION_ACTION_FAILED",
-                {"execution_id": str(execution.id), "error": str(exc)},
+                {"execution_id": str(execution.id), "error": error_text[:2000]},
             )
             return execution
 
