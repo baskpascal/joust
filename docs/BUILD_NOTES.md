@@ -1,5 +1,37 @@
 # Build notes
 
+## 2026-09-15 — A credential resolver, so a configured operator is never asked where it is
+
+Mid-release-verification, `docker compose build` failed on a fresh clone for
+the ordinary reason: no Plow credential minted yet in that environment. The
+operator's actual complaint was different and sharper — Joust already has an
+explicit contract for where its credential lives (`PLOW_CREDENTIALS_PATH`,
+falling back to `./plow-credentials`), so an agent should never need to
+search the filesystem or ask a configured operator where their own credential
+is. Two independent, slightly different implementations of that lookup
+already existed (`scripts/preflight.py`'s `check_credential`, and
+`cli.py`'s `credential_candidates`/`credential_check`), and neither read a
+`.env` file the way `docker compose` itself does, and the `cli.py` one never
+`~`-expanded a configured path at all.
+
+Added `hackathon_competitor/credentials.py`: `resolve_credential_path()`
+resolves in a fixed order — an explicit argument, `PLOW_CREDENTIALS_PATH` in
+the environment, the same key read from a `.env` next to the checkout, then
+the documented default — expanding `~` at every step, and never opening the
+file it resolves to. `cli.py`'s `credential_candidates()` now calls this
+directly for its first, most-specific candidate rather than duplicating the
+lookup. `scripts/preflight.py` stays deliberately stdlib-only with no project
+imports, so it grew the equivalent resolution logic in place (plus a new
+`--credential-path` flag) instead of importing the shared module.
+
+Ten new tests cover CLI-argument priority, environment priority over `.env`,
+`.env` fallback, `~`-expansion, that resolution never reads the credential's
+bytes (checked by pointing it at genuinely invalid UTF-8 and confirming
+resolution still succeeds), and that a configured, existing credential
+produces no "where is it" remedy text. The suite now collects 275 tests. No
+push, PR, or release was performed as part of this entry — it precedes the
+`db3b610` release verification already in progress.
+
 ## 2026-09-15 — Test 15: reconciling an existing repository, and four gaps it found
 
 Every defect found so far shared one shape: Joust assumes it controls state

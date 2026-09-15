@@ -78,6 +78,51 @@ def test_the_configured_credential_path_is_the_one_inspected(tmp_path):
     assert str(elsewhere) in check.detail
 
 
+def test_a_dotenv_credential_path_is_read_when_no_env_var_is_set(tmp_path):
+    elsewhere = tmp_path / "home" / "credentials"
+    elsewhere.parent.mkdir()
+    elsewhere.write_text("token", encoding="utf-8")
+    elsewhere.chmod(0o600)
+    if stat.S_IMODE(elsewhere.stat().st_mode) != 0o600:
+        pytest.skip("this filesystem cannot hold POSIX modes")
+    (tmp_path / ".env").write_text(f"PLOW_CREDENTIALS_PATH={elsewhere}\n", encoding="utf-8")
+    check = preflight.check_credential(tmp_path, {})
+    assert check.ok
+    assert str(elsewhere) in check.detail
+
+
+def test_an_env_var_wins_over_a_dotenv_value(tmp_path):
+    dotenv_path = tmp_path / "from-dotenv"
+    (tmp_path / ".env").write_text(f"PLOW_CREDENTIALS_PATH={dotenv_path}\n", encoding="utf-8")
+    env_path = tmp_path / "from-env"
+    env_path.write_text("token", encoding="utf-8")
+    env_path.chmod(0o600)
+    check = preflight.check_credential(tmp_path, {"PLOW_CREDENTIALS_PATH": str(env_path)})
+    assert str(env_path) in check.detail
+
+
+def test_a_cli_credential_path_wins_over_env_and_dotenv(tmp_path):
+    (tmp_path / ".env").write_text("PLOW_CREDENTIALS_PATH=./from-dotenv\n", encoding="utf-8")
+    explicit = tmp_path / "explicit-credentials"
+    check = preflight.check_credential(
+        tmp_path, {"PLOW_CREDENTIALS_PATH": "./from-env"}, cli_path=str(explicit)
+    )
+    assert str(explicit) in check.detail
+
+
+def test_configured_credential_does_not_ask_where_it_is(tmp_path):
+    """A configured, existing credential must resolve without the mint remedy."""
+
+    token = tmp_path / "plow-credentials"
+    token.write_text("token", encoding="utf-8")
+    token.chmod(0o600)
+    if stat.S_IMODE(token.stat().st_mode) != 0o600:
+        pytest.skip("this filesystem cannot hold POSIX modes")
+    check = preflight.check_credential(tmp_path, {})
+    assert check.ok
+    assert check.remedy == ""
+
+
 def test_agent_id_must_be_set_and_is_described_as_permanent():
     assert not preflight.check_agent_id({}).ok
     assert "must not change" in preflight.check_agent_id({}).remedy
