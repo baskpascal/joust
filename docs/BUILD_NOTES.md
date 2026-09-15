@@ -1,5 +1,53 @@
 # Build notes
 
+## 2026-09-15 — The brand identity was drawn, validated, and then left unused
+
+Three of the project's own pixel-art banners — `joust-duel.png` (a collision
+at the tilt) and `joust-scenes.png` (helm, prize-giving, favour) — were
+generated and validated in an earlier session (see "Rasterised silhouettes"
+and "Shading" below) at the exact same 1260-1280×420, 3:1 frame as
+`joust-hero.png`. Only the hero ever made it into the README; the rest of
+the page was plain text after it, which is what prompted the question this
+entry answers. Added the duel banner at the turn into "Evidence" and the
+scenes strip as the closing bookend before "Inside" — the same width, the
+same aspect, no new shape introduced. `joust-marks.png` (the mark sheet) is
+linked from "Inside" as a reference rather than inlined as a fourth banner,
+since it is a design-system sheet, not a scene, and reads wrong at banner
+width. `joust-card.png` is exactly 1200×630 — the standard OpenGraph/social-
+preview size — and belongs in the repository's own social-preview setting,
+not in the page; that is a GitHub Settings action, not a file this repo can
+push.
+
+Checking the render (GitHub's markdown API, rendered through a headless
+Chromium at realistic content width, the same method "Looking at the README
+instead of shipping it" used) is what caught that the Evidence table was
+also nearly a day stale: it credited three competitions with "3 strategies"
+each, when the actual evidence by now is stronger and more specific — real
+projects built, repaired, and passing tests (`dryday` 11/11, `issue-pilot`
+4/4, both clean-clone verified), a live demonstration of the strategy-pivot
+fix (a `redirect` that actually moves the built project, not just the
+label), and the three-concurrent-mission isolation result. Rewritten to say
+what actually happened, with commit SHAs.
+
+Validating this the way the project always does — reproducing the exact
+install path, not just reading the diff — surfaced a real, previously
+undetected regression: `build_public_bundle` and
+`validate_install_run_documentation` both required the literal substring
+"docker build" in the README, but the real README has said
+`docker compose up --build -d` since an earlier rewrite. `joust cli bundle`
+has been silently broken against the real README ever since; nothing
+caught it because every existing test for either function used a synthetic
+fixture, never the actual file. Fixed by accepting either phrasing — a bare
+`docker build` and the compose equivalent are both a real, current answer
+to "how does the image get built," and the deterministic fixture path's own
+generated submission README still legitimately says `docker build .`
+literally, so picking one to require would have broken the other real
+caller. A new test runs validation against the real README directly rather
+than a fixture, so this cannot go stale silently again.
+
+Tests passing, ruff clean, `joust cli bundle` verified working against the
+real committed tree.
+
 ## 2026-09-15 — A Plow Chat safety incident, and the boundary of what this fixes
 
 A real incident, reported live: diagnosing why a competition URL
