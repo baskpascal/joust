@@ -83,15 +83,28 @@ it chose, and what it chose over. A change the model made carries the model's
 name. **With no model configured, a mission stops at `AI_STRATEGY_UNAVAILABLE`
 and builds nothing** — there is no deterministic impersonation underneath.
 
+<p align="center">
+  <img src="docs/brand/joust-duel.png" alt="" width="100%">
+</p>
+
 ## Evidence
 
-Three live competitions read on 2026-09-14, none of them known to the code:
+Competitions read on 2026-09-14 and 2026-09-15, none of them known to the code
+beforehand — chosen after the code was frozen, not the other way around:
 
 | Competition | What Joust produced |
 |---|---|
-| [OneAquaHealth IEEE](https://oneaquahealth-ieee-hackathon.devpost.com/rules) | 3 strategies; chose a dry-weather discharge detector for a utility operator; created `dryday` |
-| [Amazon Developer Hackathon](https://amazonappdev2026.devpost.com/rules) | 3 strategies across the Fire TV, Bee and Ring tracks; deadline read as 2026-10-23 12:00 PDT |
-| [RevenueCat Shipaton](https://revenuecat-shipaton-2026.devpost.com/rules) | 3 strategies; identified store publication as the binding gate |
+| [OneAquaHealth IEEE](https://oneaquahealth-ieee-hackathon.devpost.com/rules) | Chose a dry-weather discharge detector; built `dryday`; repaired its own build failures; **11/11 tests passing**, clean-clone verified (`807df02`) |
+| [The Agent Index](https://aiworthusing.com/agent-index) | Built a GitHub issue-triage agent (`issue-pilot`); diagnosed and fixed two real defects on its own; **4/4 tests passing** (`646d9077`) |
+| Same mission, redirected mid-build | An operator instruction changed the winning strategy twice; Joust re-planned, built a *different* real project each time, and marked the superseded one as superseded — the strategy and the repository never drifted apart |
+| [Amazon Developer Hackathon](https://amazonappdev2026.devpost.com/rules) | Chose an Alexa+ caregiving check-in agent; built `kinkeeper` **concurrently** with the row below, against a shared database |
+| [RevenueCat Shipaton](https://revenuecat-shipaton-2026.devpost.com/rules) | Chose an Android cost-splitting app; built `classsplit`; a build-loop crash found here (a coding agent never generated its own Gradle wrapper) was fixed and re-verified live |
+
+The Amazon and RevenueCat missions above ran **at the same time**, against a
+shared database and a shared pool of project directories, to check for
+exactly the failure mode an agent like this invites: one mission's context
+leaking into another's. It didn't — each build stayed correctly scoped to
+its own project, and each failure it hit was its own.
 
 [The build notes](docs/BUILD_NOTES.md) record how each of these went, including
 what broke.
@@ -110,10 +123,16 @@ what broke.
 - **Parts of the older pipeline are deterministic fixtures.** They are labelled
   as such in the source and no mission is routed through them.
 
+<p align="center">
+  <img src="docs/brand/joust-scenes.png" alt="" width="100%">
+</p>
+
 ## Inside
 
 [The design document](docs/SDD.md) says what Joust is meant to be.
 [The runbook](docs/RUNBOOK.md) says how to operate it.
 [The build notes](docs/BUILD_NOTES.md) say why each piece came out the way it did.
+[The marks](docs/brand/joust-marks.png) are drawn on a 16-pixel grid; nothing
+in them is anti-aliased.
 
 MIT licensed.
