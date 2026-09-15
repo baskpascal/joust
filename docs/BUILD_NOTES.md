@@ -1,5 +1,142 @@
 # Build notes
 
+## 2026-09-15 — A pivot that changed the record but not the repository
+
+A validation program run against the frozen `3c33afa` commit (zero code
+touched during any mission — see "A validation program" directly below,
+and "Two unseen competitions" further down) found the most serious defect yet:
+`ai_mission.redirect` changed `mission.active_strategy_id` and recorded a real,
+well-reasoned AI decision, but nothing downstream ever read that field. Run
+live twice against `issue-pilot`, a pivot from IssuePilot to PolicyGuard
+produced the mission claiming "now pursuing PolicyGuard" — a Slack/Teams
+compliance monitor — while the repository on disk kept being the GitHub-triage
+bot, indefinitely, with git HEAD unmoved. The intelligence could think
+correctly and the body would keep executing the mission it had just left.
+
+The fix opens a new development line on top of the frozen commit rather than
+amending it, so the frozen-test evidence stays exactly what it was when it was
+observed. Four defects closed together, because the second and third were
+found chasing the first live:
+
+**The reasoner's `--max-turns 1` was failing 40-50% of live calls.** Across
+Test 1 (frozen-SHA) and Test 4 (long-running adaptation) it failed six times
+in one session with `Error: Reached max turns (1)`. The cause, confirmed with
+`claude -p ... --output-format json`: a reasoning prompt has no legitimate
+reason to use a tool, but the model sometimes tried anyway (`stop_reason:
+tool_use`), spending its one turn on a call instead of an answer, sometimes
+recovering on a bare retry of the identical prompt. `ClaudeCliReasoner` now
+denies every built-in tool (removing the actual cause), gives a bounded
+`--max-turns 3` margin rather than hiding the symptom behind a much larger
+number, reads `--output-format json` to classify what actually happened
+(`REASONING_PROVIDER_TURN_BUDGET_EXCEEDED`, `REASONING_PROVIDER_INVALID_RESPONSE`,
+`REASONING_PROVIDER_ERROR_<SUBTYPE>`, or an unretryable
+`REASONING_PROVIDER_UNAVAILABLE` for a process that never produced a
+structured result), and retries the retryable classifications up to three
+times with backoff, keeping every attempt's classification in the record
+rather than only the last one. Five live calls after the fix: five clean
+successes.
+
+**A strategy pivot now actually moves the project.** `redirect` detects an
+actual candidate change (not a reconfirmation), re-plans a real project for
+the new strategy through the same `plan_project` `joust_it` uses, attaches it
+as the mission's new `ProjectTarget`, and marks the previous one
+`superseded_at`/`superseded_reason` instead of leaving both live and
+ambiguous. `get_project_target_for_mission` now skips superseded targets, so
+every reader — `compete-run`, `build-project`, the planner — picks up the new
+project without being told to look anywhere different. Verified live: a
+pivot to a never-before-chosen candidate (TrendSync, a content-calendar
+agent, out of the three original candidates for the Agent Index mission)
+produced a new project directory (`trendsync`), a new `ProjectTarget` row,
+and the prior one (`issue-pilot`) marked superseded with the operator's own
+instruction as the reason. `HermesCompetitionPlanner.assess` also now reads
+the mission's active strategy into its own context and is told every
+candidate action must serve it, closing the same class of drift one level
+down in the compete loop.
+
+**A narrow exception clause was hiding operational failures behind a slower,
+indirect recovery path.** `competition_actions.execute_selected` only caught
+`(RuntimeError, TypeError, ValueError, TimeoutError)`. A real stale-venv
+`FileNotFoundError`, hit live while reproducing this exact scenario, escaped
+uncaught, left an `ActionExecution` stuck `RUNNING`, and cost the *next*
+`compete-run` invocation an entire cycle just closing the orphan before
+anything could retry the actual fix. Broadened to `except Exception`: every
+operational failure an executor raises now reaches a terminal state
+immediately, and only a real interrupt (`KeyboardInterrupt`, `SystemExit`)
+still propagates. Orphan-recovery on a stuck `RUNNING` execution remains —
+for the case no exception handler can reach, a hard process kill — but it is
+now the last defense, not the routine path.
+
+**A no-diff build was blocked for lacking evidence it could not have had in
+advance.** `review_project_change` required a caller to have pre-declared
+`verification_only` before the build even ran — before anyone could know
+whether the fix would touch source at all. Live: a real dependency
+reinstall validated cleanly (twice — working tree and clean clone) with no
+changed files, and was blocked anyway, forcing an unneeded second repair
+round. This function only ever runs after both those validations already
+passed, so a no-diff result at that point is not missing work; it is
+evidence of an environment or configuration outcome rather than a code one.
+It is now a non-blocking finding.
+
+One more defect surfaced while wiring `redirect`'s new `plan_project` call
+live: `json_object` raises a plain `ValueError` when a model's answer is not
+JSON at all, and `except StrategyRejected` — itself a `ValueError` subclass —
+does not catch its own parent type. This was not new: `joust_it`'s original
+`plan_project` call site had the identical gap and had simply never hit it
+live before. Both original call sites and the new one in `redirect` now
+catch `ValueError`.
+
+Ruff clean, 234 tests passing (up from 200 on the frozen commit; the 34 new
+tests are one per defect above, each reproducing the exact failure observed
+live rather than a shape guessed at afterward).
+
+## 2026-09-15 — A validation program: frozen SHA, and a compete loop under a real break
+
+Two tests run against commit `3c33afa` with a hard rule: no edit to
+`hackathon_competitor` during either mission, and no manual database patch
+either — a genuine failure is reported as one, not quietly fixed and hidden.
+
+**Frozen SHA, zero intervention.** Pointed at a competition neither this
+codebase nor its author had touched: the AI Builders Hackathon
+(`ai-builders-hackathon-2026.devpost.com`, deadline the following day).
+`joust mission joust-it` failed twice in a row with the reasoner's
+`--max-turns 1` limit (see the fix above) and succeeded on an unmodified
+third attempt — 3 strategies, a GitHub-issue-triage-and-PR agent selected
+with a rationale that correctly keyed off the one day of build time actually
+remaining in the rules text. `build-project` then ran the AI's own plan,
+which called for real GitHub API writes and a real AI Gateway call against a
+live throwaway repository as its own test fixture — `no mocked LLM, no
+mocked sandbox` was in the specification the AI itself wrote. Neither
+`GITHUB_TOKEN` nor `AI_GATEWAY_API_KEY` exists on this host, and neither was
+supplied: granting a repo-scoped token and a billed API key to an autonomous
+agent is exactly the kind of consequential, hard-to-reverse action that
+needs an explicit go-ahead, not an assumption. The build failed after
+exhausting its repair budget — correctly. 4 of 6 tests passed (pure unit
+tests); the two live end-to-end tests threw a clear, actionable error
+instead of mocking anything, with a comment the AI wrote unprompted: "These
+are deliberately NOT skipped silently: a triage pipeline that can't be
+proven against a real issue isn't done." A real terminal failure, honestly
+reported, is what this test was built to distinguish from a faked pass.
+
+**Long-running adaptation, against a real break.** A dependency was
+genuinely uninstalled (`reportlab`, from the already-validated `dryday`
+mission) and `compete-run` was run repeatedly with zero manual fixes. It
+correctly observed the regression ("27 of 61 build checks are failing"),
+proposed a targeted repair action, executed it, verified via a clean-clone
+reproduction, and measured `project_readiness` moving `0.0 → 1.0` — real
+observation-to-verified-fix, not just a build. No new commit resulted, and
+that was the right outcome: the actual fix was reinstalling a dependency
+(an environment repair), which is correctly outside git. Getting there,
+however, surfaced the three defects fixed immediately below: the reasoner's
+turn-budget fragility (hit twice more here), a validated no-diff commit
+wrongly blocked by review, and a stale-venv crash left an `ActionExecution`
+stuck `RUNNING` for a full extra cycle. The same run, exercised in parallel
+on `redirect`, is what found the strategy/execution disconnect that became
+the most serious fix of the four: two live pivots, each producing a
+genuine AI decision, neither moving the repository at all.
+
+None of the four defects found here were patched mid-test. They were fixed
+afterward, on a new commit, which is the entry directly above this one.
+
 ## 2026-09-14 — Two unseen competitions, built and validated by a real coding agent
 
 `joust mission joust-it` was pointed at two competitions the code had never
