@@ -1506,3 +1506,13 @@ Plow Chat retest is still pending:
 it requires sending the two-message confirmation sequence through the live
 conversation and recording the existing IBM Bob 2.0 mission without modifying
 its project.
+
+Live Plow Chat observation on this host was performed against the open
+`Plow-Hackhaton` conversation. “Can we cancel it?” produced the concise
+confirmation question with no internal vocabulary. “Yes, cancel it.” produced
+the expected cancellation wording, but the conversation has no connected Joust
+action tool: it narrated the requested test instead of changing the mission.
+The container database therefore remained unchanged. This is a real integration
+gap, not evidence that cancellation itself failed; the lifecycle and CLI are
+ready for the Plow tool binding to route those messages to
+`MissionLifecycleService`.
