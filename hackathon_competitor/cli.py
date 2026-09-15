@@ -12,19 +12,20 @@ from collections.abc import Mapping
 from pathlib import Path
 from uuid import UUID
 
-from .ai import ClaudeCliReasoner, UnavailableReasoner
-from .ai_mission import MissionBlocked, ask, joust_it, redirect
 from .agent_index import (
     AgentIndexService,
     PinnedCliAgentIndexClient,
     observe_license_spdx,
 )
+from .ai import ClaudeCliReasoner, UnavailableReasoner
+from .ai_mission import MissionBlocked, ask, joust_it, redirect
 from .build_loop import (
     ClaudeCodeImplementer,
     CommandImplementer,
     HermesImplementer,
     project_environment,
 )
+from .capabilities.repository_context import detect_default_branch
 from .competition_actions import (
     CompetitionActionDispatcher,
     RealBuildActionExecutor,
@@ -304,7 +305,12 @@ def build_parser() -> argparse.ArgumentParser:
     attach.add_argument("--repo")
     attach.add_argument("--repo-owner")
     attach.add_argument("--repo-name")
-    attach.add_argument("--default-branch", default="main")
+    attach.add_argument(
+        "--default-branch",
+        default=None,
+        help="defaults to the path's actual current branch when it is already a Git "
+        "checkout; falls back to 'main' only when there is no existing repository to read",
+    )
     attach.add_argument(
         "--install-command",
         action="append",
@@ -392,14 +398,16 @@ def main(argv: list[str] | None = None) -> int:
         # Validate the names at attachment time so a credential-shaped name
         # cannot be persisted as a future build permission.
         project_environment(args.environment_name)
+        resolved_path = Path(args.path).resolve()
+        default_branch = args.default_branch or detect_default_branch(resolved_path) or "main"
         target = ProjectTarget(
             mission_id=args.mission_id,
             mode=ProjectMode(args.mode),
-            local_path=str(Path(args.path).resolve()),
+            local_path=str(resolved_path),
             repository_url=args.repo,
             repository_owner=args.repo_owner,
             repository_name=args.repo_name,
-            default_branch=args.default_branch,
+            default_branch=default_branch,
             install_commands=_parse_command_vectors(args.install_command),
             dev_commands=_parse_command_vectors(args.dev_command),
             build_commands=_parse_command_vectors(args.build_command),

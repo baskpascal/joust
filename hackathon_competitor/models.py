@@ -958,6 +958,31 @@ class ModelProvenance(Contract):
     invocation_id: UUID
 
 
+class RepositoryContext(Contract):
+    """What already exists in an attached project, read once before strategy.
+
+    Test 15 found the actual gap this closes: a strategy proposed with no
+    knowledge of an existing repository has no way to say "this already has
+    tokenize() and reading_time_minutes(); build the new feature on top of
+    those" — the reuse that did happen only happened because the
+    implementation step could see the files directly. This is a read-only,
+    static snapshot; nothing that produced it executed anything from the
+    repository it describes.
+    """
+
+    local_path: str
+    language: str | None = None
+    framework: str | None = None
+    tree: list[str] = Field(default_factory=list)
+    readme_excerpt: str | None = None
+    test_files: list[str] = Field(default_factory=list)
+    public_api: list[str] = Field(default_factory=list)
+    todos: list[str] = Field(default_factory=list)
+    current_branch: str | None = None
+    commit_count: int = 0
+    latest_commit_message: str | None = None
+
+
 class StrategyCandidate(Contract):
     """One materially distinct way to compete, as a model proposed it."""
 

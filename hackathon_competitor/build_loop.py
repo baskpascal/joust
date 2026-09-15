@@ -596,6 +596,20 @@ class RealBuildLoop:
             (root / ".joust" / ".keep").write_text("", encoding="utf-8")
             base_sha = git_workspace.checkpoint("Initialize competition project workspace")
         target.base_commit_sha = base_sha
+        actual_branch = git.current_branch()
+        if target.default_branch != actual_branch and not git.branch_exists(target.default_branch):
+            # A stale or assumed default_branch (recorded before this
+            # checkout existed, or copied from a template) would otherwise
+            # fail the switch below with an opaque
+            # "fatal: invalid reference" naming a branch that was never
+            # real. The actual checked-out branch is the only ground truth
+            # available here.
+            self.database.append_event(
+                target.mission_id,
+                "PROJECT_DEFAULT_BRANCH_CORRECTED",
+                {"recorded": target.default_branch, "actual": actual_branch},
+            )
+            target.default_branch = actual_branch
         branch = target.working_branch or f"joust/{target.mission_id}"
         target.working_branch = branch
         self.database.save_project_target(target)

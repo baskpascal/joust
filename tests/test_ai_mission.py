@@ -10,13 +10,13 @@ keeps the history it changes.
 import json
 
 import pytest
+from test_ai_strategy import ScriptedReasoner, _candidate
 
 from hackathon_competitor.ai import UnavailableReasoner
 from hackathon_competitor.ai_mission import MissionBlocked, ask, joust_it, redirect
 from hackathon_competitor.models import MissionState
 from hackathon_competitor.orchestrator import MissionOrchestrator
 from hackathon_competitor.storage import Database
-from test_ai_strategy import ScriptedReasoner, _candidate
 
 
 def _generation() -> dict:
@@ -100,6 +100,57 @@ def test_a_competition_url_becomes_a_chosen_strategy_and_a_real_project(app, tmp
     assert {"AI_STRATEGY_SELECTED", "AI_PROJECT_PLANNED"} <= events
 
 
+def _seed_existing_repository(root):
+    import subprocess
+
+    (root / "pkg").mkdir()
+    (root / "pkg" / "core.py").write_text(
+        "def tokenize(text):\n    return text.split()\n", encoding="utf-8"
+    )
+    (root / "README.md").write_text("# pkg\n\nAn existing package.\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q", "-b", "trunk"], cwd=root, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=a@b.c", "-c", "user.name=x", "add", "-A"],
+        cwd=root,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-c", "user.email=a@b.c", "-c", "user.name=x", "commit", "-qm", "seed"],
+        cwd=root,
+        check=True,
+    )
+
+
+def test_joust_it_attaches_an_existing_project_instead_of_inventing_one(app, tmp_path):
+    existing = tmp_path / "existing-project"
+    existing.mkdir()
+    _seed_existing_repository(existing)
+
+    reasoner = ScriptedReasoner(
+        _generation(),
+        {"selected_index": 0, "rationale": "r" * 60, "rejected": []},
+        _plan("some-other-name"),
+    )
+
+    _mission, _selected, _decision, target = joust_it(
+        app,
+        _rules_page(tmp_path),
+        reasoner,
+        workspace_path=str(tmp_path / "work"),
+        projects_root=tmp_path / "projects",
+        existing_project_path=existing,
+    )
+
+    assert target.local_path == str(existing.resolve())
+    assert target.default_branch == "trunk"
+    assert not (tmp_path / "projects" / "some-other-name").exists()
+
+    generation_prompt, selection_prompt, plan_prompt = reasoner.prompts
+    assert "tokenize" in generation_prompt
+    assert "tokenize" in selection_prompt
+    assert "tokenize" in plan_prompt
+
+
 def test_without_a_model_the_mission_blocks_and_creates_no_project(app, tmp_path):
     """The ablation, through the path a user actually runs."""
 
@@ -129,6 +180,37 @@ def test_an_unreadable_competition_blocks_before_any_model_is_asked(app, tmp_pat
 
     assert caught.value.code == "SOURCE_UNREADABLE"
     assert reasoner.prompts == []
+
+
+def test_a_closed_competition_blocks_before_a_model_is_ever_asked_to_build(app, tmp_path):
+    """A model noticing in its own rationale that a deadline has passed, and
+    then building anyway, is worse than not noticing — this must never
+    reach a model at all. Whether a deadline has passed is a comparison,
+    not a judgement call."""
+
+    page = tmp_path / "closed.html"
+    page.write_text(
+        """<html><body data-hackathon-name="Already Over Cup">
+        <p>Submission Period: Monday, August 10, 2026 (9:00 am Pacific Time)
+           &ndash; Monday, August 17, 2026 (5:00 pm Pacific Time).</p>
+        <p>Entrants must publish a public repository to be eligible.</p>
+        <p>Submissions must include a runnable demo and a README file.</p>
+        <p>Entrants must not fabricate usage numbers or installs.</p>
+        </body></html>""",
+        encoding="utf-8",
+    )
+    reasoner = ScriptedReasoner(_generation())
+
+    with pytest.raises(MissionBlocked) as caught:
+        joust_it(app, str(page), reasoner, workspace_path=str(tmp_path / "work"))
+
+    assert caught.value.code == "COMPETITION_CLOSED"
+    assert "2026-08-17" in caught.value.detail
+    # The gate runs before strategize() is ever called with the locked spec.
+    assert reasoner.prompts == []
+    mission = app.database.get_mission(caught.value.mission_id)
+    assert mission.state is MissionState.BLOCKED
+    assert mission.deadline_at is not None
 
 
 def test_a_question_is_answered_from_stored_state_only(app, tmp_path):
