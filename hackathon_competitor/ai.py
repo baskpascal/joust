@@ -40,6 +40,19 @@ class ModelUnavailable(RuntimeError):
         super().__init__(f"{code}: {detail}" if detail else code)
 
 
+class ModelResponseInvalid(ValueError):
+    """A model answered, but with no JSON object anywhere in the text.
+
+    Kept as a `ValueError` so existing `except ValueError` handling still
+    catches it, but carries its own `code` so a caller can report exactly
+    why the mission stopped instead of a generic rejection — this is
+    "unparseable", never confused with "parsed fine but rejected its
+    content", which is what `StrategyRejected` is for.
+    """
+
+    code = "MODEL_RESPONSE_INVALID"
+
+
 class Reasoner(Protocol):
     """A text-in/text-out model. Implementations must be real providers."""
 
@@ -309,4 +322,4 @@ def json_object(text: str) -> dict:
             continue
         if isinstance(value, dict):
             return value
-    raise ValueError("the model did not return a JSON object")
+    raise ModelResponseInvalid("the model did not return a JSON object")

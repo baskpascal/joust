@@ -3,6 +3,7 @@ import json
 import pytest
 
 import hackathon_competitor.hermes_planner as planner_module
+from hackathon_competitor.ai import ModelUnavailable
 from hackathon_competitor.hermes_planner import (
     HermesCompetitionPlanner,
     HermesOneShotReasoner,
@@ -14,8 +15,8 @@ from hackathon_competitor.models import (
     ActionExecution,
     ActionExecutionStatus,
     ActionResult,
-    CompetitionCycle,
     CompetitionActionType,
+    CompetitionCycle,
     CompetitionObservation,
     Mission,
 )
@@ -34,6 +35,8 @@ class Reasoner:
 
 class CapturingShell:
     calls = []
+    scripted_response = "{}"
+    raises: BaseException | None = None
 
     def __init__(self, root, *, environment=None):
         self.root = root
@@ -41,7 +44,9 @@ class CapturingShell:
 
     def run(self, argv, *, timeout_seconds):
         self.calls.append((argv, timeout_seconds))
-        return "{}"
+        if CapturingShell.raises is not None:
+            raise CapturingShell.raises
+        return CapturingShell.scripted_response
 
 
 def _mission_observation(tmp_path):
@@ -198,6 +203,63 @@ def test_oneshot_reasoner_disables_project_rules_and_tools(tmp_path, monkeypatch
     assert argv[argv.index("--reasoning") + 1] == "minimal"
     assert argv[argv.index("-t") + 1] == ""
     assert timeout == 37
+
+
+@pytest.mark.parametrize(
+    ("status_text", "expected_code"),
+    [
+        ('HTTP 401: {"detail":"Invalid or revoked token"}\n', "MODEL_AUTHENTICATION_FAILED"),
+        ('HTTP 403: {"detail":"forbidden"}\n', "MODEL_AUTHENTICATION_FAILED"),
+        ('HTTP 429: {"detail":"rate limited"}\n', "MODEL_RATE_LIMITED"),
+        ('HTTP 503: {"detail":"upstream unavailable"}\n', "MODEL_PROVIDER_UNAVAILABLE"),
+    ],
+)
+def test_an_http_failure_the_cli_printed_is_never_read_as_a_completion(
+    tmp_path, monkeypatch, status_text, expected_code
+):
+    """A 401/403/429/5xx body still contains valid JSON — it must never be
+    mistaken for a model's answer just because `json_object()` could parse
+    it."""
+
+    CapturingShell.calls = []
+    CapturingShell.scripted_response = status_text
+    CapturingShell.raises = None
+    monkeypatch.setattr(planner_module, "LocalShellTool", CapturingShell)
+    reasoner = HermesOneShotReasoner(tmp_path)
+
+    with pytest.raises(ModelUnavailable) as excinfo:
+        reasoner.complete("plan")
+
+    assert excinfo.value.code == expected_code
+    assert "Invalid or revoked token" in excinfo.value.detail or status_text.strip().startswith(
+        "HTTP"
+    )
+
+
+def test_a_normal_answer_that_happens_to_start_with_the_word_http_passes_through(
+    tmp_path, monkeypatch
+):
+    CapturingShell.calls = []
+    CapturingShell.scripted_response = '{"note": "HTTPS is required for the demo link"}'
+    CapturingShell.raises = None
+    monkeypatch.setattr(planner_module, "LocalShellTool", CapturingShell)
+    reasoner = HermesOneShotReasoner(tmp_path)
+
+    assert reasoner.complete("plan") == '{"note": "HTTPS is required for the demo link"}'
+
+
+def test_a_shell_timeout_becomes_a_typed_model_timeout(tmp_path, monkeypatch):
+    CapturingShell.calls = []
+    CapturingShell.scripted_response = "{}"
+    CapturingShell.raises = TimeoutError("exceeded")
+    monkeypatch.setattr(planner_module, "LocalShellTool", CapturingShell)
+    reasoner = HermesOneShotReasoner(tmp_path, timeout_seconds=42)
+
+    with pytest.raises(ModelUnavailable) as excinfo:
+        reasoner.complete("plan")
+
+    assert excinfo.value.code == "MODEL_TIMEOUT"
+    CapturingShell.raises = None
 
 
 def test_planner_prompt_omits_durable_ids_and_bounds_context(tmp_path):

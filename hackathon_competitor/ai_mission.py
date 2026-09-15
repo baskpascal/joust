@@ -165,11 +165,15 @@ def joust_it(
     except ModelUnavailable as error:
         raise _block(orchestrator, mission, error.code, error.detail)
     except ValueError as error:
-        # StrategyRejected is-a ValueError; so is the plain ValueError
-        # `json_object` raises when the model's answer is not JSON at all.
-        # Both are the same class of problem from here — an unusable model
-        # answer — and both must stop the mission visibly rather than crash.
-        raise _block(orchestrator, mission, "AI_STRATEGY_REJECTED", str(error))
+        # StrategyRejected and ModelResponseInvalid are both ValueError, and
+        # both carry their own `code` (a plain candidate-validation failure
+        # falls back to AI_STRATEGY_REJECTED) — the boundary the mission
+        # reports has to say why the answer was unusable, not just that it
+        # was, so a caller can tell "the model said nothing buildable" apart
+        # from "the transport or the model's own text was never usable".
+        raise _block(
+            orchestrator, mission, getattr(error, "code", "AI_STRATEGY_REJECTED"), str(error)
+        )
 
     mission = orchestrator.transition_state(mission, MissionState.STRATEGY_SELECTION)
     decision = Decision(

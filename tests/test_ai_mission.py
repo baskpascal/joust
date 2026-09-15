@@ -170,6 +170,26 @@ def test_without_a_model_the_mission_blocks_and_creates_no_project(app, tmp_path
     assert app.database.list_strategy_candidates(mission.id) == []
 
 
+def test_zero_candidates_blocks_with_a_specific_boundary_not_a_generic_one(app, tmp_path):
+    """A 401 masquerading as an empty answer, or a genuinely empty answer,
+    must report NO_STRATEGY_CANDIDATES — not the generic AI_STRATEGY_REJECTED
+    every other rejected answer reports — so an operator can tell "the model
+    said nothing buildable" apart from "a candidate failed validation"."""
+
+    reasoner = ScriptedReasoner({"candidates": []})
+
+    with pytest.raises(MissionBlocked) as caught:
+        joust_it(
+            app,
+            _rules_page(tmp_path),
+            reasoner,
+            workspace_path=str(tmp_path / "work"),
+            projects_root=tmp_path / "projects",
+        )
+
+    assert caught.value.code == "NO_STRATEGY_CANDIDATES"
+
+
 def test_an_unreadable_competition_blocks_before_any_model_is_asked(app, tmp_path):
     shell = tmp_path / "shell.html"
     shell.write_text("<html><body><div id='app'></div></body></html>", encoding="utf-8")

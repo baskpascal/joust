@@ -1,5 +1,44 @@
 # Build notes
 
+## 2026-09-15 — An auth failure that looked exactly like an empty answer
+
+Running Test 15's scenario for real, inside the production container, against
+a live model call surfaced a defect worse than the one it was meant to find:
+`HermesOneShotReasoner.complete()` returned `HermesOneShotReasoner`'s call to
+the `hermes` CLI, which on a failed request prints `HTTP 401: {"detail":
+"Invalid or revoked token"}` to stdout and exits 0 rather than raising.
+`json_object()`'s substring scan happily found the embedded `{"detail": ...}`
+object inside that text and parsed it as a completion, so `generate_candidates`
+saw a payload with no `candidates` key and reported "the model returned 0
+candidates" — indistinguishable from a model that was reached and genuinely
+answered with nothing. (The actual cause that day was unrelated to any of
+this: a manual verification script ran through a plain `docker exec` shell,
+which does not inherit `s6-overlay`'s `/run/s6/container_environment/*`
+variables — only processes started through `with-contenv` do — so the token
+was simply missing from that one shell's environment. Real production calls,
+run under proper s6 supervision, were never affected.)
+
+Whether or not that specific case turns out to matter operationally, the
+underlying gap does: an authentication failure, a rate limit, a provider
+outage, a timeout, and a genuinely empty answer are five different situations
+an operator needs to tell apart, and all five used to collapse into the same
+generic `AI_STRATEGY_REJECTED`. `HermesOneShotReasoner.complete()` now
+classifies an `HTTP <status>` line the CLI printed *before* any JSON parsing
+happens — 401/403 → `MODEL_AUTHENTICATION_FAILED`, 429 → `MODEL_RATE_LIMITED`,
+5xx → `MODEL_PROVIDER_UNAVAILABLE` — and a shell timeout now raises
+`MODEL_TIMEOUT` instead of a bare `TimeoutError` that `joust_it()` had no
+handler for at all. `ai.json_object()` now raises a typed
+`ModelResponseInvalid` (`MODEL_RESPONSE_INVALID`) — still a `ValueError`, so
+existing handling keeps working — when there is no JSON object anywhere in
+the text. `StrategyRejected` gained an optional `code`, defaulting to the
+existing `AI_STRATEGY_REJECTED`, and `generate_candidates()` now reports
+`NO_STRATEGY_CANDIDATES` specifically when a valid, parsed answer's candidate
+list is empty. `joust_it()` propagates whichever code the exception actually
+carries instead of overwriting it. Eleven new tests cover every one of these
+paths, including that a normal answer that merely happens to start with the
+word "HTTPS" still passes through untouched. The suite now collects 288
+tests.
+
 ## 2026-09-15 — `joust-it` had no way to say "evolve this repository"
 
 Preparing to actually run Test 15's protocol through the real CLI (against
