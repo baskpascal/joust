@@ -1,5 +1,83 @@
 # Build notes
 
+## 2026-09-15 — Test 15: reconciling an existing repository, and four gaps it found
+
+Every defect found so far shared one shape: Joust assumes it controls state
+from zero and breaks when it has to reconcile state that already exists. Test
+15 targeted that directly. A small, real, three-commit Python fixture repo
+(`textkit`, plain `git init`, no structure of Joust's own) was seeded with
+three deliberate traps: a correctly implemented `tokenize()` that must not be
+rewritten, a real `TODO: implement CSV export` in `report.py` that must be
+completed, and an existing `test_stats.py` case protecting old behaviour that
+must not regress. Joust's own code was frozen; the operator ran
+`attach-project`, gave it an unseen competition (TikTok TechJam 2026), and
+issued `joust-it`.
+
+The build succeeded — 18/18 tests passing, clean-clone verified, all three
+traps handled correctly (the existing function untouched, the TODO completed,
+the protected test still green) — but it succeeded despite the architecture,
+not because of it, and only because the implementation step happens to have
+file access that the strategy step does not. Four real gaps surfaced:
+
+`attach-project` assumed `--default-branch main` unconditionally. `textkit`
+was on `master`; the only reason the mission ran at all was an operator
+override. Fixed two ways: `attach-project` now reads the checkout's actual
+current branch (`git symbolic-ref --short HEAD`) and falls back to `main`
+only when there is no existing repository to read at all, and `RealBuildLoop`
+independently re-checks the branch it is about to work from against the
+branch that is actually checked out, self-correcting (and recording a
+`PROJECT_DEFAULT_BRANCH_CORRECTED` event) if a caller still got it wrong.
+
+`strategize()` and `plan_project()` had no parameter through which an
+existing repository could reach them at all — not a bug in what they did
+with it, but a total absence of the input. Nothing that chooses or shapes a
+strategy could reference `tokenize()`, the real TODO, or the protected test,
+no matter how capable the underlying model was. A new `RepositoryContext`
+model and a read-only `inspect_repository()` (`capabilities/repository_context.py`)
+build a bounded snapshot — language/framework, file tree, README excerpt,
+test files, public API surface (via `ast`, never executed), open TODOs,
+current branch, and commit metadata — entirely through static reads and
+read-only `git` calls, with a dedicated test proving that even a repository
+whose `conftest.py` and `setup.py` both `raise SystemExit` on import is
+inspected safely. `generate_candidates()`, `select_candidate()`,
+`strategize()`, and `plan_project()` now all accept an optional
+`repository_context` and, when one is given, are told explicitly to build on
+`existing_public_api` and `open_todos` rather than propose a disconnected
+product. `joust_it()` gained an `existing_project_path` parameter that
+inspects the repository once before any strategy is proposed, threads the
+resulting context through the whole strategy and planning pipeline, and
+attaches the real directory and its real detected branch as the mission's
+`ProjectTarget` — never a freshly invented `repository_name` or an assumed
+`main` — closing the gap Test 15 had to route around by hand.
+
+A competition whose deadline had already passed was previously handled by
+letting the model notice it in its own rationale and build anyway — a
+"considered but overridden" outcome, which is worse than not noticing, since
+it looks deliberate without being acted on. `joust_it()` now compares the
+extracted deadline against the current time before any model is ever asked
+what to build and raises a `COMPETITION_CLOSED` block if it has passed; a
+deadline with no timezone information is left uncompared rather than guessed
+at, consistent with how deadline extraction already treats timezone
+uncertainty elsewhere.
+
+`GitWorkspace.checkpoint()` ran `git add --all` unconditionally, which
+respects `.gitignore` but does nothing when a repository's own `.gitignore`
+is incomplete — exactly the state a real partially-built repo can be in.
+`checkpoint()` now checks, before staging, whether common generated-artifact
+patterns (`.egg-info`, `__pycache__`, `.venv`, `node_modules`, `dist`,
+`build`, and similar caches) exist unignored in the tree, and if so appends
+them to `.gitignore` (creating one if none exists) before staging — using a
+direct `subprocess` call rather than the shared shell tool, since
+`git check-ignore` returns a legitimate non-zero exit code for "not ignored",
+which the shared tool would otherwise treat as a command failure.
+
+Eight new tests cover the branch auto-detection, the `.gitignore` repair, the
+`RepositoryContext` inspection (including the safety property that inspecting
+a repository must never execute anything from it), the `COMPETITION_CLOSED`
+gate, and the new `repository_context` wiring through the strategy pipeline
+and `joust_it()`'s attach-existing-project path — the suite now collects 264
+tests. No push, PR, or release was performed as part of this entry.
+
 ## 2026-09-15 — The brand identity was drawn, validated, and then left unused
 
 Three of the project's own pixel-art banners — `joust-duel.png` (a collision

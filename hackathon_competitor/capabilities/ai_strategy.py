@@ -20,7 +20,7 @@ import re
 from uuid import UUID
 
 from ..ai import InvocationRecorder, ModelUnavailable, Reasoner, json_object
-from ..models import AIDecision, Evidence, HackathonSpec, StrategyCandidate
+from ..models import AIDecision, Evidence, HackathonSpec, RepositoryContext, StrategyCandidate
 
 MINIMUM_CANDIDATES = 3
 _REQUIRED_FIELDS = (
@@ -58,6 +58,41 @@ def competition_briefing(spec: HackathonSpec, evidence: list[Evidence]) -> dict:
     }
 
 
+def _repository_briefing(context: RepositoryContext) -> dict:
+    """What the model is told about a repository that already exists.
+
+    Everything a strategy needs to build on the existing project rather
+    than propose a disconnected one instead of it — the actual gap Test 15
+    found: a strategy chosen with no knowledge of this cannot reference it,
+    no matter how capable the model is.
+    """
+
+    return {
+        "language": context.language,
+        "framework": context.framework,
+        "file_tree": context.tree[:120],
+        "readme_excerpt": context.readme_excerpt[:800] if context.readme_excerpt else None,
+        "test_files": context.test_files,
+        "existing_public_api": context.public_api,
+        "open_todos": context.todos,
+        "current_branch": context.current_branch,
+        "commit_count": context.commit_count,
+        "latest_commit_message": context.latest_commit_message,
+    }
+
+
+_EXISTING_REPOSITORY_INSTRUCTION = (
+    "A repository already exists for this mission (see existing_repository below) — "
+    "this is not a greenfield decision. Every candidate's technical_plan must build on "
+    "what already exists: reuse existing_public_api entries by name where they already do "
+    "part of the job, complete a real entry from open_todos when one is relevant, and do "
+    "not propose a parallel, disconnected product that ignores the repository's actual "
+    "content. A candidate whose technical_plan could have been written without reading "
+    "existing_repository is wrong the same way a candidate written without reading the "
+    "competition's rules would be."
+)
+
+
 _GENERATION_SCHEMA = {
     "winning_mechanism_analysis": "what actually produces rank or victory here",
     "candidates": [
@@ -83,8 +118,13 @@ def generate_candidates(
     recorder: InvocationRecorder,
     *,
     minimum: int = MINIMUM_CANDIDATES,
+    repository_context: RepositoryContext | None = None,
 ) -> tuple[list[StrategyCandidate], str]:
     briefing = competition_briefing(spec, evidence)
+    context_clause = ""
+    if repository_context is not None:
+        briefing = {**briefing, "existing_repository": _repository_briefing(repository_context)}
+        context_clause = f"\n\n{_EXISTING_REPOSITORY_INSTRUCTION}"
     prompt = (
         "You are deciding what to build to win a specific competition. Read the "
         "competition below and propose "
@@ -94,7 +134,7 @@ def generate_candidates(
         "job. Reject your own generic answers: 'AI productivity assistant', 'research "
         "assistant' and 'agent with many tools' are not products. Ground the winning "
         "mechanism in this competition's stated scoring and requirements, quoting the rule "
-        "you are relying on. Do not propose anything the prohibited actions forbid.\n\n"
+        f"you are relying on. Do not propose anything the prohibited actions forbid.{context_clause}\n\n"
         "Return exactly one JSON object, no markdown, no commentary.\n\n"
         f"response_schema={json.dumps(_GENERATION_SCHEMA, sort_keys=True)}\n"
         f"competition={json.dumps(briefing, sort_keys=True, default=str)}"
@@ -170,8 +210,12 @@ def select_candidate(
     candidates: list[StrategyCandidate],
     reasoner: Reasoner,
     recorder: InvocationRecorder,
+    *,
+    repository_context: RepositoryContext | None = None,
 ) -> tuple[StrategyCandidate, AIDecision]:
     briefing = competition_briefing(spec, evidence)
+    if repository_context is not None:
+        briefing = {**briefing, "existing_repository": _repository_briefing(repository_context)}
     listing = [
         {
             "index": index,
@@ -184,11 +228,19 @@ def select_candidate(
         }
         for index, candidate in enumerate(candidates)
     ]
+    fit_clause = (
+        " Prefer a candidate whose technical_plan actually builds on existing_repository "
+        "when one is present, over an equally plausible candidate that would start "
+        "disconnected from it."
+        if repository_context is not None
+        else ""
+    )
     prompt = (
         "Choose the single strategy most likely to win this competition, and say why "
         "against this competition's own scoring and requirements. Judge feasibility "
         "before the stated deadline, whether real users would adopt it, and whether it "
-        "differs from what obvious entrants will submit. Give a reason for each rejection.\n\n"
+        f"differs from what obvious entrants will submit.{fit_clause} Give a reason for "
+        "each rejection.\n\n"
         "Return exactly one JSON object, no markdown.\n\n"
         f"response_schema={json.dumps(_SELECTION_SCHEMA, sort_keys=True)}\n"
         f"competition={json.dumps(briefing, sort_keys=True, default=str)}\n"
@@ -241,15 +293,25 @@ def strategize(
     recorder: InvocationRecorder,
     *,
     minimum: int = MINIMUM_CANDIDATES,
+    repository_context: RepositoryContext | None = None,
 ) -> tuple[list[StrategyCandidate], StrategyCandidate, AIDecision, str]:
-    """Generate, persist and choose. Raises ModelUnavailable when nothing answers."""
+    """Generate, persist and choose. Raises ModelUnavailable when nothing answers.
+
+    `repository_context`, when given, is the read-only snapshot of a
+    repository that already exists for this mission — see
+    `capabilities.repository_context.inspect_repository`. Without it, a
+    strategy has no way to know an existing repository exists at all, let
+    alone reference it.
+    """
 
     candidates, analysis = generate_candidates(
-        spec, evidence, reasoner, recorder, minimum=minimum
+        spec, evidence, reasoner, recorder, minimum=minimum, repository_context=repository_context
     )
     for candidate in candidates:
         recorder.database.save_strategy_candidate(candidate)
-    selected, decision = select_candidate(spec, evidence, candidates, reasoner, recorder)
+    selected, decision = select_candidate(
+        spec, evidence, candidates, reasoner, recorder, repository_context=repository_context
+    )
     return candidates, selected, decision, analysis
 
 
@@ -272,6 +334,8 @@ def plan_project(
     selected: StrategyCandidate,
     reasoner: Reasoner,
     recorder: InvocationRecorder,
+    *,
+    repository_context: RepositoryContext | None = None,
 ) -> tuple[dict, AIDecision]:
     """Let the model shape the project it is about to build.
 
@@ -279,6 +343,12 @@ def plan_project(
     product decisions, not platform mechanics. Deciding them in Joust would put
     a human's template back in the middle of the promise, so they are asked for
     and validated like everything else.
+
+    When `repository_context` is given, a repository already exists for this
+    mission: the plan must evolve it, not invent an unrelated one. The
+    orchestration layer, not this function, stays authoritative about the
+    actual `repository_name` in that case — it already knows the real
+    directory — so a mismatched name here does not get treated as an error.
     """
 
     briefing = {
@@ -294,12 +364,15 @@ def plan_project(
             "technical_plan": selected.technical_plan,
         },
     }
+    if repository_context is not None:
+        briefing["existing_repository"] = _repository_briefing(repository_context)
+    instruction = _EXISTING_REPOSITORY_INSTRUCTION if repository_context is not None else ""
     prompt = (
         "Plan the repository for this product. Choose the stack that gets a working, "
         "testable first slice fastest, and give every command in argv form, executable "
         "on Linux with nothing preinstalled beyond that language's toolchain. The first "
         "slice must deliver the recurring job end to end for one real input, not a "
-        "skeleton. Use a test command that fails when the behaviour is wrong.\n\n"
+        f"skeleton. Use a test command that fails when the behaviour is wrong.{instruction}\n\n"
         "Return exactly one JSON object, no markdown.\n\n"
         f"response_schema={json.dumps(_PROJECT_SCHEMA, sort_keys=True)}\n"
         f"brief={json.dumps(briefing, sort_keys=True, default=str)}"

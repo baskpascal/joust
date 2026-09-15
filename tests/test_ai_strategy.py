@@ -28,6 +28,7 @@ from hackathon_competitor.models import (
     Evidence,
     HackathonSpec,
     ModelInvocationStatus,
+    RepositoryContext,
     Requirement,
 )
 from hackathon_competitor.storage import Database
@@ -115,9 +116,7 @@ def spec_and_evidence():
     return spec, evidence
 
 
-def test_a_real_strategy_is_generated_selected_and_attributed(
-    mission_database, spec_and_evidence
-):
+def test_a_real_strategy_is_generated_selected_and_attributed(mission_database, spec_and_evidence):
     spec, evidence = spec_and_evidence
     reasoner = ScriptedReasoner(
         _generation(),
@@ -211,9 +210,7 @@ def test_a_candidate_missing_a_field_is_refused(mission_database, spec_and_evide
 def test_a_selection_outside_the_candidate_set_is_refused(mission_database, spec_and_evidence):
     spec, evidence = spec_and_evidence
     recorder = InvocationRecorder(mission_database, spec.mission_id)
-    candidates, _ = generate_candidates(
-        spec, evidence, ScriptedReasoner(_generation()), recorder
-    )
+    candidates, _ = generate_candidates(spec, evidence, ScriptedReasoner(_generation()), recorder)
     with pytest.raises(StrategyRejected, match="outside the candidate set"):
         select_candidate(
             spec,
@@ -227,9 +224,7 @@ def test_a_selection_outside_the_candidate_set_is_refused(mission_database, spec
 def test_a_selection_without_a_stated_reason_is_refused(mission_database, spec_and_evidence):
     spec, evidence = spec_and_evidence
     recorder = InvocationRecorder(mission_database, spec.mission_id)
-    candidates, _ = generate_candidates(
-        spec, evidence, ScriptedReasoner(_generation()), recorder
-    )
+    candidates, _ = generate_candidates(spec, evidence, ScriptedReasoner(_generation()), recorder)
     with pytest.raises(StrategyRejected, match="without stating why"):
         select_candidate(
             spec,
@@ -257,9 +252,7 @@ def test_the_generation_prompt_carries_the_competition_and_not_a_template(
 def test_the_project_plan_must_be_buildable(mission_database, spec_and_evidence):
     spec, evidence = spec_and_evidence
     recorder = InvocationRecorder(mission_database, spec.mission_id)
-    candidates, _ = generate_candidates(
-        spec, evidence, ScriptedReasoner(_generation()), recorder
-    )
+    candidates, _ = generate_candidates(spec, evidence, ScriptedReasoner(_generation()), recorder)
     plan, decision = plan_project(
         spec,
         candidates[0],
@@ -284,9 +277,7 @@ def test_the_project_plan_must_be_buildable(mission_database, spec_and_evidence)
 def test_a_project_plan_without_a_test_command_is_refused(mission_database, spec_and_evidence):
     spec, evidence = spec_and_evidence
     recorder = InvocationRecorder(mission_database, spec.mission_id)
-    candidates, _ = generate_candidates(
-        spec, evidence, ScriptedReasoner(_generation()), recorder
-    )
+    candidates, _ = generate_candidates(spec, evidence, ScriptedReasoner(_generation()), recorder)
     with pytest.raises(StrategyRejected, match="no test commands"):
         plan_project(
             spec,
@@ -302,3 +293,111 @@ def test_a_project_plan_without_a_test_command_is_refused(mission_database, spec
             ),
             recorder,
         )
+
+
+def _repository_context(**overrides) -> RepositoryContext:
+    base = {
+        "local_path": "/tmp/textkit",
+        "language": "Python",
+        "framework": None,
+        "tree": ["textkit/stats.py", "textkit/report.py", "tests/test_stats.py"],
+        "readme_excerpt": "# textkit\n\nText analysis helpers.\n",
+        "test_files": ["tests/test_stats.py"],
+        "public_api": ["textkit/stats.py: def tokenize(text)"],
+        "todos": ["textkit/report.py:12: # TODO: implement CSV export"],
+        "current_branch": "main",
+        "commit_count": 4,
+        "latest_commit_message": "add stats module",
+    }
+    base.update(overrides)
+    return RepositoryContext(**base)
+
+
+def test_generation_prompt_carries_the_existing_repository_when_given(
+    mission_database, spec_and_evidence
+):
+    spec, evidence = spec_and_evidence
+    reasoner = ScriptedReasoner(_generation())
+    recorder = InvocationRecorder(mission_database, spec.mission_id)
+
+    generate_candidates(
+        spec, evidence, reasoner, recorder, repository_context=_repository_context()
+    )
+
+    prompt = reasoner.prompts[0]
+    assert "tokenize" in prompt
+    assert "TODO: implement CSV export" in prompt
+
+
+def test_generation_prompt_omits_existing_repository_when_none_given(
+    mission_database, spec_and_evidence
+):
+    spec, evidence = spec_and_evidence
+    reasoner = ScriptedReasoner(_generation())
+    recorder = InvocationRecorder(mission_database, spec.mission_id)
+
+    generate_candidates(spec, evidence, reasoner, recorder)
+
+    assert "existing_repository" not in reasoner.prompts[0]
+
+
+def test_selection_prompt_carries_the_existing_repository_when_given(
+    mission_database, spec_and_evidence
+):
+    spec, evidence = spec_and_evidence
+    recorder = InvocationRecorder(mission_database, spec.mission_id)
+    candidates, _ = generate_candidates(spec, evidence, ScriptedReasoner(_generation()), recorder)
+    reasoner = ScriptedReasoner({"selected_index": 0, "rationale": "x" * 60, "rejected": []})
+
+    select_candidate(
+        spec,
+        evidence,
+        candidates,
+        reasoner,
+        recorder,
+        repository_context=_repository_context(),
+    )
+
+    assert "tokenize" in reasoner.prompts[0]
+
+
+def test_strategize_threads_repository_context_into_both_calls(mission_database, spec_and_evidence):
+    spec, evidence = spec_and_evidence
+    reasoner = ScriptedReasoner(
+        _generation(),
+        {"selected_index": 0, "rationale": "x" * 60, "rejected": []},
+    )
+    recorder = InvocationRecorder(mission_database, spec.mission_id)
+
+    strategize(spec, evidence, reasoner, recorder, repository_context=_repository_context())
+
+    assert all("tokenize" in prompt for prompt in reasoner.prompts)
+
+
+def test_project_plan_prompt_carries_the_existing_repository_when_given(
+    mission_database, spec_and_evidence
+):
+    spec, evidence = spec_and_evidence
+    recorder = InvocationRecorder(mission_database, spec.mission_id)
+    candidates, _ = generate_candidates(spec, evidence, ScriptedReasoner(_generation()), recorder)
+    reasoner = ScriptedReasoner(
+        {
+            "repository_name": "textkit",
+            "language": "Python",
+            "framework": "none",
+            "install_commands": [["python3", "-m", "venv", ".venv"]],
+            "test_commands": [[".venv/bin/python", "-m", "pytest", "-q"]],
+            "lint_commands": [],
+            "first_slice_specification": "s" * 120,
+        }
+    )
+
+    plan_project(
+        spec,
+        candidates[0],
+        reasoner,
+        recorder,
+        repository_context=_repository_context(),
+    )
+
+    assert "tokenize" in reasoner.prompts[0]

@@ -20,6 +20,7 @@ from uuid import UUID
 
 from .ai import InvocationRecorder, ModelUnavailable, Reasoner, json_object
 from .capabilities.ai_strategy import plan_project, strategize
+from .capabilities.repository_context import detect_default_branch, inspect_repository
 from .capabilities.research import SourceFetcher, SourceUnreadable, discover_sources, extract_spec
 from .models import (
     AIDecision,
@@ -29,6 +30,7 @@ from .models import (
     MissionState,
     ProjectMode,
     ProjectTarget,
+    RepositoryContext,
     SourceRecord,
     StrategyCandidate,
     utcnow,
@@ -75,8 +77,20 @@ def joust_it(
     workspace_path: str | None = None,
     fetcher: SourceFetcher | None = None,
     projects_root: str | Path | None = None,
+    existing_project_path: str | Path | None = None,
 ) -> tuple[Mission, StrategyCandidate, Decision, ProjectTarget]:
-    """One competition URL in; a chosen strategy and a real project out."""
+    """One competition URL in; a chosen strategy and a real project out.
+
+    `existing_project_path`, when given, names a real local repository this
+    mission must evolve rather than replace. Test 15 found that without this,
+    a strategy has no way to know the repository exists at all: it gets
+    inspected once, read-only, before a strategy is ever proposed, and the
+    resulting `RepositoryContext` is threaded through both strategy selection
+    and project planning so a candidate that builds on what is already there
+    can be told apart from one that would start disconnected from it. The
+    attached `ProjectTarget` then points at the real directory and its actual
+    current branch, never a freshly invented name or an assumed "main".
+    """
 
     workspace = str(Path(workspace_path or ".").resolve())
     mission = orchestrator.create_mission(
@@ -117,13 +131,37 @@ def joust_it(
     mission.deadline_at = spec.deadline_at
     orchestrator.database.save_mission(mission)
 
+    if (
+        spec.deadline_at is not None
+        and spec.deadline_at.tzinfo is not None
+        and spec.deadline_at <= utcnow()
+    ):
+        # A model noticing a closed deadline in its own rationale, and then
+        # building anyway, is worse than not noticing at all — it looks
+        # considered without being acted on. Whether a deadline has passed
+        # is never a judgement call; it is a comparison this code makes
+        # before a model is ever asked what to build, not something left to
+        # be mentioned in a decision and then quietly worked around.
+        raise _block(
+            orchestrator,
+            mission,
+            "COMPETITION_CLOSED",
+            f"the submission deadline ({spec.deadline_at.isoformat()}) has already passed",
+        )
+
     mission = orchestrator.transition_state(mission, MissionState.RULES_LOCK)
     mission = orchestrator.transition_state(mission, MissionState.LANDSCAPE_ANALYSIS)
     mission = orchestrator.transition_state(mission, MissionState.IDEATION)
 
+    repository_context = (
+        inspect_repository(existing_project_path) if existing_project_path is not None else None
+    )
+
     recorder = InvocationRecorder(orchestrator.database, mission.id)
     try:
-        candidates, selected, ai_decision, analysis = strategize(spec, evidence, reasoner, recorder)
+        candidates, selected, ai_decision, analysis = strategize(
+            spec, evidence, reasoner, recorder, repository_context=repository_context
+        )
     except ModelUnavailable as error:
         raise _block(orchestrator, mission, error.code, error.detail)
     except ValueError as error:
@@ -186,6 +224,8 @@ def joust_it(
             recorder,
             projects_root=projects_root,
             workspace=workspace,
+            existing_project_path=existing_project_path,
+            repository_context=repository_context,
         )
     except ModelUnavailable as error:
         raise _block(orchestrator, mission, error.code, error.detail)
@@ -206,6 +246,8 @@ def _plan_and_attach_project_target(
     *,
     projects_root: str | Path | None,
     workspace: str,
+    existing_project_path: str | Path | None = None,
+    repository_context: RepositoryContext | None = None,
 ) -> tuple[ProjectTarget, dict]:
     """Plan a project for one strategy and make it the mission's active target.
 
@@ -214,16 +256,30 @@ def _plan_and_attach_project_target(
     thing that gets built", and a pivot handled any other way risks the
     strategy and the target drifting apart, which is exactly the defect this
     was written to close.
+
+    When `existing_project_path` names a real repository, the plan must
+    evolve it: the target points at that exact directory and its actual
+    current branch, never at a freshly invented `repository_name` or an
+    assumed "main" — the model is not trusted to know either of those about
+    a repository it did not create.
     """
 
-    plan, _ = plan_project(spec, selected, reasoner, recorder)
-    root = Path(projects_root or Path(workspace).parent) / plan["repository_name"]
-    root.mkdir(parents=True, exist_ok=True)
+    plan, _ = plan_project(
+        spec, selected, reasoner, recorder, repository_context=repository_context
+    )
+    if existing_project_path is not None:
+        root = Path(existing_project_path).resolve()
+        default_branch = detect_default_branch(root) or "main"
+    else:
+        root = Path(projects_root or Path(workspace).parent) / plan["repository_name"]
+        root.mkdir(parents=True, exist_ok=True)
+        root = root.resolve()
+        default_branch = "main"
     target = ProjectTarget(
         mission_id=mission.id,
         mode=ProjectMode.LOCAL_ONLY,
-        local_path=str(root.resolve()),
-        default_branch="main",
+        local_path=str(root),
+        default_branch=default_branch,
         language=plan["language"],
         framework=plan["framework"],
         install_commands=plan["install_commands"],
@@ -236,9 +292,10 @@ def _plan_and_attach_project_target(
         "AI_PROJECT_PLANNED",
         {
             "project_target_id": str(target.id),
-            "repository_name": plan["repository_name"],
+            "repository_name": root.name,
             "language": plan["language"],
             "strategy_candidate_id": str(selected.id),
+            "existing_repository": existing_project_path is not None,
         },
     )
     specification_path = orchestrator.artifact_root / str(mission.id) / "artifacts"
