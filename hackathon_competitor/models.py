@@ -229,6 +229,9 @@ class Mission(Contract):
     mission_score: float | None = Field(default=None, ge=0.0)
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     blockers: list[str] = Field(default_factory=list)
+    # The phase to return to after a user pause.  This is durable so a
+    # restart cannot accidentally resume a paused mission at the wrong phase.
+    paused_from_state: MissionState | None = None
     unresolved_questions: list[str] = Field(default_factory=list)
     evidence_ids: list[UUID] = Field(default_factory=list)
     workspace_path: str

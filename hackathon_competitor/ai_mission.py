@@ -366,6 +366,8 @@ def _mission_facts(orchestrator: MissionOrchestrator, mission: Mission) -> dict:
         if target is None
         else {
             "path": target.local_path,
+            "repository_url": target.repository_url,
+            "location": "remote" if target.repository_url else "local",
             "language": target.language,
             "branch": target.working_branch,
             "test_commands": target.test_commands,
@@ -406,12 +408,34 @@ def ask(
         "below. They are the mission's stored state. If the facts do not contain the "
         "answer, say exactly what is missing instead of supplying it. Do not offer to "
         "do anything; just answer. Keep it under 200 words, plain prose, no markdown "
-        "headings.\n\n"
+        "headings. Use competition, project, repository, tests, deadline, paused, "
+        "and cancelled as user-facing terms; never mention implementation classes, "
+        "methods, internal commands, databases, or container paths.\n\n"
         f"question={question}\n\nfacts={json.dumps(facts, sort_keys=True, default=str)}"
     )
+    # A model may use internal context to reason, but the returned answer is
+    # sanitized before it reaches the operator.
+    public_facts = facts
     recorder = InvocationRecorder(orchestrator.database, mission.id)
-    text, _ = recorder.run(reasoner, purpose="mission_question", prompt=prompt, context=facts)
-    return text.strip()
+    text, _ = recorder.run(
+        reasoner, purpose="mission_question", prompt=prompt, context=public_facts
+    )
+    return _sanitize_user_answer(text.strip())
+
+
+def _sanitize_user_answer(text: str) -> str:
+    """Keep routine mission answers in product language."""
+
+    import re
+
+    text = re.sub(r"/var/lib/hermes(?:/[^\s)]+)*", "the local project", text)
+    text = re.sub(
+        r"\bMissionOrchestrator\b|\bMissionLifecycleService\b|\bStateMachine\b|\bcancel\(\)",
+        "mission controls",
+        text,
+    )
+    text = re.sub(r"internal (?:CLI|command|wiring)|database transition", "mission controls", text, flags=re.I)
+    return text
 
 
 def redirect(

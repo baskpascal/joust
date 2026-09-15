@@ -227,3 +227,21 @@ class TaskEngine:
                 cancelled.append(task)
             queue.extend(children[current])
         return cancelled
+
+    def cancel_mission(self, mission_id: UUID) -> list[Task]:
+        """Stop all unfinished work while retaining every task record."""
+
+        cancelled: list[Task] = []
+        for task in self.database.list_tasks(mission_id):
+            if task.status in {TaskStatus.SUCCEEDED, TaskStatus.CANCELLED}:
+                continue
+            task.status = TaskStatus.CANCELLED
+            task.finished_at = utcnow()
+            task.error = "mission cancelled by user"
+            self.database.save_task(task)
+            self.database.append_event(
+                mission_id, "TASK_CANCELLED", {"task_id": str(task.id), "reason": "mission_cancelled"}
+            )
+            self.database.record_metric(mission_id, "tasks_cancelled", 1.0)
+            cancelled.append(task)
+        return cancelled

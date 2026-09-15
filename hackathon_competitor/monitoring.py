@@ -14,6 +14,7 @@ from .models import (
     CompeteStage,
     CompetitionObservation,
     MissionStatus,
+    MissionState,
     MonitorOutcome,
     MonitorRunResult,
     utcnow,
@@ -98,7 +99,7 @@ class MonitoredCompetitionRunner:
     ) -> MonitorRunResult:
         captured_at = now or utcnow()
         mission = self.database.get_mission(mission_id)
-        if mission.status != MissionStatus.ACTIVE:
+        if mission.status != MissionStatus.ACTIVE or mission.state in {MissionState.PAUSED, MissionState.CANCELLED}:
             return MonitorRunResult(
                 outcome=MonitorOutcome.UNCHANGED,
                 mission_id=mission.id,

@@ -264,7 +264,7 @@ def build_parser() -> argparse.ArgumentParser:
     create = mission_commands.add_parser("create")
     create.add_argument("--url", required=True)
     create.add_argument("--workspace", default=".")
-    for name in ("show", "resume", "tasks"):
+    for name in ("show", "resume", "pause", "cancel", "tasks"):
         sub = mission_commands.add_parser(name)
         sub.add_argument("mission_id", type=UUID)
     joust = mission_commands.add_parser("joust-it")
@@ -677,6 +677,22 @@ def main(argv: list[str] | None = None) -> int:
                 indent=2,
             )
         )
+        return 0
+    if args.mission_command == "pause":
+        mission = app.lifecycle.pause(args.mission_id)
+        target = app.database.get_project_target_for_mission(mission.id) if mission.project_target_id else None
+        print(json.dumps({
+            "mission_id": str(mission.id), "state": mission.state.value,
+            "project_preserved": target is not None,
+        }, indent=2))
+        return 0
+    if args.mission_command == "cancel":
+        mission = app.lifecycle.cancel(args.mission_id)
+        target = app.database.get_project_target_for_mission(mission.id) if mission.project_target_id else None
+        print(json.dumps({
+            "mission_id": str(mission.id), "state": mission.state.value,
+            "project_preserved": target is not None,
+        }, indent=2))
         return 0
     if args.mission_command == "resume":
         resumed = app.resume_mission(args.mission_id)

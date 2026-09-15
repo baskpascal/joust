@@ -8,6 +8,7 @@ from .capability import CapabilityRegistry, MissionContext
 from .models import EntrantProfile, Mission, MissionState, ProjectTarget
 from .storage import Database, transition_mission
 from .task_engine import TaskEngine
+from .lifecycle import MissionLifecycleService
 
 
 class MissionOrchestrator:
@@ -22,6 +23,7 @@ class MissionOrchestrator:
         self.artifact_root = Path(artifact_root)
         self.artifact_root.mkdir(parents=True, exist_ok=True)
         self.tasks = TaskEngine(database)
+        self.lifecycle = MissionLifecycleService(database, self.tasks)
         self.capability_registry = capability_registry
 
     def create_mission(
@@ -48,7 +50,13 @@ class MissionOrchestrator:
         return mission
 
     def resume_mission(self, mission_id: UUID) -> Mission:
+        return self.lifecycle.resume(mission_id)
+
+    def recover_mission(self, mission_id: UUID) -> Mission:
+        """Recover interrupted task bookkeeping without changing lifecycle state."""
         mission = self.database.get_mission(mission_id)
+        if mission.state in {MissionState.PAUSED, MissionState.CANCELLED}:
+            return mission
         self.tasks.recover_running(mission.id)
         return self.database.get_mission(mission.id)
 
@@ -94,6 +102,9 @@ class MissionOrchestrator:
         if self.capability_registry is None:
             raise LookupError("no capability registry is configured")
         task = self.database.get_task(task_id)
+        mission = self.database.get_mission(task.mission_id)
+        if mission.state in {MissionState.PAUSED, MissionState.CANCELLED}:
+            raise ValueError(f"mission is {mission.state.value.lower()}")
         ready = self.tasks.refresh_ready(task.mission_id)
         if task.id not in {item.id for item in ready}:
             raise ValueError(f"task did not become ready: {task.id}")
@@ -136,8 +147,8 @@ class MissionOrchestrator:
     def run_capability_task(self, task_id: UUID, *, services: dict[str, object] | None = None):
         return asyncio.run(self.dispatch_task(task_id, services=services))
 
-    def pause(self, mission: Mission) -> Mission:
-        return self.transition_state(mission, MissionState.PAUSED)
+    def pause(self, mission: Mission | UUID) -> Mission:
+        return self.lifecycle.pause(mission.id if isinstance(mission, Mission) else mission)
 
-    def cancel(self, mission: Mission) -> Mission:
-        return self.transition_state(mission, MissionState.CANCELLED)
+    def cancel(self, mission: Mission | UUID) -> Mission:
+        return self.lifecycle.cancel(mission.id if isinstance(mission, Mission) else mission)

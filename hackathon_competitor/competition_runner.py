@@ -16,6 +16,7 @@ from .models import (
     Measurement,
     Mission,
     MissionStatus,
+    MissionState,
 )
 from .observation import CompetitionObserver
 from .storage import Database
@@ -70,7 +71,7 @@ class CompetitionIterationRunner:
 
     def run(self, mission_id: UUID) -> CompetitionCycle | None:
         mission = self.database.get_mission(mission_id)
-        if mission.status != MissionStatus.ACTIVE:
+        if mission.status != MissionStatus.ACTIVE or mission.state in {MissionState.PAUSED, MissionState.CANCELLED}:
             return None
         cycles = self.database.list_competition_cycles(mission.id)
         cycle = cycles[-1] if cycles and cycles[-1].completed_at is None else None

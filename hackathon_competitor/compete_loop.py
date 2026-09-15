@@ -8,6 +8,7 @@ from .models import (
     CompeteStage,
     CompetitionCycle,
     MissionStatus,
+    MissionState,
     utcnow,
 )
 from .storage import Database
@@ -25,7 +26,7 @@ class CompeteLoop:
 
     def create_cycle(self, mission_id: UUID) -> CompetitionCycle:
         mission = self.database.get_mission(mission_id)
-        if mission.status != MissionStatus.ACTIVE:
+        if mission.status != MissionStatus.ACTIVE or mission.state in {MissionState.PAUSED, MissionState.CANCELLED}:
             raise CompeteLoopError(f"mission is terminal: {mission.status.value}")
         existing = self.database.list_competition_cycles(mission_id)
         if existing and existing[-1].completed_at is None:

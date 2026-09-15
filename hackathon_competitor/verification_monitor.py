@@ -85,7 +85,7 @@ class VerificationMonitor:
             mission_id=mission.id,
             monitor_type=self.monitor_type,
         )
-        if mission.status != MissionStatus.ACTIVE:
+        if mission.status != MissionStatus.ACTIVE or mission.state.value in {"PAUSED", "CANCELLED"}:
             return inert
         # Nothing to watch until a handoff has actually been delivered. This is
         # what makes the monitor safe to schedule before the request is sent.

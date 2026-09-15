@@ -33,7 +33,9 @@ def refresh_official_rules(
     *,
     fetcher: SourceFetcher | None = None,
 ):
-    mission = orchestrator.resume_mission(mission_id)
+    mission = orchestrator.recover_mission(mission_id)
+    if mission.state in {MissionState.PAUSED, MissionState.CANCELLED}:
+        raise RuntimeError(f"mission is {mission.state.value.lower()}")
     old_spec = orchestrator.database.get_spec_for_mission(mission.id)
     task = Task(
         mission_id=mission.id,

@@ -1475,5 +1475,34 @@ GitHub check observation now uses `gh api` rather than the unsupported
 `gh pr checks --json` flag in the pinned CLI. The live container is not
 authenticated to GitHub, so remote checks remain an explicit uncertainty. No
 push, PR, deployment, submission, account mutation, or Verified request was
-performed. The complete local suite now collects 127 tests and passes with
+performed. The complete local suite now collects 293 tests and passes with
 Ruff and `git diff --check` (line-ending notices only).
+
+## 2026-09-15 — Mission lifecycle control incident
+
+Plow Chat exposed implementation details when an operator asked “Can we cancel
+it?”: it described an unavailable CLI instead of answering the product question
+or offering the action. The root cause was that pause/cancel existed only as
+orchestrator helpers, while the public CLI and persona had no canonical
+lifecycle route. In addition, competition and monitoring entrypoints guarded
+only the terminal status field, so a PAUSED mission could still be considered
+active.
+
+`MissionLifecycleService` is now the single boundary for pause, resume, and
+cancel. It persists `MISSION_PAUSED`, `MISSION_RESUMED`, and
+`MISSION_CANCELLED` exactly once on idempotent retries, records the prior phase
+for resume, stops unfinished task bookkeeping on cancellation, and preserves
+the attached target and project. Competition cycles, scheduled monitors, and
+capability dispatch refuse PAUSED/CANCELLED missions; restart recovery does not
+resume them. The CLI exposes `mission pause`, `mission resume`, and
+`mission cancel` with authoritative JSON. Persona guidance distinguishes
+questions from commands and keeps internal paths and implementation terms out
+of normal replies.
+
+The lifecycle regression suite covers state transitions, target/task/project
+preservation, idempotent cancellation, execution guards, and natural-language
+question versus command handling. The full suite contains 293 tests. The real
+Plow Chat retest is still pending:
+it requires sending the two-message confirmation sequence through the live
+conversation and recording the existing IBM Bob 2.0 mission without modifying
+its project.

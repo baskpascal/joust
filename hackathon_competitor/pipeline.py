@@ -467,7 +467,7 @@ def build_project_for_mission(
 ):
     """Execute the real project build path for an attached mission target."""
 
-    mission = orchestrator.resume_mission(mission_id)
+    mission = orchestrator.recover_mission(mission_id)
     target = orchestrator.database.get_project_target_for_mission(mission.id)
     if specification is None:
         plans = [
@@ -535,7 +535,7 @@ def build_project_for_mission(
 def prepare_project_submission(orchestrator: MissionOrchestrator, mission_id) -> Mission:
     """Create a target-bound submission pack after a real project build."""
 
-    mission = orchestrator.resume_mission(mission_id)
+    mission = orchestrator.recover_mission(mission_id)
     if mission.state != MissionState.VALIDATING:
         raise RuntimeError(
             f"project submission requires VALIDATING state, got {mission.state.value}"
@@ -763,7 +763,7 @@ def _fixture_compliance_statuses(spec, *, demo_valid: bool) -> dict[str, RuleSta
 
 
 def complete_v0(orchestrator: MissionOrchestrator, mission_id) -> Mission:
-    mission = orchestrator.resume_mission(mission_id)
+    mission = orchestrator.recover_mission(mission_id)
     if mission.state != MissionState.PLANNING:
         return mission
     spec = orchestrator.database.get_spec_for_mission(mission.id)
