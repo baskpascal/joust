@@ -41,6 +41,7 @@ from .models import (
     MetricSignal,
     MonitorBackoffState,
     ProjectTarget,
+    ProposedCommand,
     ProposedExternalAction,
     RepositorySnapshot,
     RuleObservation,
@@ -333,6 +334,17 @@ MIGRATIONS: tuple[str, ...] = (
     );
     CREATE INDEX IF NOT EXISTS idx_strategy_candidates_mission
       ON strategy_candidates(mission_id, created_at);
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS proposed_commands (
+        id TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        requested_at TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_proposed_commands_mission
+      ON proposed_commands(mission_id, requested_at);
     """,
 )
 
@@ -943,6 +955,21 @@ class Database:
 
     def list_approvals(self, mission_id: UUID | str) -> list[Approval]:
         return self._list_for_mission("approvals", mission_id, Approval)
+
+    def save_proposed_command(self, command: ProposedCommand) -> None:
+        self._save(
+            "proposed_commands",
+            command,
+            mission_id=command.mission_id,
+            status=command.status.value,
+            requested_at=command.requested_at.isoformat(),
+        )
+
+    def get_proposed_command(self, command_id: UUID | str) -> ProposedCommand:
+        return self._get("proposed_commands", command_id, ProposedCommand)
+
+    def list_proposed_commands(self, mission_id: UUID | str) -> list[ProposedCommand]:
+        return self._list_for_mission("proposed_commands", mission_id, ProposedCommand)
 
     def save_external_action(self, action: ProposedExternalAction) -> None:
         self._save(

@@ -1,5 +1,117 @@
 # Build notes
 
+## 2026-09-15 — A Plow Chat safety incident, and the boundary of what this fixes
+
+A real incident, reported live: diagnosing why a competition URL
+(lablab.ai, the IBM Bob 2 hackathon) was unreachable, an agent proposed
+`cat /var/lib/hermes/.env`, `env | grep ...`, and `find /etc/ssl ...`. The
+user sent `/deny`. Plow Chat answered "No pending command to deny." The
+agent continued anyway.
+
+**What this fixes, honestly.** Plow Chat's own approval UI — the surface
+that lost the pending request and answered `/deny` with an ambiguous
+failure — lives in the Hermes gateway, in the base image
+(`plow-pbc/plow-hermes-agent`), not in this repository. This repository
+has no access to that code and cannot patch the specific race condition in
+it. What it can do, and what was built: make the dangerous command
+unnecessary and unreachable from Joust's own side, and build the durable
+approval primitive Joust's own code needs, so that anywhere Joust itself
+proposes or gates a risky command, the failure mode in the incident cannot
+recur. This is prevention and a correct pattern to point at, not a claim of
+having patched Hermes's own UI.
+
+**`security_policy.classify_command`** — the actual live commands
+classified, and rejected before any approval prompt would exist:
+`.env`, `plow-credentials`, SSH keys, `*_TOKEN`/`*_KEY`/`*_SECRET`/password
+patterns, cookies and auth headers, and a genuine environment dump (bare
+`env`/`printenv`, or either piped into a filter) are all forbidden
+outright. `printenv PATH` — naming one specific, non-secret variable — is
+not; the distinction is deliberate; a dump is not the same failure as
+reading one declared value. Wired into `build_loop.validate_project_commands`
+so a project's own declared commands are held to the same standard as
+anything proposed interactively.
+
+**`capabilities/network_diagnostics.diagnose`** — the answer to "why is
+this host unreachable" that never needed a shell in the first place: DNS
+resolution, TCP connectivity, a TLS handshake, certificate validation, and
+an HTTP status, as one direct library call with no filesystem or
+environment access at all. Run against the actual reported host:
+
+```
+lablab.ai is reachable (HTTP 403).
+DNS: resolved to 104.26.10.134, 2606:4700:20::ac43:4620
+TLS: handshake succeeded, certificate valid
+HTTP: responded with status 403
+```
+
+DNS, TLS, and the certificate were all fine the whole time; the 403 is a
+bot/WAF block, the same pattern already documented for other Devpost-style
+hosts. There was never a network or credential problem to diagnose — which
+is exactly the point: a tool that answers the real question in one honest
+call removes any reason to reach for `.env` or `/etc/ssl` at all.
+
+**`command_approval.CommandApprovalService`** — the durable primitive this
+incident's UI needed and evidently didn't have. A `ProposedCommand` is a
+row (`propose`/`get`/`grant`/`deny`, backed by a new `proposed_commands`
+table, migration 14), not session state: `get` resolves a stale `PENDING`
+to `EXPIRED` on read rather than trusting whatever a caller last believed;
+`deny` on an already-denied request is an idempotent no-op (a second
+`/deny` must never look like a failure); `deny`/`grant` on anything else
+non-pending raise a *named* status (`CommandNotPending`, carrying the
+actual state) instead of the ambiguous message that caused the live
+incident; nothing this service governs can run except through
+`execute_if_granted`, which reads status fresh and refuses anything not
+`GRANTED` at that moment. `propose_unless_blocked` makes "a denial is
+authoritative" a checked precondition, not a convention: a same-category
+fallback after a denial is refused (`CategoryBlocked`) before it becomes a
+new request at all, not merely discouraged in prose. `classify_command`
+runs inside `propose` itself, so a forbidden command never becomes
+something with an id to grant or deny in the first place —
+`format_approval_prompt` renders only commands that passed that gate, and
+renders intent first ("I want to check whether the site is reachable... no
+credentials will be read"), with the raw command as an optional technical
+disclosure, never the primary text.
+
+**`hackathon-safety`**, a new skill, is the actual point of leverage for
+the specific incident: it happened in Plow Chat's own top-level
+conversation, entirely outside anything this repository dispatches, which
+means the code fixes above were never in that call path at all. Skills are
+how Joust's own behavioral policy reaches the agent that *is* in that path.
+It states the forbidden list, names the safe diagnostic tool for
+connectivity failures, and states the approval/denial semantics, and is
+cross-referenced from `hackathon-intake` and `hackathon-research` at the
+exact point (an unreachable source) the incident occurred. `ClaudeCodeImplementer`
+and `HermesImplementer`'s own repair/implement prompts carry the same
+instruction directly, since those run a real coding agent with real shell
+access too.
+
+Seven regression tests, one per named property
+(`test_command_approval_security.py`): a network failure must not trigger
+secret inspection; a denied approval must not execute; an approval request
+must survive a fresh service instance untouched (durability, not session
+state); the exact "no pending command" ambiguity must instead be two
+distinct, named failures (`CommandNotFound` vs. `CommandNotPending`) and a
+second `/deny` must be a no-op, not an error; a denial must block an
+equivalent same-category fallback before it is even proposed; a forbidden
+command must never become an approvable request at all; and an expired,
+undecided request must resolve to `EXPIRED` and stay refused, never be
+treated as silently approved.
+
+**Re-running the actual flow**: `joust mission joust-it --url
+https://lablab.ai/ai-hackathons/ibm-bob-2-hackathon` now completes cleanly
+end to end — lablab.ai answered normally this run (the WAF block above was
+not present this time, so the original failure did not reproduce on
+demand). 3 strategies, `ClauseWatch` selected on a concrete, rules-grounded
+rationale, reached `BUILDING`. No secret file was read, no environment
+dump occurred, and no shell command was ever shown to a user during this
+run — which is consistent with the fix, not proof of it, since the
+condition that triggered the incident (an actually-blocked fetch) did not
+occur this time. The six tests above are what actually exercises the fix
+under that condition, deterministically, rather than waiting for a live
+403 to happen to recur.
+
+242 tests passing, ruff clean.
+
 ## 2026-09-15 — Three missions at once: clean isolation, one more crash site found
 
 Three competitions run truly concurrently — the same shared `state.db`, the

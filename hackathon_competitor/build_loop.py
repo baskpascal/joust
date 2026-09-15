@@ -20,6 +20,7 @@ from .models import (
     RepositorySnapshot,
 )
 from .project_review import review_project_change
+from .security_policy import classify_command
 from .storage import Database
 from .tool_gateway import CodingAgentCommandTool, LocalGitTool, LocalShellTool
 from .workspace import GitWorkspace
@@ -94,7 +95,18 @@ def project_environment(allowlist: Sequence[str] = ()) -> dict[str, str]:
 
 
 def validate_project_commands(commands: Sequence[Sequence[str]]) -> None:
-    """Reject command vectors that would persist an obvious credential."""
+    """Reject command vectors that would persist or read an obvious credential.
+
+    Two distinct risks, both checked: an argument that *contains* a
+    credential-shaped value (a token pasted into a build command, which
+    would then sit in shell history or a log), and a command whose *target*
+    is a secret, a key, or the whole environment (`cat .env`, `env | grep`) —
+    the class of command a live incident showed reaching a user as something
+    they had to recognise as dangerous themselves. `security_policy` is the
+    general form of the second check; it is enforced here too so a project's
+    own declared commands are held to the same standard as anything proposed
+    interactively.
+    """
 
     for argv in commands:
         if not argv or any(not isinstance(argument, str) or not argument for argument in argv):
@@ -103,6 +115,9 @@ def validate_project_commands(commands: Sequence[Sequence[str]]) -> None:
             upper = argument.upper()
             if any(marker.upper() in upper for marker in _SENSITIVE_COMMAND_MARKERS):
                 raise ValueError("project command contains a credential-shaped argument")
+        verdict = classify_command(argv)
+        if not verdict.allowed:
+            raise ValueError(f"project command is forbidden ({verdict.category}): {verdict.reason}")
 
 
 # A coding-agent CLI takes its prompt as a single command-line argument, and
@@ -234,7 +249,9 @@ class HermesImplementer:
             "You are the implementation executor for a competition project. "
             "Work directly in the current project directory. Implement the requested "
             "slice completely, including tests. Inspect existing files first, make the "
-            "smallest coherent changes, and do not publish or push anything.\n\n"
+            "smallest coherent changes, and do not publish or push anything. Never read "
+            ".env, plow-credentials, SSH keys, or any credential/token/secret file, and "
+            "never dump the process environment.\n\n"
             f"SPECIFICATION:\n{specification}"
         )
         if failure:
@@ -354,7 +371,8 @@ class ClaudeCodeImplementer:
             "directory. Implement the specification completely, with tests that actually "
             "exercise the behaviour. Inspect what already exists before writing. Do not "
             "invent APIs, credentials or telemetry, and do not push, publish or deploy "
-            "anything.\n\n"
+            "anything. Never read .env, plow-credentials, SSH keys, or any "
+            "credential/token/secret file, and never dump the process environment.\n\n"
             f"SPECIFICATION:\n{specification}"
         )
         if failure:
@@ -368,7 +386,13 @@ class ClaudeCodeImplementer:
         prompt = (
             "A verification command just failed in this project. Diagnose it from the "
             "output below and the code, state the root cause, apply the smallest repair "
-            "that fixes it, and do not weaken or delete tests to make them pass.\n\n"
+            "that fixes it, and do not weaken or delete tests to make them pass. "
+            "Never read .env, plow-credentials, SSH keys, or any credential/token/secret "
+            "file, and never dump the process environment (env, printenv with no "
+            "argument, /proc/*/environ) — no diagnosis needs it. If the failure looks "
+            "network- or TLS-related, diagnose it with ordinary, narrowly-scoped tools "
+            "(a single DNS lookup, one HTTP request, one TLS handshake against the exact "
+            "host involved) rather than broad environment or filesystem inspection.\n\n"
             f"ORIGINAL SPECIFICATION:\n{specification}\n\n"
             f"FAILURE OUTPUT:\n{_bounded_failure(failure)}"
         )
