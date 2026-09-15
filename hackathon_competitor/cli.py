@@ -181,6 +181,7 @@ def doctor(home: Path | None = None) -> tuple[dict[str, dict[str, object]], bool
         "hackathon-build",
         "hackathon-red-team",
         "hackathon-submit",
+        "hackathon-safety",
     ]
     skill_roots = [repo_root / "skills", Path("/opt/hermes/skills")]
     installed = {

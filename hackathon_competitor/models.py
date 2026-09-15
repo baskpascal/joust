@@ -760,6 +760,30 @@ class Approval(Contract):
     decision_note: str | None = None
 
 
+class ProposedCommand(Contract):
+    """A command that needs a human's yes before it runs, held durably.
+
+    A command already rejected by `security_policy.classify_command` never
+    becomes one of these — this contract exists only for a command that is
+    genuinely permitted to run *with* approval, so the record itself only
+    ever represents something a person could reasonably say yes to. What a
+    user sees is `intent_summary`; `command` is the underlying text, present
+    for evidence and an optional "technical details" disclosure, never the
+    thing a user is asked to parse.
+    """
+
+    id: UUID = Field(default_factory=uuid4)
+    mission_id: UUID
+    command: str
+    intent_summary: str
+    category: str = "diagnostic"
+    status: ApprovalStatus = ApprovalStatus.PENDING
+    requested_at: datetime = Field(default_factory=utcnow)
+    expires_at: datetime
+    decided_at: datetime | None = None
+    decision_note: str | None = None
+
+
 class AgentIndexEligibility(Contract):
     """Observed eligibility gate from the Agent Index publication flow."""
 

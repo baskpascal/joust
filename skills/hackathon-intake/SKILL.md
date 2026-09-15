@@ -16,3 +16,7 @@ same mission already exists, resume it rather than duplicating state.
 
 Research and local drafting are reversible. Do not register, publish, accept
 terms, or submit during intake.
+
+If the supplied source cannot be reached, see `hackathon-safety` before
+diagnosing why — a connectivity failure is never a reason to read a
+credential file or dump the environment.
