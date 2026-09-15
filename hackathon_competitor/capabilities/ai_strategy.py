@@ -35,7 +35,18 @@ _REQUIRED_FIELDS = (
 
 
 class StrategyRejected(ValueError):
-    """The model answered, but the answer does not survive validation."""
+    """The model answered, but the answer does not survive validation.
+
+    Carries an optional `code` so a caller reporting a mission boundary can
+    say something more specific than the generic `AI_STRATEGY_REJECTED` —
+    "the model returned genuinely zero candidates" is a materially different
+    situation from "a candidate was missing a required field", even though
+    both are, mechanically, a rejected answer.
+    """
+
+    def __init__(self, message: str, *, code: str = "AI_STRATEGY_REJECTED"):
+        super().__init__(message)
+        self.code = code
 
 
 def competition_briefing(spec: HackathonSpec, evidence: list[Evidence]) -> dict:
@@ -147,10 +158,11 @@ def generate_candidates(
     )
     payload = json_object(text)
     raw = payload.get("candidates")
+    count = len(raw) if isinstance(raw, list) else 0
     if not isinstance(raw, list) or len(raw) < minimum:
         raise StrategyRejected(
-            f"the model returned {len(raw) if isinstance(raw, list) else 0} candidates, "
-            f"fewer than the required {minimum}"
+            f"the model returned {count} candidates, fewer than the required {minimum}",
+            code="NO_STRATEGY_CANDIDATES" if count == 0 else "AI_STRATEGY_REJECTED",
         )
     candidates = [_validate_candidate(item, spec, invocation.id, index) for index, item in enumerate(raw)]
     _reject_undifferentiated(candidates)

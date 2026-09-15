@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Protocol
 
 from pydantic import ValidationError
 
+from .ai import ModelUnavailable
 from .competition_actions import ActionExecutor
 from .models import (
     ActionCandidate,
@@ -60,6 +62,36 @@ def _current_strategy(database: Database, mission: Mission) -> dict | None:
     return None
 
 
+_HTTP_ERROR_PATTERN = re.compile(r"\bHTTP\s+(\d{3})\b")
+
+
+def _classify_transport_failure(text: str) -> tuple[str, str] | None:
+    """Detect an HTTP failure the `hermes` CLI printed instead of raising.
+
+    A 401 from the API is not "the model returned nothing" — it never asked
+    a model anything — but the CLI's own error text (`HTTP 401: {"detail":
+    ...}`) still contains a syntactically valid JSON object, so a bare
+    `json_object()` scan happily parses it as if it were an answer. This has
+    to be caught before that scan ever runs, at the one place that actually
+    knows this text came from a failed request rather than a completion.
+    Returns `(code, detail)` for a recognised failure, `None` for ordinary
+    model output.
+    """
+
+    match = _HTTP_ERROR_PATTERN.search(text[:200])
+    if match is None:
+        return None
+    status = int(match.group(1))
+    detail = text.strip()[:400]
+    if status in (401, 403):
+        return "MODEL_AUTHENTICATION_FAILED", detail
+    if status == 429:
+        return "MODEL_RATE_LIMITED", detail
+    if status >= 500:
+        return "MODEL_PROVIDER_UNAVAILABLE", detail
+    return None
+
+
 class HermesOneShotReasoner:
     """Invoke the configured Hermes model and return its final response."""
 
@@ -99,10 +131,20 @@ class HermesOneShotReasoner:
         argv.extend(["--provider", self.provider, "--model", self.model])
         argv.extend(["--reasoning", self.reasoning])
         argv.extend(["-z", prompt])
-        return LocalShellTool(self.workdir, environment=self.environment).run(
-            argv,
-            timeout_seconds=self.timeout_seconds,
-        )
+        try:
+            text = LocalShellTool(self.workdir, environment=self.environment).run(
+                argv,
+                timeout_seconds=self.timeout_seconds,
+            )
+        except TimeoutError as error:
+            raise ModelUnavailable(
+                "MODEL_TIMEOUT", f"no answer in {self.timeout_seconds:.0f}s"
+            ) from error
+        failure = _classify_transport_failure(text)
+        if failure is not None:
+            code, detail = failure
+            raise ModelUnavailable(code, detail)
+        return text
 
 
 def _json_object(text: str) -> dict:
