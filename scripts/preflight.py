@@ -148,9 +148,55 @@ def _holds_posix_modes(directory: Path) -> bool:
         probe.unlink(missing_ok=True)
 
 
-def check_credential(root: Path, environment: dict[str, str]) -> Check:
+def _dotenv_value(path: Path, key: str) -> str | None:
+    """One `KEY=value` line from a `.env` file, read as plain text.
+
+    Never executed, never sourced through a shell — Compose reads the same
+    file the same way, so this has to agree with it without giving a `.env`
+    the power to run anything.
+    """
+
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    prefix = f"{key}="
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("#") or not stripped.startswith(prefix):
+            continue
+        value = stripped[len(prefix) :].strip().strip('"').strip("'")
+        return value or None
+    return None
+
+
+def resolve_credential_path(
+    root: Path, environment: dict[str, str], *, cli_path: str | None = None
+) -> Path:
+    """The configured credential path, in the order Joust actually reads it.
+
+    An explicit `--credential-path`, then `PLOW_CREDENTIALS_PATH` in the
+    environment, then the same key in a `.env` next to the checkout (what
+    `docker compose` itself reads), then the documented `./plow-credentials`
+    default. An operator who has already configured any of the first three
+    should never be asked where their credential is.
+    """
+
+    if cli_path:
+        return Path(cli_path).expanduser()
     configured = environment.get("PLOW_CREDENTIALS_PATH", "").strip()
-    path = Path(configured).expanduser() if configured else root / "plow-credentials"
+    if configured:
+        return Path(configured).expanduser()
+    dotenv_value = _dotenv_value(root / ".env", "PLOW_CREDENTIALS_PATH")
+    if dotenv_value:
+        return Path(dotenv_value).expanduser()
+    return (root / "plow-credentials").expanduser()
+
+
+def check_credential(
+    root: Path, environment: dict[str, str], *, cli_path: str | None = None
+) -> Check:
+    path = resolve_credential_path(root, environment, cli_path=cli_path)
     mint = (
         "Mint one with the official helper:\n"
         "      git clone https://github.com/plow-pbc/plow-agents.git\n"
@@ -220,13 +266,15 @@ def check_disk(root: Path) -> Check:
     )
 
 
-def run_checks(root: Path, environment: dict[str, str] | None = None) -> list[Check]:
+def run_checks(
+    root: Path, environment: dict[str, str] | None = None, *, credential_path: str | None = None
+) -> list[Check]:
     environment = dict(os.environ if environment is None else environment)
     checks = [check_git(), check_docker()]
     if checks[-1].ok:
         checks.append(check_compose())
         checks.append(check_daemon())
-    checks.append(check_credential(root, environment))
+    checks.append(check_credential(root, environment, cli_path=credential_path))
     checks.append(check_agent_id(environment))
     checks.append(check_disk(root))
     return checks
@@ -256,10 +304,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Check this machine before starting Joust.")
     parser.add_argument("--json", action="store_true", help="print the checks as JSON")
     parser.add_argument("--root", default=".", help="the Joust checkout to inspect")
+    parser.add_argument(
+        "--credential-path",
+        default=None,
+        help="the Plow credential file, overriding PLOW_CREDENTIALS_PATH and .env",
+    )
     arguments = parser.parse_args(argv)
 
     root = Path(arguments.root).resolve()
-    checks = run_checks(root)
+    checks = run_checks(root, credential_path=arguments.credential_path)
     ready = not any(not check.ok and check.blocking for check in checks)
     if arguments.json:
         print(
