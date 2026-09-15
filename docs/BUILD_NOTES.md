@@ -1,5 +1,18 @@
 # Build notes
 
+## 2026-09-15 — `joust-it` had no way to say "evolve this repository"
+
+Preparing to actually run Test 15's protocol through the real CLI (against
+the real production container, not a direct Python call) surfaced the gap:
+`joust_it()` gained an `existing_project_path` parameter earlier today, but
+the `joust mission joust-it` command line never exposed it. An operator could
+attach a project to a mission, but had no way to tell `joust-it` itself that
+a repository already exists and must be evolved rather than replaced — the
+exact capability the four gaps were supposed to deliver end to end. Added
+`--existing-project-path` to the `joust-it` subcommand, threaded straight
+through to `joust_it()`. Two new tests cover the flag reaching `joust_it()`
+and defaulting to `None` when omitted. The suite now collects 277 tests.
+
 ## 2026-09-15 — A credential resolver, so a configured operator is never asked where it is
 
 Mid-release-verification, `docker compose build` failed on a fresh clone for

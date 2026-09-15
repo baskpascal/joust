@@ -270,6 +270,10 @@ def build_parser() -> argparse.ArgumentParser:
     joust = mission_commands.add_parser("joust-it")
     joust.add_argument("--url", required=True)
     joust.add_argument("--projects-root")
+    joust.add_argument(
+        "--existing-project-path",
+        help="a real local repository this mission must evolve rather than replace",
+    )
     joust.add_argument("--claude-model", default="default")
     joust.add_argument(
         "--no-model",
@@ -438,6 +442,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.url,
                 reasoner,
                 projects_root=args.projects_root,
+                existing_project_path=args.existing_project_path,
             )
         except MissionBlocked as blocked:
             print(
