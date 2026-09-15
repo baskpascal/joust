@@ -42,9 +42,17 @@ def validate_public_bundle(bundle: Path) -> dict[str, object]:
         if missing:
             raise ValueError(f"public bundle is missing required files: {missing}")
         readme = archive.read(relative[PurePosixPath("README.md")]).decode("utf-8")
-        for marker in ("Docker Compose", "docker build", "plow-credentials", "AGENT_ID"):
+        for marker in ("Docker Compose", "plow-credentials", "AGENT_ID"):
             if marker not in readme:
                 raise ValueError(f"public README is missing install marker: {marker}")
+        # A README that shows either a literal `docker build` or the compose
+        # equivalent (`compose up ... --build`) has told the reader how the
+        # image actually gets built; requiring one exact phrasing would
+        # reject a correct README for using the other.
+        if "docker build" not in readme and "compose up" not in readme:
+            raise ValueError(
+                "public README is missing install marker: a docker build or compose up command"
+            )
         license_text = archive.read(relative[PurePosixPath("LICENSE")]).decode("utf-8")
         if not license_text.startswith("MIT License"):
             raise ValueError("public bundle does not contain the MIT license")
