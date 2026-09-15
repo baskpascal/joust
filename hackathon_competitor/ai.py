@@ -17,6 +17,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Any, Protocol
 from uuid import UUID
@@ -48,6 +49,33 @@ class Reasoner(Protocol):
     def complete(self, prompt: str) -> str: ...
 
 
+# A reasoning call is a self-contained text-in/text-out completion: the
+# prompt already carries everything the model needs, so it has no legitimate
+# reason to invoke a tool. Denying every built-in tool removes the actual
+# cause of the "reached max turns" failure (the model spending its one turn
+# on a tool call instead of an answer) rather than just giving it more turns
+# to eventually get around to answering. This list is deliberately named
+# tools, not "no tools" behaviour Joust cannot verify across CLI versions.
+_NO_TOOL_REASONING_ARGS = [
+    "--disallowedTools",
+    "Bash Read Write Edit MultiEdit Glob Grep WebFetch WebSearch Task "
+    "TodoWrite NotebookEdit BashOutput KillBash SlashCommand",
+]
+
+# Even with every tool denied, a model can still spend a turn attempting one
+# and recovering from the denial before answering in text. Three turns is a
+# bounded margin for exactly that (attempt, denial, answer) — not the same
+# as raising the limit to make the symptom go away; the tool denial above is
+# what actually addresses the cause.
+_REASONING_MAX_TURNS = 3
+
+# Turn-budget exhaustion has been observed to be transient: an identical
+# prompt, replayed with no change, has succeeded on a later attempt. A
+# bounded retry reflects that; it is not applied to failures a retry cannot
+# fix (the binary missing, for instance).
+_REASONING_MAX_ATTEMPTS = 3
+
+
 class ClaudeCliReasoner:
     """The Claude Code CLI in non-interactive mode.
 
@@ -62,20 +90,40 @@ class ClaudeCliReasoner:
         model: str = "default",
         timeout_seconds: float = 300.0,
         workdir: str | Path | None = None,
+        max_turns: int = _REASONING_MAX_TURNS,
+        max_attempts: int = _REASONING_MAX_ATTEMPTS,
     ):
         self.executable = executable
         self.provider = "claude-code-cli"
         self.model = model
         self.timeout_seconds = timeout_seconds
         self.workdir = Path(workdir).resolve() if workdir else None
+        if max_turns < 1:
+            raise ValueError("max_turns must be at least 1")
+        if max_attempts < 1:
+            raise ValueError("max_attempts must be at least 1")
+        self.max_turns = max_turns
+        self.max_attempts = max_attempts
 
-    def complete(self, prompt: str) -> str:
-        resolved = shutil.which(self.executable)
-        if resolved is None:
-            raise ModelUnavailable(
-                "REASONING_PROVIDER_UNAVAILABLE", f"{self.executable} is not on PATH"
-            )
-        argv = [resolved, "-p", prompt, "--max-turns", "1"]
+    def _invoke(self, resolved: str, prompt: str) -> dict:
+        """Run one CLI call and return its structured `--output-format json` envelope.
+
+        Raises `ModelUnavailable` directly for failures a retry cannot help
+        with (the process never producing a JSON envelope at all); returns
+        the parsed envelope, error or not, for everything else so the caller
+        can classify it and decide whether to retry.
+        """
+
+        argv = [
+            resolved,
+            "-p",
+            prompt,
+            "--output-format",
+            "json",
+            "--max-turns",
+            str(self.max_turns),
+            *_NO_TOOL_REASONING_ARGS,
+        ]
         if self.model and self.model != "default":
             argv.extend(["--model", self.model])
         try:
@@ -92,14 +140,63 @@ class ClaudeCliReasoner:
             raise ModelUnavailable(
                 "REASONING_PROVIDER_TIMEOUT", f"no answer in {self.timeout_seconds:.0f}s"
             ) from error
-        if result.returncode != 0:
+        try:
+            envelope = json.loads(result.stdout)
+        except (json.JSONDecodeError, ValueError):
+            # The process ran but never produced the structured result the
+            # CLI documents for --output-format json: a crash before any
+            # turn completed, not a classifiable model-level failure.
             raise ModelUnavailable(
                 "REASONING_PROVIDER_UNAVAILABLE",
                 (result.stderr or result.stdout).strip()[:400] or f"exit {result.returncode}",
+            ) from None
+        return envelope
+
+    def _classify(self, envelope: dict) -> tuple[str, str, bool]:
+        """Return (code, detail, retryable) for one CLI result envelope."""
+
+        if not envelope.get("is_error"):
+            text = str(envelope.get("result") or "").strip()
+            if not text:
+                return (
+                    "REASONING_PROVIDER_INVALID_RESPONSE",
+                    "provider reported success with no answer text",
+                    True,
+                )
+            return "", text, False
+        subtype = str(envelope.get("subtype") or "unknown")
+        errors = envelope.get("errors") or []
+        detail = "; ".join(str(item) for item in errors) or subtype
+        if subtype == "error_max_turns":
+            return (
+                "REASONING_PROVIDER_TURN_BUDGET_EXCEEDED",
+                f"{detail} (stop_reason={envelope.get('stop_reason')})",
+                True,
             )
-        if not result.stdout.strip():
-            raise ModelUnavailable("REASONING_PROVIDER_UNAVAILABLE", "provider returned no text")
-        return result.stdout
+        # Anything else reported as an error by the provider itself
+        # (permission denial, an API error, a malformed request) — retrying
+        # blind is the CLI's own recommended recovery for a transient
+        # provider error, so it is retried too, just without the specific
+        # turn-budget classification.
+        return f"REASONING_PROVIDER_ERROR_{subtype.upper()}", detail, True
+
+    def complete(self, prompt: str) -> str:
+        resolved = shutil.which(self.executable)
+        if resolved is None:
+            raise ModelUnavailable(
+                "REASONING_PROVIDER_UNAVAILABLE", f"{self.executable} is not on PATH"
+            )
+        attempts: list[str] = []
+        for attempt in range(1, self.max_attempts + 1):
+            envelope = self._invoke(resolved, prompt)
+            code, detail, retryable = self._classify(envelope)
+            if not code:
+                return detail
+            attempts.append(f"attempt {attempt}: {code}: {detail}"[:300])
+            if not retryable or attempt >= self.max_attempts:
+                raise ModelUnavailable(code, " | ".join(attempts))
+            time.sleep(1.5 * attempt)
+        raise AssertionError("unreachable: loop always returns or raises")
 
 
 class UnavailableReasoner:
