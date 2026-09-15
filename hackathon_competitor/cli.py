@@ -12,12 +12,19 @@ from collections.abc import Mapping
 from pathlib import Path
 from uuid import UUID
 
+from .ai import ClaudeCliReasoner, UnavailableReasoner
+from .ai_mission import MissionBlocked, ask, joust_it, redirect
 from .agent_index import (
     AgentIndexService,
     PinnedCliAgentIndexClient,
     observe_license_spdx,
 )
-from .build_loop import CommandImplementer, HermesImplementer, project_environment
+from .build_loop import (
+    ClaudeCodeImplementer,
+    CommandImplementer,
+    HermesImplementer,
+    project_environment,
+)
 from .competition_actions import (
     CompetitionActionDispatcher,
     RealBuildActionExecutor,
@@ -253,6 +260,24 @@ def build_parser() -> argparse.ArgumentParser:
     for name in ("show", "resume", "tasks"):
         sub = mission_commands.add_parser(name)
         sub.add_argument("mission_id", type=UUID)
+    joust = mission_commands.add_parser("joust-it")
+    joust.add_argument("--url", required=True)
+    joust.add_argument("--projects-root")
+    joust.add_argument("--claude-model", default="default")
+    joust.add_argument(
+        "--no-model",
+        action="store_true",
+        help="run the same mission with no reasoning provider, to see where it stops",
+    )
+    ask_parser = mission_commands.add_parser("ask")
+    ask_parser.add_argument("mission_id", type=UUID)
+    ask_parser.add_argument("question")
+    ask_parser.add_argument("--claude-model", default="default")
+    redirect_parser = mission_commands.add_parser("redirect")
+    redirect_parser.add_argument("mission_id", type=UUID)
+    redirect_parser.add_argument("instruction")
+    redirect_parser.add_argument("--claude-model", default="default")
+    redirect_parser.add_argument("--projects-root")
     export = mission_commands.add_parser("export")
     export.add_argument("mission_id", type=UUID)
     export.add_argument("--bundle", type=Path)
@@ -305,6 +330,8 @@ def build_parser() -> argparse.ArgumentParser:
     implementer = build.add_mutually_exclusive_group(required=True)
     implementer.add_argument("--implementation-command", metavar="JSON_ARGV")
     implementer.add_argument("--hermes", action="store_true")
+    implementer.add_argument("--claude", action="store_true")
+    build.add_argument("--claude-model", default="default")
     build.add_argument("--hermes-model")
     build.add_argument("--hermes-reasoning")
     build.add_argument("--spec")
@@ -315,6 +342,12 @@ def build_parser() -> argparse.ArgumentParser:
     compete.add_argument("mission_id", type=UUID)
     compete.add_argument("--hermes-model")
     compete.add_argument("--hermes-reasoning")
+    compete.add_argument(
+        "--claude",
+        action="store_true",
+        help="plan and implement with the Claude Code CLI instead of the hosted Hermes runtime",
+    )
+    compete.add_argument("--claude-model", default="default")
     compete.add_argument("--max-repairs", type=int, default=1)
 
     eligibility = mission_commands.add_parser("index-eligibility")
@@ -379,6 +412,104 @@ def main(argv: list[str] | None = None) -> int:
         app.attach_project_target(target)
         print(json.dumps(target.model_dump(mode="json"), indent=2))
         return 0
+    if args.mission_command == "joust-it":
+        reasoner = (
+            UnavailableReasoner()
+            if args.no_model
+            else ClaudeCliReasoner(model=args.claude_model, workdir=Path.cwd())
+        )
+        try:
+            mission, selected, decision, target = joust_it(
+                app,
+                args.url,
+                reasoner,
+                projects_root=args.projects_root,
+            )
+        except MissionBlocked as blocked:
+            print(
+                json.dumps(
+                    {
+                        "mission_id": str(blocked.mission_id),
+                        "state": "BLOCKED",
+                        "boundary": blocked.code,
+                        "detail": blocked.detail,
+                    },
+                    indent=2,
+                )
+            )
+            return 2
+        print(
+            json.dumps(
+                {
+                    "mission_id": str(mission.id),
+                    "competition": mission.title,
+                    "deadline_at": (
+                        mission.deadline_at.isoformat() if mission.deadline_at else None
+                    ),
+                    "strategies_considered": len(decision.options),
+                    "selected": selected.product_thesis,
+                    "target_user": selected.target_user,
+                    "winning_mechanism": selected.winning_mechanism,
+                    "rationale": decision.rationale,
+                    "project_target_id": str(target.id),
+                    "project_path": target.local_path,
+                    "state": mission.state.value,
+                },
+                indent=2,
+            )
+        )
+        return 0
+    if args.mission_command == "ask":
+        print(
+            ask(
+                app,
+                args.mission_id,
+                args.question,
+                ClaudeCliReasoner(model=args.claude_model, workdir=Path.cwd()),
+            )
+        )
+        return 0
+    if args.mission_command == "redirect":
+        try:
+            selected, ai_decision = redirect(
+                app,
+                args.mission_id,
+                args.instruction,
+                ClaudeCliReasoner(model=args.claude_model, workdir=Path.cwd()),
+                projects_root=args.projects_root,
+            )
+        except MissionBlocked as blocked:
+            print(
+                json.dumps(
+                    {
+                        "mission_id": str(blocked.mission_id),
+                        "state": "BLOCKED",
+                        "boundary": blocked.code,
+                        "detail": blocked.detail,
+                    },
+                    indent=2,
+                )
+            )
+            return 2
+        try:
+            current_target = app.database.get_project_target_for_mission(args.mission_id)
+            project_path = current_target.local_path
+        except KeyError:
+            project_path = None
+        print(
+            json.dumps(
+                {
+                    "now_pursuing": selected.product_thesis,
+                    "target_user": selected.target_user,
+                    "winning_mechanism": selected.winning_mechanism,
+                    "because": ai_decision.rationale,
+                    "ai_decision_id": str(ai_decision.id),
+                    "project_path": project_path,
+                },
+                indent=2,
+            )
+        )
+        return 0
     if args.mission_command == "attach-entrant":
         profile = EntrantProfile(
             display_name=args.display_name,
@@ -400,6 +531,8 @@ def main(argv: list[str] | None = None) -> int:
                 model=args.hermes_model,
                 reasoning=args.hermes_reasoning,
             )
+        elif args.claude:
+            implementer = ClaudeCodeImplementer(model=args.claude_model)
         else:
             implementation_command = _parse_command_vectors([args.implementation_command])[0]
             implementer = CommandImplementer(implementation_command)
@@ -474,10 +607,15 @@ def main(argv: list[str] | None = None) -> int:
             if target is not None and target.repository_url
             else None
         )
-        reasoner = HermesOneShotReasoner(
-            target.local_path if target is not None else mission.workspace_path,
-            model=args.hermes_model,
-            reasoning=args.hermes_reasoning,
+        workdir = target.local_path if target is not None else mission.workspace_path
+        reasoner = (
+            ClaudeCliReasoner(model=args.claude_model, workdir=workdir)
+            if args.claude
+            else HermesOneShotReasoner(
+                workdir,
+                model=args.hermes_model,
+                reasoning=args.hermes_reasoning,
+            )
         )
         allowed = {CompetitionActionType.CUSTOM, CompetitionActionType.RESEARCH}
         executors = {
@@ -489,7 +627,9 @@ def main(argv: list[str] | None = None) -> int:
             executors[CompetitionActionType.BUILD_PROJECT] = RealBuildActionExecutor(
                 app.database,
                 app.artifact_root,
-                HermesImplementer(
+                ClaudeCodeImplementer(model=args.claude_model)
+                if args.claude
+                else HermesImplementer(
                     model=args.hermes_model,
                     reasoning=args.hermes_reasoning,
                 ),

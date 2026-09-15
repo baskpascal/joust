@@ -2,13 +2,23 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shutil
+import subprocess
 import tempfile
+import time
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
+from uuid import UUID, uuid4
 
-from .models import BuildRun, ChangeSet, ProjectTarget, RepositorySnapshot
+from .models import (
+    BuildRun,
+    ChangeSet,
+    ModelProvenance,
+    ProjectTarget,
+    RepositorySnapshot,
+)
 from .project_review import review_project_change
 from .storage import Database
 from .tool_gateway import CodingAgentCommandTool, LocalGitTool, LocalShellTool
@@ -93,6 +103,45 @@ def validate_project_commands(commands: Sequence[Sequence[str]]) -> None:
             upper = argument.upper()
             if any(marker.upper() in upper for marker in _SENSITIVE_COMMAND_MARKERS):
                 raise ValueError("project command contains a credential-shaped argument")
+
+
+# A coding-agent CLI takes its prompt as a single command-line argument, and
+# the OS enforces a hard ceiling on total argv+environ size (E2BIG when
+# exceeded). A failing command's captured output is not bounded by anything
+# in this pipeline, so it must be bounded here: the actual error is far more
+# often in the tail (the assertion, the traceback) than buried in an early
+# flood of unrelated noise (a linter walking into a vendored dependency, a
+# verbose install log), so this keeps the head for context and the tail for
+# the failure itself.
+_MAX_FAILURE_CHARS = 20_000
+
+
+def _bounded_failure(failure: str, limit: int = _MAX_FAILURE_CHARS) -> str:
+    if len(failure) <= limit:
+        return failure
+    head = limit // 4
+    tail = limit - head
+    omitted = len(failure) - head - tail
+    return f"{failure[:head]}\n\n...[{omitted} characters omitted]...\n\n{failure[-tail:]}"
+
+
+def _provenance(implementer: object) -> ModelProvenance | None:
+    """Name the model behind a diff, when the implementer is a model.
+
+    A ChangeSet whose provenance is absent is a change no model claimed, and
+    the difference has to be visible in stored state rather than inferred from
+    a class name.
+    """
+
+    invocation_id = getattr(implementer, "invocation_id", None)
+    provider = getattr(implementer, "provider", None)
+    if provider is None:
+        return None
+    return ModelProvenance(
+        provider=str(provider),
+        model=str(getattr(implementer, "model", "unknown")),
+        invocation_id=invocation_id if isinstance(invocation_id, UUID) else uuid4(),
+    )
 
 
 class ProjectBootstrap(Protocol):
@@ -189,11 +238,141 @@ class HermesImplementer:
             f"SPECIFICATION:\n{specification}"
         )
         if failure:
-            prompt += f"\n\nPRIOR FAILURE:\n{failure}"
+            prompt += f"\n\nPRIOR FAILURE:\n{_bounded_failure(failure)}"
         return self._run(project_root, prompt)
 
     def repair(self, project_root: Path, specification: str, failure: str) -> str:
         return self.implement(project_root, specification, failure=failure)
+
+
+class ClaudeCodeImplementer:
+    """A real coding agent, writing real files in the project directory.
+
+    The Hermes path stays the hosted runtime's implementer. This one exists so
+    a mission can be implemented wherever Joust is actually running, and so
+    that the provider behind a ChangeSet is a fact the database carries rather
+    than an assumption.
+
+    Edits are accepted automatically inside the project root and nowhere else;
+    the agent gets no permission to reach outside it.
+    """
+
+    provider = "claude-code-cli"
+
+    def __init__(
+        self,
+        *,
+        executable: str = "claude",
+        model: str = "default",
+        timeout_seconds: float = 1800.0,
+        environment: Mapping[str, str] | None = None,
+    ):
+        self.executable = executable
+        self.model = model
+        self.timeout_seconds = timeout_seconds
+        self.environment = dict(environment) if environment is not None else dict(os.environ)
+        self.last_output = ""
+
+    def set_environment(self, environment: Mapping[str, str]) -> None:
+        # Deliberately ignored: project commands run with a filtered
+        # environment, but the coding agent needs its own credentials to run
+        # at all. Mixing the two is what leaks a token into a build command.
+        return None
+
+    def _run(self, project_root: Path, prompt: str) -> str:
+        resolved = shutil.which(self.executable)
+        if resolved is None:
+            raise BuildLoopError(
+                f"IMPLEMENTATION_PROVIDER_UNAVAILABLE: {self.executable} is not on PATH"
+            )
+        argv = [
+            resolved,
+            "-p",
+            prompt,
+            "--permission-mode",
+            "acceptEdits",
+            "--add-dir",
+            str(project_root.resolve()),
+        ]
+        if self.model and self.model != "default":
+            argv.extend(["--model", self.model])
+        # The coding agent only needs enough environment to resolve its own
+        # binaries and locate its stored credentials; project commands run
+        # separately through the filtered `project_environment`.
+        run_environment = {
+            "PATH": os.environ.get("PATH", ""),
+            "HOME": os.environ.get("HOME", ""),
+            "CLAUDE_CODE_ENTRYPOINT": "joust",
+        }
+        # The prompt is bounded above (see `_bounded_failure`), so this argv
+        # should never approach the OS's argv+environ ceiling. A bounded retry
+        # is kept anyway for a genuinely transient exec failure (the resolved
+        # binary being mid-self-update, for instance); it is not a substitute
+        # for keeping the prompt small.
+        attempts = 0
+        while True:
+            attempts += 1
+            try:
+                result = subprocess.run(
+                    argv,
+                    capture_output=True,
+                    text=True,
+                    timeout=self.timeout_seconds,
+                    check=False,
+                    cwd=str(project_root.resolve()),
+                    env=run_environment,
+                )
+                break
+            except subprocess.TimeoutExpired as error:
+                raise BuildLoopError(
+                    f"IMPLEMENTATION_PROVIDER_TIMEOUT: no result in {self.timeout_seconds:.0f}s"
+                ) from error
+            except OSError as error:
+                if attempts >= 3:
+                    raise BuildLoopError(
+                        f"IMPLEMENTATION_PROVIDER_EXEC_FAILED: {error} "
+                        f"(gave up after {attempts} attempts, argv_bytes="
+                        f"{sum(len(a) for a in argv)})"
+                    ) from error
+                time.sleep(2.0 * attempts)
+        if result.returncode != 0:
+            raise BuildLoopError(
+                "IMPLEMENTATION_PROVIDER_FAILED: "
+                + ((result.stderr or result.stdout).strip()[:500] or f"exit {result.returncode}")
+            )
+        self.last_output = result.stdout
+        return result.stdout
+
+    def implement(
+        self,
+        project_root: Path,
+        specification: str,
+        failure: str | None = None,
+    ) -> str:
+        prompt = (
+            "You are implementing a competition entry. Work only inside the current "
+            "directory. Implement the specification completely, with tests that actually "
+            "exercise the behaviour. Inspect what already exists before writing. Do not "
+            "invent APIs, credentials or telemetry, and do not push, publish or deploy "
+            "anything.\n\n"
+            f"SPECIFICATION:\n{specification}"
+        )
+        if failure:
+            prompt += (
+                "\n\nA previous attempt failed. Read this output, find the root cause, "
+                "and fix it:\n" + _bounded_failure(failure)
+            )
+        return self._run(project_root, prompt)
+
+    def repair(self, project_root: Path, specification: str, failure: str) -> str:
+        prompt = (
+            "A verification command just failed in this project. Diagnose it from the "
+            "output below and the code, state the root cause, apply the smallest repair "
+            "that fixes it, and do not weaken or delete tests to make them pass.\n\n"
+            f"ORIGINAL SPECIFICATION:\n{specification}\n\n"
+            f"FAILURE OUTPUT:\n{_bounded_failure(failure)}"
+        )
+        return self._run(project_root, prompt)
 
 
 class RealBuildLoop:
@@ -231,7 +410,8 @@ class RealBuildLoop:
         git: LocalGitTool,
     ) -> tuple[bool, str]:
         shell = git.shell
-        failure = ""
+        failures: list[str] = []
+        phase_counts: dict[str, int] = {}
         for phase, argv in commands:
             started = datetime.now(UTC)
             output = ""
@@ -243,9 +423,16 @@ class RealBuildLoop:
                 passed = True
             except (RuntimeError, TimeoutError) as exc:
                 error = str(exc)
-                failure = error
+                failures.append(f"[{phase}] {' '.join(argv)}\n{error}")
                 exit_code = 1
-            log_path = self.artifact_root / str(target.mission_id) / "build" / f"{phase}.log"
+            # A target can declare more than one command for the same phase
+            # (two lint tools, say). Without a per-command suffix, the second
+            # command's log silently overwrites the first's, hiding whichever
+            # command actually failed from anyone reading the evidence.
+            phase_counts[phase] = phase_counts.get(phase, 0) + 1
+            occurrence = phase_counts[phase]
+            log_name = f"{phase}.log" if occurrence == 1 else f"{phase}-{occurrence}.log"
+            log_path = self.artifact_root / str(target.mission_id) / "build" / log_name
             log_path.parent.mkdir(parents=True, exist_ok=True)
             log_path.write_text(output or error or "", encoding="utf-8")
             run = BuildRun(
@@ -267,8 +454,17 @@ class RealBuildLoop:
                 "BUILD_RUN_RECORDED",
                 {"build_run_id": str(run.id), "phase": phase, "passed": passed},
             )
-            if not passed:
-                return False, failure
+            if not passed and phase == "install":
+                # Nothing downstream can mean anything if the environment
+                # did not build, so this is the one failure worth stopping
+                # on.
+                return False, failures[-1]
+        if failures:
+            # Everything else runs to the end. A repair budget spent on a
+            # formatting nit, only to meet a failing test on the next
+            # attempt, is a budget wasted: one repair should see every
+            # failure at once.
+            return False, "\n\n".join(failures)
         return True, ""
 
     def _reproduce(
@@ -352,8 +548,17 @@ class RealBuildLoop:
         git_workspace = GitWorkspace(root, environment=environment)
         git_workspace.initialize(default_branch=target.default_branch)
         git = LocalGitTool(root, shell=git_workspace.shell)
-        if git.changed_files():
-            raise BuildLoopError("project workspace is dirty; refusing to overwrite user changes")
+        dirty = git.changed_files()
+        if dirty:
+            # Naming the files matters: the usual cause is the project's own
+            # test run writing output it does not ignore, which otherwise
+            # deadlocks every later cycle with nothing to act on.
+            listed = ", ".join(sorted(dirty)[:10])
+            more = f" (+{len(dirty) - 10} more)" if len(dirty) > 10 else ""
+            raise BuildLoopError(
+                "project workspace is dirty; refusing to overwrite user changes. "
+                f"Commit or ignore these first: {listed}{more}"
+            )
         try:
             base_sha = git.current_revision()
         except RuntimeError:
@@ -395,6 +600,7 @@ class RealBuildLoop:
             mission_id=target.mission_id,
             project_target_id=target.id,
             base_sha=base_sha,
+            generated_by=_provenance(implementer),
             diff_hash=hashlib.sha256(diff.encode()).hexdigest(),
             files=git.commit_changed_files(commit_sha) if has_changes else [],
             commit_sha=commit_sha,

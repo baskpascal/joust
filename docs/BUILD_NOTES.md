@@ -1,5 +1,302 @@
 # Build notes
 
+## 2026-09-15 — A pivot that changed the record but not the repository
+
+A validation program run against the frozen `3c33afa` commit (zero code
+touched during any mission — see "A validation program" directly below,
+and "Two unseen competitions" further down) found the most serious defect yet:
+`ai_mission.redirect` changed `mission.active_strategy_id` and recorded a real,
+well-reasoned AI decision, but nothing downstream ever read that field. Run
+live twice against `issue-pilot`, a pivot from IssuePilot to PolicyGuard
+produced the mission claiming "now pursuing PolicyGuard" — a Slack/Teams
+compliance monitor — while the repository on disk kept being the GitHub-triage
+bot, indefinitely, with git HEAD unmoved. The intelligence could think
+correctly and the body would keep executing the mission it had just left.
+
+The fix opens a new development line on top of the frozen commit rather than
+amending it, so the frozen-test evidence stays exactly what it was when it was
+observed. Four defects closed together, because the second and third were
+found chasing the first live:
+
+**The reasoner's `--max-turns 1` was failing 40-50% of live calls.** Across
+Test 1 (frozen-SHA) and Test 4 (long-running adaptation) it failed six times
+in one session with `Error: Reached max turns (1)`. The cause, confirmed with
+`claude -p ... --output-format json`: a reasoning prompt has no legitimate
+reason to use a tool, but the model sometimes tried anyway (`stop_reason:
+tool_use`), spending its one turn on a call instead of an answer, sometimes
+recovering on a bare retry of the identical prompt. `ClaudeCliReasoner` now
+denies every built-in tool (removing the actual cause), gives a bounded
+`--max-turns 3` margin rather than hiding the symptom behind a much larger
+number, reads `--output-format json` to classify what actually happened
+(`REASONING_PROVIDER_TURN_BUDGET_EXCEEDED`, `REASONING_PROVIDER_INVALID_RESPONSE`,
+`REASONING_PROVIDER_ERROR_<SUBTYPE>`, or an unretryable
+`REASONING_PROVIDER_UNAVAILABLE` for a process that never produced a
+structured result), and retries the retryable classifications up to three
+times with backoff, keeping every attempt's classification in the record
+rather than only the last one. Five live calls after the fix: five clean
+successes.
+
+**A strategy pivot now actually moves the project.** `redirect` detects an
+actual candidate change (not a reconfirmation), re-plans a real project for
+the new strategy through the same `plan_project` `joust_it` uses, attaches it
+as the mission's new `ProjectTarget`, and marks the previous one
+`superseded_at`/`superseded_reason` instead of leaving both live and
+ambiguous. `get_project_target_for_mission` now skips superseded targets, so
+every reader — `compete-run`, `build-project`, the planner — picks up the new
+project without being told to look anywhere different. Verified live: a
+pivot to a never-before-chosen candidate (TrendSync, a content-calendar
+agent, out of the three original candidates for the Agent Index mission)
+produced a new project directory (`trendsync`), a new `ProjectTarget` row,
+and the prior one (`issue-pilot`) marked superseded with the operator's own
+instruction as the reason. `HermesCompetitionPlanner.assess` also now reads
+the mission's active strategy into its own context and is told every
+candidate action must serve it, closing the same class of drift one level
+down in the compete loop.
+
+**A narrow exception clause was hiding operational failures behind a slower,
+indirect recovery path.** `competition_actions.execute_selected` only caught
+`(RuntimeError, TypeError, ValueError, TimeoutError)`. A real stale-venv
+`FileNotFoundError`, hit live while reproducing this exact scenario, escaped
+uncaught, left an `ActionExecution` stuck `RUNNING`, and cost the *next*
+`compete-run` invocation an entire cycle just closing the orphan before
+anything could retry the actual fix. Broadened to `except Exception`: every
+operational failure an executor raises now reaches a terminal state
+immediately, and only a real interrupt (`KeyboardInterrupt`, `SystemExit`)
+still propagates. Orphan-recovery on a stuck `RUNNING` execution remains —
+for the case no exception handler can reach, a hard process kill — but it is
+now the last defense, not the routine path.
+
+**A no-diff build was blocked for lacking evidence it could not have had in
+advance.** `review_project_change` required a caller to have pre-declared
+`verification_only` before the build even ran — before anyone could know
+whether the fix would touch source at all. Live: a real dependency
+reinstall validated cleanly (twice — working tree and clean clone) with no
+changed files, and was blocked anyway, forcing an unneeded second repair
+round. This function only ever runs after both those validations already
+passed, so a no-diff result at that point is not missing work; it is
+evidence of an environment or configuration outcome rather than a code one.
+It is now a non-blocking finding.
+
+One more defect surfaced while wiring `redirect`'s new `plan_project` call
+live: `json_object` raises a plain `ValueError` when a model's answer is not
+JSON at all, and `except StrategyRejected` — itself a `ValueError` subclass —
+does not catch its own parent type. This was not new: `joust_it`'s original
+`plan_project` call site had the identical gap and had simply never hit it
+live before. Both original call sites and the new one in `redirect` now
+catch `ValueError`.
+
+Ruff clean, 234 tests passing (up from 200 on the frozen commit; the 34 new
+tests are one per defect above, each reproducing the exact failure observed
+live rather than a shape guessed at afterward).
+
+## 2026-09-15 — A validation program: frozen SHA, and a compete loop under a real break
+
+Two tests run against commit `3c33afa` with a hard rule: no edit to
+`hackathon_competitor` during either mission, and no manual database patch
+either — a genuine failure is reported as one, not quietly fixed and hidden.
+
+**Frozen SHA, zero intervention.** Pointed at a competition neither this
+codebase nor its author had touched: the AI Builders Hackathon
+(`ai-builders-hackathon-2026.devpost.com`, deadline the following day).
+`joust mission joust-it` failed twice in a row with the reasoner's
+`--max-turns 1` limit (see the fix above) and succeeded on an unmodified
+third attempt — 3 strategies, a GitHub-issue-triage-and-PR agent selected
+with a rationale that correctly keyed off the one day of build time actually
+remaining in the rules text. `build-project` then ran the AI's own plan,
+which called for real GitHub API writes and a real AI Gateway call against a
+live throwaway repository as its own test fixture — `no mocked LLM, no
+mocked sandbox` was in the specification the AI itself wrote. Neither
+`GITHUB_TOKEN` nor `AI_GATEWAY_API_KEY` exists on this host, and neither was
+supplied: granting a repo-scoped token and a billed API key to an autonomous
+agent is exactly the kind of consequential, hard-to-reverse action that
+needs an explicit go-ahead, not an assumption. The build failed after
+exhausting its repair budget — correctly. 4 of 6 tests passed (pure unit
+tests); the two live end-to-end tests threw a clear, actionable error
+instead of mocking anything, with a comment the AI wrote unprompted: "These
+are deliberately NOT skipped silently: a triage pipeline that can't be
+proven against a real issue isn't done." A real terminal failure, honestly
+reported, is what this test was built to distinguish from a faked pass.
+
+**Long-running adaptation, against a real break.** A dependency was
+genuinely uninstalled (`reportlab`, from the already-validated `dryday`
+mission) and `compete-run` was run repeatedly with zero manual fixes. It
+correctly observed the regression ("27 of 61 build checks are failing"),
+proposed a targeted repair action, executed it, verified via a clean-clone
+reproduction, and measured `project_readiness` moving `0.0 → 1.0` — real
+observation-to-verified-fix, not just a build. No new commit resulted, and
+that was the right outcome: the actual fix was reinstalling a dependency
+(an environment repair), which is correctly outside git. Getting there,
+however, surfaced the three defects fixed immediately below: the reasoner's
+turn-budget fragility (hit twice more here), a validated no-diff commit
+wrongly blocked by review, and a stale-venv crash left an `ActionExecution`
+stuck `RUNNING` for a full extra cycle. The same run, exercised in parallel
+on `redirect`, is what found the strategy/execution disconnect that became
+the most serious fix of the four: two live pivots, each producing a
+genuine AI decision, neither moving the repository at all.
+
+None of the four defects found here were patched mid-test. They were fixed
+afterward, on a new commit, which is the entry directly above this one.
+
+## 2026-09-14 — Two unseen competitions, built and validated by a real coding agent
+
+`joust mission joust-it` was pointed at two competitions the code had never
+built a project for: OneAquaHealth IEEE (`dryday`, a water-quality compliance
+report generator) and the Agent Index (`issue-pilot`, a GitHub issue triage
+bot). Both reached `BUILDING` with an AI-authored `FIRST_SLICE.md`, and both
+were then handed to `ClaudeCodeImplementer` to actually write.
+
+`issue-pilot` exposed the intended failure/repair contract working end to end
+without help: the model's own package.json used `vitest`, not the `ts-node`
+command the plan had declared, so the project's own stored test command had to
+be corrected to match what was actually built before verification meant
+anything. From there the agent found and fixed a real module-resolution defect
+(`NodeNext` needs an explicit `.js` import extension) and, on the next repair
+round, a real API defect (`octokit.issues.list` does not exist; the method is
+`listForRepo`). Final commit `646d9077` passes 4 tests.
+
+`dryday` repeatedly failed with `OSError: [Errno 7] Argument list too long`
+inside `ClaudeCodeImplementer.repair`, and the first three hypotheses were all
+wrong. It was not the coding agent's own environment (trimming it to
+`PATH`/`HOME` didn't fix it). It was not two heavy builds running concurrently
+against a Windows-drive-backed checkout (it failed identically running alone).
+Direct measurement inside the failing call finally found it: the repair prompt
+was 12,358,004 characters. The project's `flake8 .` command had no exclusion
+for `.venv`, so it was linting every third-party package inside the virtualenv
+— Pillow, reportlab, the lot — and that output was going straight into a
+command-line argument to `claude -p`, well past what `execve` will accept.
+
+Finding it took longer than it should have because of a second, independent
+defect: `_run_commands` names each phase's log file `{phase}.log` with no
+disambiguation, so when a target declares two lint commands (`flake8` then
+`black --check`, both phase `"lint"`), the second command's log silently
+overwrites the first's. The evidence for what had actually failed was gone by
+the time anyone looked at it. Reading `lint.log` after the crash showed a
+small, unremarkable `black` diff and nothing to explain twelve million
+characters; only instrumenting the failing call directly, rather than trusting
+the log it wrote, found the real cause.
+
+Both are now fixed. `_run_commands` suffixes a log file by occurrence
+(`lint.log`, `lint-2.log`, ...) when a phase repeats, so no command's failure
+is ever silently discarded. `_bounded_failure` caps what any coding-agent
+prompt embeds from a captured command failure to 20,000 characters, keeping
+head and tail rather than truncating blind, since the actual assertion or
+traceback is usually at the end of a flood of unrelated noise — this is a
+property of the pipeline now, not a fix scoped to one linter misconfiguration,
+so a different runaway command in a different generated project cannot
+reproduce the same failure. `dryday`'s own `lint_commands` were also corrected
+to exclude `.venv`. Final commit `807df02` passes 11 tests, `flake8` and
+`black --check` clean.
+
+A third, unrelated mistake surfaced while chasing this: both projects had been
+created inside the Joust repository itself (`--projects-root` pointed at a
+`projects/` directory under the checkout), which put each project's own `.git`
+pack data inside the tree that `test_secret_bearing_paths_are_excluded_from_git_and_build_context`
+scans for secret-shaped strings — compressed git blob bytes coincidentally
+matched the pattern. Both projects were moved to an independent directory
+outside the repository and their `ProjectTarget.local_path` updated to match;
+the full suite (200 tests) is green again. Mission-owned projects must never
+live inside Joust's own source tree, for the same reason Joust must never
+treat its own repository as a mission target.
+
+## 2026-09-14 — Auditing whether a model was ever in the loop
+
+The question was direct: does Joust use AI to compete, or does it run a
+deterministic pipeline wearing that name? Tracing the execution path rather
+than the class names gave an uncomfortable answer.
+
+`llm.py` and `structured.py` define an `LLMClient`, a telemetry wrapper and a
+structured runner. Nothing in the product constructs one; grep finds them only
+in tests. The mission path from a URL — `run_vertical_slice` — reached no model
+at all. Its twenty ideas came from a fixed dictionary of names (`Navigator`,
+`Workbench`, `Coach`, `Radar`, …). Their six scores came from
+`_stable_score`, which is `sha256(title).hexdigest()[:8]` mapped into
+0.55-0.96. Six "independent judges" multiplied those same hashes by six fixed
+weight tables, and `select_strategy` returned the largest number, with a
+rationale reading "won the independent product, technical, and skeptical
+reviews". `architecture_tournament` scored three fixed candidates with three
+fixed arrays, so its winner was decided when it was typed.
+`build_demo_project` wrote one hardcoded source string.
+
+A model was genuinely in the loop in exactly two places, both downstream:
+`HermesCompetitionPlanner.assess` asks a model to choose the next action from a
+fixed enum, and `HermesImplementer` runs a real coding agent over an already
+attached project. Neither decides what to build. And nothing in stored state
+distinguished a model's decision from a hash's: there was no invocation record,
+no provider field, and a `ChangeSet` carried no attribution.
+
+So the product promise was being made by the parts that could not keep it.
+
+`ai.py` is the boundary now: a provider, an `InvocationRecorder` that writes a
+`ModelInvocation` for every call including the ones that fail, and
+`UnavailableReasoner`, which exists so "Joust without a model" is a state you
+can run rather than an argument. `capabilities/ai_strategy.py` asks a real model
+for materially different strategies, validates them against the competition
+they came from, refuses three restatements of one idea, and makes it choose one
+with a stated reason and a reason per rejection. `plan_project` lets the model
+name the repository, pick the stack and write the first slice, because those
+are product decisions and putting a template there would put the imitation
+straight back. `ai_mission.joust_it` is the path a competition URL now takes.
+
+Observed, against competitions the code had never seen:
+
+| Competition | Result |
+|---|---|
+| OneAquaHealth IEEE (rules page published the same day) | 3 strategies, chose `dryday`, created the project, reached BUILDING |
+| Amazon Developer Hackathon | 3 strategies across the Fire TV, Bee and Ring tracks, each citing that track's own gate |
+| RevenueCat Shipaton | 3 strategies; named store publication as the binding constraint, not idea quality |
+| AI Worth Using Agent Index | 3 strategies; read the scoring as single-axis and planned `flakedown` around reported usage |
+
+The ablation is the part that matters. The same command, the same URL, with
+the provider replaced by `UnavailableReasoner`: mission `BLOCKED`, boundary
+`AI_STRATEGY_UNAVAILABLE`, one invocation recorded as `UNAVAILABLE`, zero
+strategy candidates, zero decisions, and no project directory created. Nothing
+deterministic underneath produced an approximation of the same entry.
+
+Two defects came out of running it rather than reading it. `Database._save`
+takes the model as its second positional parameter, so a column named `model`
+collided with it — `TypeError: got multiple values for argument 'model'` — and
+the column is `model_name`. And `joust_it` built a `SourceRecord` without its
+required `content_hash`, which only surfaced on the first live acceptance run.
+Both are competition-agnostic; neither was a patch to make a particular
+hackathon pass.
+
+The deterministic modules are kept and now say what they are in their own
+docstrings. Having the imitation in the tree, labelled, is better than having
+it in the product unlabelled.
+
+## 2026-09-14 — The Plow toolset was never connected, and nothing said so
+
+The live container had been reporting healthily to the Agent Index for
+seventeen hours — `200 {'ok': True, 'agent_id': 'galahad-hackathon', 'days': 2,
+'rows': 4}` every five minutes — while carrying this beside it, at the same
+interval, since the moment it booted:
+
+```text
+WARNING tools.mcp_tool: MCP server 'plow' failed initial connection after 3
+attempts, parking until a reconnect is requested (state: connecting → parked):
+MCPError: Server returned an error response
+```
+
+Reporting is not reachability. A rebuild from the current tree reproduced it on
+a fresh boot with a freshly read credential, so it is not a stale container.
+Asking the relay directly, from inside the container and with the agent's own
+token, named the condition:
+
+```text
+POST $PLOW_MCP_URL  ->  401 {"detail":"Missing or invalid Authorization header"}   (no token)
+POST $PLOW_MCP_URL  ->  503 {"detail":"Device is not connected"}                   (agent token)
+```
+
+The token authenticates. `api.plow.co` reports that the device behind the
+minted line is not connected, which is state on Plow's side, not in this
+repository. Until it is connected, the Plow toolset stays parked and the
+product's first-use sentence — send a competition URL in Plow Chat and say
+`Joust it.` — has nothing to run on. That is an external blocker, recorded as
+one, and it is the most plausible reason an installer would conclude nothing
+happened.
+
+The agent-index reporter is unaffected and continues to report truthfully.
+
 ## 2026-09-14 — Three people tried to install Joust and none of them got it running
 
 The Agent Index reports installs, and reading

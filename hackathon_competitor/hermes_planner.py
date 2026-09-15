@@ -30,6 +30,36 @@ class TextReasoner(Protocol):
     def complete(self, prompt: str) -> str: ...
 
 
+def _current_strategy(database: Database, mission: Mission) -> dict | None:
+    """What the mission is actually trying to win with, right now.
+
+    Without this, a planner reasons only from the project's current state —
+    its README, its passing or failing checks — and never from *why* that
+    project exists. A strategy pivot (`ai_mission.redirect`) changes which
+    candidate is active; a planner that never reads that field can propose
+    actions that are locally sensible and globally incoherent with what the
+    mission just decided to pursue instead.
+    """
+
+    decisions = [
+        item
+        for item in database.list_ai_decisions(mission.id)
+        if item.decision_type in {"strategy_selection", "strategy_reassessment"}
+    ]
+    if not decisions:
+        return None
+    selected_id = decisions[-1].selected_option
+    for candidate in database.list_strategy_candidates(mission.id):
+        if str(candidate.id) == selected_id:
+            return {
+                "product_thesis": candidate.product_thesis,
+                "target_user": candidate.target_user,
+                "winning_mechanism": candidate.winning_mechanism,
+                "risks": candidate.risks,
+            }
+    return None
+
+
 class HermesOneShotReasoner:
     """Invoke the configured Hermes model and return its final response."""
 
@@ -129,6 +159,7 @@ class HermesCompetitionPlanner:
             }
         except KeyError:
             spec = None
+        strategy = _current_strategy(self.database, mission)
         try:
             target = self.database.get_project_target_for_mission(mission.id)
             target_payload = {
@@ -210,6 +241,7 @@ class HermesCompetitionPlanner:
             "allowed_action_types": sorted(item.value for item in self.allowed_action_types),
             "mission": mission_payload,
             "competition": spec,
+            "active_strategy": strategy,
             "project": target_payload,
             "project_readme": project_readme,
             "observation": observation_payload,
@@ -236,7 +268,10 @@ class HermesCompetitionPlanner:
             "BUILD_PROJECT must include a complete implementation specification; RESEARCH "
             "must identify official source URLs; CUSTOM is only a deliberate no-op/observe "
             "action and must not claim research or project mutation. Do not repeat a "
-            "successful zero-delta action unless the observation changed. Never invent "
+            "successful zero-delta action unless the observation changed. If active_strategy "
+            "is present, every candidate must serve it; a candidate that would only make "
+            "sense for a different product thesis is wrong regardless of how well it fixes "
+            "what the project currently is. Never invent "
             "API endpoints, credentials, telemetry, or substitute clients; preserve and "
             "use official integrations already present in the project. Values "
             "for improvement, time, risk, and probability must be non-negative numbers; "

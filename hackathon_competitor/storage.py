@@ -33,8 +33,10 @@ from .models import (
     Experiment,
     HackathonSpec,
     Idea,
+    AIDecision,
     Mission,
     MissionState,
+    ModelInvocation,
     LeaderboardSignal,
     MetricSignal,
     MonitorBackoffState,
@@ -44,6 +46,7 @@ from .models import (
     RuleObservation,
     SourceObservation,
     SourceRecord,
+    StrategyCandidate,
     StructuredSignal,
     StructuredSignalType,
     Task,
@@ -297,6 +300,39 @@ MIGRATIONS: tuple[str, ...] = (
     );
     CREATE INDEX IF NOT EXISTS idx_external_action_observations_action
       ON external_action_observations(action_id, observed_at);
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS model_invocations (
+        id TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        purpose TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        model_name TEXT NOT NULL,
+        status TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_model_invocations_mission
+      ON model_invocations(mission_id, started_at);
+    CREATE TABLE IF NOT EXISTS ai_decisions (
+        id TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        invocation_id TEXT NOT NULL,
+        decision_type TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_decisions_mission
+      ON ai_decisions(mission_id, created_at);
+    CREATE TABLE IF NOT EXISTS strategy_candidates (
+        id TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        invocation_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        payload TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_strategy_candidates_mission
+      ON strategy_candidates(mission_id, created_at);
     """,
 )
 
@@ -576,6 +612,49 @@ class Database:
     def list_evidence(self, mission_id: UUID | str) -> list[Evidence]:
         return self._list_for_mission("evidence", mission_id, Evidence)
 
+    def save_model_invocation(self, invocation: ModelInvocation) -> None:
+        self._save(
+            "model_invocations",
+            invocation,
+            mission_id=invocation.mission_id,
+            purpose=invocation.purpose,
+            provider=invocation.provider,
+            model_name=invocation.model,
+            status=invocation.status.value,
+            started_at=invocation.started_at.isoformat(),
+        )
+
+    def get_model_invocation(self, invocation_id: UUID | str) -> ModelInvocation:
+        return self._get("model_invocations", invocation_id, ModelInvocation)
+
+    def list_model_invocations(self, mission_id: UUID | str) -> list[ModelInvocation]:
+        return self._list_for_mission("model_invocations", mission_id, ModelInvocation)
+
+    def save_ai_decision(self, decision: AIDecision) -> None:
+        self._save(
+            "ai_decisions",
+            decision,
+            mission_id=decision.mission_id,
+            invocation_id=decision.invocation_id,
+            decision_type=decision.decision_type,
+            created_at=decision.created_at.isoformat(),
+        )
+
+    def list_ai_decisions(self, mission_id: UUID | str) -> list[AIDecision]:
+        return self._list_for_mission("ai_decisions", mission_id, AIDecision)
+
+    def save_strategy_candidate(self, candidate: StrategyCandidate) -> None:
+        self._save(
+            "strategy_candidates",
+            candidate,
+            mission_id=candidate.mission_id,
+            invocation_id=candidate.invocation_id,
+            created_at=candidate.created_at.isoformat(),
+        )
+
+    def list_strategy_candidates(self, mission_id: UUID | str) -> list[StrategyCandidate]:
+        return self._list_for_mission("strategy_candidates", mission_id, StrategyCandidate)
+
     def save_decision(self, decision: Decision) -> None:
         self._save("decisions", decision, mission_id=decision.mission_id)
 
@@ -794,9 +873,13 @@ class Database:
         return self._get("project_targets", target_id, ProjectTarget)
 
     def get_project_target_for_mission(self, mission_id: UUID | str) -> ProjectTarget:
-        items = self._list_for_mission("project_targets", mission_id, ProjectTarget)
+        items = [
+            item
+            for item in self._list_for_mission("project_targets", mission_id, ProjectTarget)
+            if item.superseded_at is None
+        ]
         if not items:
-            raise KeyError(f"no project target for mission: {mission_id}")
+            raise KeyError(f"no active project target for mission: {mission_id}")
         return items[-1]
 
     def list_project_targets(self, mission_id: UUID | str) -> list[ProjectTarget]:
