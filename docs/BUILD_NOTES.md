@@ -1499,6 +1499,10 @@ The live SMS pause/cancel sequence still needs to be sent and verified after
 this rebuild. Until that happens, this project records the SMS path as ready,
 not as a completed real-user lifecycle acceptance test.
 
+After the channel and persona documentation was committed, the image was
+rebuilt once more from `19cb0a3`; the container's `lifecycle.py` and seeded
+persona hashes now match that checkout.
+
 ## 2026-09-15 — Mission lifecycle control incident
 
 Plow Chat exposed implementation details when an operator asked “Can we cancel
