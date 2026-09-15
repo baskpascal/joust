@@ -1475,7 +1475,7 @@ GitHub check observation now uses `gh api` rather than the unsupported
 `gh pr checks --json` flag in the pinned CLI. The live container is not
 authenticated to GitHub, so remote checks remain an explicit uncertainty. No
 push, PR, deployment, submission, account mutation, or Verified request was
-performed. The complete local suite now collects 293 tests and passes with
+performed. The complete local suite now collects 300 tests and passes with
 Ruff and `git diff --check` (line-ending notices only).
 
 ## 2026-09-15 — Mission lifecycle control incident
@@ -1501,7 +1501,7 @@ of normal replies.
 
 The lifecycle regression suite covers state transitions, target/task/project
 preservation, idempotent cancellation, execution guards, and natural-language
-question versus command handling. The full suite contains 293 tests. The real
+question versus command handling. The full suite contains 300 tests. The real
 Plow Chat retest is still pending:
 it requires sending the two-message confirmation sequence through the live
 conversation and recording the existing IBM Bob 2.0 mission without modifying

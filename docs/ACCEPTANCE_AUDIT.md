@@ -59,7 +59,7 @@ runtime evidence nor client registration proves a public Verified listing.
 | Install preconditions checked before the build | `scripts/preflight.py` from a bare clone of public `main` at `13c10dd`: git, Docker 29.1.3, Compose v2.40.3, daemon, credential mode `0o600`, `AGENT_ID` — ready, exit 0 | PASS (clean external clone) |
 | Live competitive standing | `/v1/agent?agent_id=galahad-hackathon` returned `installs {attempted: 3, succeeded: 0}`, `users 1`, `token_usage 3119664`, `blessed_at ""`; 38 agents registered, 1 Verified | OBSERVED (not verified, unranked) |
 | Public release reaches installers | Public `main` moved `f0b1e86` → `13c10dd`, read back from the remote; `raw.githubusercontent.com` serves the new README step and `scripts/preflight.py` (HTTP 200) | PASS (public) |
-| Unit/integration/E2E/secret/license quality | 293 tests, Ruff, diff check, MIT license | PASS |
+| Unit/integration/E2E/secret/license quality | 300 tests, Ruff, diff check, MIT license | PASS |
 
 ## External handoff
 

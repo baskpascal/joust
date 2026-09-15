@@ -89,8 +89,14 @@ def handle_lifecycle_message(
     question = normalized.endswith("?") or normalized.startswith(
         ("can we ", "could we ", "should we ", "is it possible")
     )
-    cancel = any(phrase in normalized for phrase in ("cancel", "quit this competition"))
-    pause = any(phrase in normalized for phrase in ("pause", "stop working", "hold this"))
+    cancel = any(
+        phrase in normalized
+        for phrase in ("cancel", "quit this competition", "stop this competition entirely")
+    )
+    pause = any(
+        phrase in normalized
+        for phrase in ("pause", "stop working", "hold this", "stop this for now")
+    ) or normalized in {"stop", "stop it", "stop this"}
     resume = any(phrase in normalized for phrase in ("resume", "continue", "carry on"))
     if "delete" in normalized or "remove everything" in normalized:
         return "What exactly should I delete? Deletion is separate and requires confirmation."
