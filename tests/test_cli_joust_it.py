@@ -92,3 +92,10 @@ def test_installation_home_is_unique_for_explicit_tenant_homes(tmp_path):
     assert first == (tmp_path / "tenant-a").resolve()
     assert second == (tmp_path / "tenant-b").resolve()
     assert first != second
+
+
+def test_hermes_home_is_authoritative_for_github_config(monkeypatch, tmp_path):
+    hermes_home = tmp_path / "hermes-home"
+    monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+
+    assert cli.installation_home(tmp_path / "state-root") == hermes_home.resolve()

@@ -92,11 +92,11 @@ def runtime(home: Path | None = None) -> MissionOrchestrator:
 def installation_home(home: Path | None = None) -> Path:
     """Return the persistent home that owns this installation's GitHub login."""
 
-    if home is not None:
-        return home.expanduser().resolve()
     configured = os.environ.get("HERMES_HOME")
     if configured:
         return Path(configured).expanduser().resolve()
+    if home is not None:
+        return home.expanduser().resolve()
     configured_competitor_home = os.environ.get("HACKATHON_COMPETITOR_HOME")
     if configured_competitor_home:
         return Path(configured_competitor_home).expanduser().resolve()
