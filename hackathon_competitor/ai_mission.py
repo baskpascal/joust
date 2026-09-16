@@ -26,6 +26,7 @@ from .models import (
     AIDecision,
     CompetitionSpec,
     Decision,
+    GitHubConnectionStatus,
     Mission,
     MissionState,
     ProjectMode,
@@ -36,6 +37,7 @@ from .models import (
     utcnow,
 )
 from .orchestrator import MissionOrchestrator
+from .presentation import PresentationMode, presentation_mode, public_mission_facts, render_answer
 
 _STRATEGY_STATES = (
     MissionState.INTAKE,
@@ -339,6 +341,14 @@ def _mission_facts(orchestrator: MissionOrchestrator, mission: Mission) -> dict:
     change_sets = (
         database.list_change_sets(mission.id) if hasattr(database, "list_change_sets") else []
     )
+    tasks = database.list_tasks(mission.id)
+    evidence = database.list_evidence(mission.id)
+    build_runs = database.list_build_runs(mission.id)
+    test_runs = [
+        run
+        for run in build_runs
+        if run.phase.casefold() in {"test", "tests", "reproduce_test", "reproduce_tests"}
+    ]
     return {
         "mission_id": str(mission.id),
         "state": mission.state.value,
@@ -346,6 +356,9 @@ def _mission_facts(orchestrator: MissionOrchestrator, mission: Mission) -> dict:
         "competition_url": spec.canonical_url if spec else None,
         "deadline_at": mission.deadline_at.isoformat() if mission.deadline_at else None,
         "blockers": mission.blockers,
+        "tasks_total": len(tasks),
+        "tasks_succeeded": sum(1 for task in tasks if task.status.value == "SUCCEEDED"),
+        "evidence_count": len(evidence),
         "operator_instructions": [
             decision.rationale
             for decision in ai_decisions
@@ -371,6 +384,13 @@ def _mission_facts(orchestrator: MissionOrchestrator, mission: Mission) -> dict:
             "language": target.language,
             "branch": target.working_branch,
             "test_commands": target.test_commands,
+            "name": Path(target.local_path).name,
+            "tests_passed": (
+                sum(1 for run in test_runs if run.passed) if test_runs else None
+            ),
+            "git_history_saved": bool(
+                target.base_commit_sha or target.final_commit_sha or change_sets
+            ),
         },
         "change_sets": [
             {
@@ -398,44 +418,49 @@ def ask(
     mission_id: UUID,
     question: str,
     reasoner: Reasoner,
+    *,
+    github_status: GitHubConnectionStatus | None = None,
 ) -> str:
     """Answer a question about a mission from that mission's stored state."""
 
     mission = orchestrator.database.get_mission(mission_id)
     facts = _mission_facts(orchestrator, mission)
+    mode = presentation_mode(question)
+    prompt_facts = (
+        facts
+        if mode is PresentationMode.DETAILS
+        else public_mission_facts(facts, github=github_status)
+    )
+    detail_rule = (
+        "The operator explicitly requested technical details, so you may include "
+        "stored paths, branch names, commit identifiers, and diagnostic fields."
+        if mode is PresentationMode.DETAILS
+        else "Never include filesystem paths, Docker paths, container names, UUIDs, branch names, "
+        "raw commands, Python classes, database states, or internal tool names."
+    )
     prompt = (
         "Answer the question about this competition mission using only the facts "
         "below. They are the mission's stored state. If the facts do not contain the "
         "answer, say exactly what is missing instead of supplying it. Do not offer to "
         "do anything; just answer. Keep it under 200 words, plain prose, no markdown "
         "headings. Use competition, project, repository, tests, deadline, paused, "
-        "and cancelled as user-facing terms; never mention implementation classes, "
-        "methods, internal commands, databases, or container paths.\n\n"
-        f"question={question}\n\nfacts={json.dumps(facts, sort_keys=True, default=str)}"
+        "and cancelled as user-facing terms. "
+        f"{detail_rule}\n\n"
+        f"question={question}\n\nfacts={json.dumps(prompt_facts, sort_keys=True, default=str)}"
     )
     # A model may use internal context to reason, but the returned answer is
     # sanitized before it reaches the operator.
-    public_facts = facts
+    public_facts = prompt_facts
     recorder = InvocationRecorder(orchestrator.database, mission.id)
     text, _ = recorder.run(
         reasoner, purpose="mission_question", prompt=prompt, context=public_facts
     )
-    return _sanitize_user_answer(text.strip())
+    return render_answer(text.strip(), mode=mode)
 
 
 def _sanitize_user_answer(text: str) -> str:
     """Keep routine mission answers in product language."""
-
-    import re
-
-    text = re.sub(r"/var/lib/hermes(?:/[^\s)]+)*", "the local project", text)
-    text = re.sub(
-        r"\bMissionOrchestrator\b|\bMissionLifecycleService\b|\bStateMachine\b|\bcancel\(\)",
-        "mission controls",
-        text,
-    )
-    text = re.sub(r"internal (?:CLI|command|wiring)|database transition", "mission controls", text, flags=re.I)
-    return text
+    return render_answer(text, mode=PresentationMode.NORMAL)
 
 
 def redirect(

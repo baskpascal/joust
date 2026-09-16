@@ -35,7 +35,7 @@ from .competition_runner import CompetitionIterationRunner
 from .credentials import DEFAULT_RELATIVE_PATH, resolve_credential_path
 from .distribution import build_public_bundle
 from .exporter import export_mission_bundle
-from .github import GitHubCliAdapter
+from .github import GitHubCliAdapter, GitHubConnectionObserver
 from .hermes_planner import (
     HermesCompetitionPlanner,
     HermesOneShotReasoner,
@@ -87,6 +87,46 @@ def runtime(home: Path | None = None) -> MissionOrchestrator:
         root / "missions",
         capability_registry=default_registry(),
     )
+
+
+def installation_home(home: Path | None = None) -> Path:
+    """Return the persistent home that owns this installation's GitHub login."""
+
+    if home is not None:
+        return home.expanduser().resolve()
+    configured = os.environ.get("HERMES_HOME")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    configured_competitor_home = os.environ.get("HACKATHON_COMPETITOR_HOME")
+    if configured_competitor_home:
+        return Path(configured_competitor_home).expanduser().resolve()
+    runtime_home = Path("/var/lib/hermes")
+    if runtime_home.is_dir():
+        return runtime_home.resolve()
+    return default_home().resolve()
+
+
+def github_adapter(home: Path | None, project_path: str | Path) -> GitHubCliAdapter:
+    """Build a GitHub adapter pinned to this installation's config directory."""
+
+    return GitHubCliAdapter(
+        str(Path(project_path).resolve()),
+        installation_home=installation_home(home),
+    )
+
+
+def target_repository(target: ProjectTarget | None) -> str | None:
+    if target is None:
+        return None
+    if target.repository_owner and target.repository_name:
+        return f"{target.repository_owner}/{target.repository_name}"
+    if target.repository_url:
+        value = target.repository_url.strip().rstrip("/").removesuffix(".git")
+        for prefix in ("https://github.com/", "http://github.com/"):
+            if value.startswith(prefix):
+                value = value.removeprefix(prefix)
+        return value if "/" in value else None
+    return None
 
 
 def _runtime_marker_present(path: Path) -> bool:
@@ -264,7 +304,7 @@ def build_parser() -> argparse.ArgumentParser:
     create = mission_commands.add_parser("create")
     create.add_argument("--url", required=True)
     create.add_argument("--workspace", default=".")
-    for name in ("show", "resume", "pause", "cancel", "tasks"):
+    for name in ("show", "resume", "pause", "cancel", "tasks", "github-status"):
         sub = mission_commands.add_parser(name)
         sub.add_argument("mission_id", type=UUID)
     joust = mission_commands.add_parser("joust-it")
@@ -479,12 +519,22 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     if args.mission_command == "ask":
+        try:
+            target = app.database.get_project_target_for_mission(args.mission_id)
+        except KeyError:
+            target = None
+        adapter = github_adapter(
+            home,
+            target.local_path if target is not None else app.artifact_root,
+        )
+        github_status = adapter.connection_status(target_repository(target))
         print(
             ask(
                 app,
                 args.mission_id,
                 args.question,
                 ClaudeCliReasoner(model=args.claude_model, workdir=Path.cwd()),
+                github_status=github_status,
             )
         )
         return 0
@@ -566,7 +616,7 @@ def main(argv: list[str] | None = None) -> int:
             max_repairs=args.max_repairs,
             # Git operations (including an approval-bound push) must run
             # inside the target checkout, not its parent directory.
-            github=GitHubCliAdapter(str(Path(target.local_path).resolve())),
+            github=github_adapter(home, target.local_path),
         )
         print(json.dumps(change_set.model_dump(mode="json"), indent=2))
         return 0
@@ -622,7 +672,7 @@ def main(argv: list[str] | None = None) -> int:
         except KeyError:
             target = None
         github = (
-            GitHubCliAdapter(str(Path(target.local_path).resolve()))
+            github_adapter(home, target.local_path)
             if target is not None and target.repository_url
             else None
         )
@@ -678,6 +728,21 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         return 0
+    if args.mission_command == "github-status":
+        try:
+            target = app.database.get_project_target_for_mission(args.mission_id)
+        except KeyError:
+            target = None
+        adapter = github_adapter(
+            home,
+            target.local_path if target is not None else app.artifact_root,
+        )
+        status = GitHubConnectionObserver(app.database, adapter).observe(
+            args.mission_id,
+            target_repository(target),
+        )
+        print(json.dumps(status.model_dump(mode="json"), indent=2))
+        return 0 if status.connected else 1
     if args.mission_command == "pause":
         mission = app.lifecycle.pause(args.mission_id)
         target = app.database.get_project_target_for_mission(mission.id) if mission.project_target_id else None

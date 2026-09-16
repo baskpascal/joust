@@ -1,6 +1,10 @@
 import json
 
-from hackathon_competitor.github import GitHubCliAdapter, GitHubRuntimeObserver
+from hackathon_competitor.github import (
+    GitHubCliAdapter,
+    GitHubConnectionObserver,
+    GitHubRuntimeObserver,
+)
 from hackathon_competitor.models import Mission
 from hackathon_competitor.storage import Database
 
@@ -169,6 +173,67 @@ def test_github_runtime_preflight_is_read_only_structured_and_evidenced(tmp_path
     assert any(item.source_type == "github_runtime" for item in database.list_evidence(mission.id))
     assert all("create" not in argv for argv, _ in shell.calls)
     assert all(argv[0:2] != ["git", "push"] for argv, _ in shell.calls)
+
+
+def test_connection_status_reports_login_and_repository_permission_without_tokens(tmp_path):
+    database = Database(tmp_path / "state.db")
+    database.migrate()
+    mission = Mission(title="GitHub", objective="observe", workspace_path=str(tmp_path))
+    database.save_mission(mission)
+    adapter = GitHubCliAdapter(str(tmp_path))
+    shell = FakeShell()
+    adapter.shell = shell
+
+    status = adapter.connection_status("https://github.com/owner/project.git")
+    assert status.connected is True
+    assert status.login == "owner"
+    assert status.can_push_to_target is True
+    assert status.repository == "owner/project"
+    assert "token" not in status.model_dump()
+    assert [argv for argv, _ in shell.calls] == [
+        ["gh", "api", "user"],
+        ["gh", "api", "repos/owner/project"],
+    ]
+
+    observed = GitHubConnectionObserver(database, adapter).observe(
+        mission.id, "owner/project"
+    )
+    assert observed.login == "owner"
+    assert any(item.source_type == "github_connection" for item in database.list_evidence(mission.id))
+    event_types = [item["event_type"] for item in database.events(mission.id)]
+    assert event_types.count("GITHUB_CONNECTION_OBSERVED") == 1
+
+
+def test_connection_status_is_disconnected_when_gh_session_is_unavailable(tmp_path):
+    class DisconnectedShell:
+        def run(self, argv, *, timeout_seconds):
+            raise RuntimeError("not logged in; token=must-not-leak")
+
+    adapter = GitHubCliAdapter(str(tmp_path))
+    adapter.shell = DisconnectedShell()
+
+    status = adapter.connection_status()
+
+    assert status.connected is False
+    assert status.login is None
+
+
+def test_installation_home_pins_gh_config_and_prevents_global_identity_leak(tmp_path):
+    creator_config = tmp_path / "creator-config"
+    installation_a = tmp_path / "installation-a"
+    installation_b = tmp_path / "installation-b"
+    adapter_a = GitHubCliAdapter(
+        str(tmp_path / "project-a"),
+        installation_home=installation_a,
+        environment={"GH_CONFIG_DIR": str(creator_config)},
+    )
+    adapter_b = GitHubCliAdapter(
+        str(tmp_path / "project-b"), installation_home=installation_b
+    )
+
+    assert adapter_a.shell.environment["GH_CONFIG_DIR"] == str(installation_a / ".config" / "gh")
+    assert adapter_b.shell.environment["GH_CONFIG_DIR"] == str(installation_b / ".config" / "gh")
+    assert adapter_a.shell.environment["GH_CONFIG_DIR"] != adapter_b.shell.environment["GH_CONFIG_DIR"]
 
 
 def test_repository_creation_recovers_when_the_exact_repository_already_exists(tmp_path):

@@ -512,6 +512,19 @@ class GitHubRuntimeSnapshot(Contract):
     observed_at: datetime = Field(default_factory=utcnow)
 
 
+class GitHubConnectionStatus(Contract):
+    """Installation-scoped GitHub authentication and capability observation."""
+
+    connected: bool
+    login: str | None = None
+    scopes: list[str] | None = None
+    can_create_repo: bool | None = None
+    can_push_to_target: bool | None = None
+    repository: str | None = None
+    source: str = "installation_auth"
+    observed_at: datetime = Field(default_factory=utcnow)
+
+
 class CurrentCompetitionState(Contract):
     id: UUID = Field(default_factory=uuid4)
     mission_id: UUID

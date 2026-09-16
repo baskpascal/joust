@@ -34,3 +34,10 @@ terms, or submit during intake.
 If the supplied source cannot be reached, see `hackathon-safety` before
 diagnosing why — a connectivity failure is never a reason to read a
 credential file or dump the environment.
+
+Normal Plow Chat replies are product-facing and concise. Keep internal paths,
+container names, UUID branches, Python classes, `gh auth`, and shell commands
+out of the default response. Show them only after an explicit request for
+technical details, logs, storage, or branch information. Report GitHub as the
+account connected to this Joust installation; never infer that it belongs to
+the SMS sender.

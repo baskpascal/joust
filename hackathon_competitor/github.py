@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
+from pathlib import Path
 from uuid import UUID
 from typing import Any, Protocol
 
-from .models import Evidence, GitHubRuntimeSnapshot
+from .models import Evidence, GitHubConnectionStatus, GitHubRuntimeSnapshot
 from .storage import Database
 from .tool_gateway import LocalShellTool
 
@@ -25,14 +27,29 @@ class GitHubTool(Protocol):
     def checks(self, repository: str, ref: str) -> list[dict[str, Any]]: ...
     def branch_sha(self, repository: str, branch: str) -> str: ...
     def pull_request(self, repository: str, number: int) -> dict[str, Any]: ...
+    def connection_status(self, repository: str | None = None) -> GitHubConnectionStatus: ...
     def runtime_snapshot(self, repository: str, ref: str) -> GitHubRuntimeSnapshot: ...
 
 
 class GitHubCliAdapter:
-    """GitHub boundary using the user's authenticated `gh` CLI session."""
+    """GitHub boundary using one installation's authenticated `gh` session.
 
-    def __init__(self, repository_root: str):
-        self.shell = LocalShellTool(repository_root)
+    ``gh`` stores its login outside the repository. Production callers pass
+    the installation home so two Joust volumes cannot accidentally share a
+    creator's global configuration. The token is never read or logged here.
+    """
+
+    def __init__(
+        self,
+        repository_root: str,
+        *,
+        installation_home: str | Path | None = None,
+        environment: dict[str, str] | None = None,
+    ):
+        env = dict(environment) if environment is not None else dict(os.environ)
+        if installation_home is not None:
+            env["GH_CONFIG_DIR"] = str(Path(installation_home).expanduser() / ".config" / "gh")
+        self.shell = LocalShellTool(repository_root, environment=env)
 
     def _gh_json(self, argv: list[str]) -> dict[str, Any] | list[dict[str, Any]]:
         output = self.shell.run(["gh", *argv], timeout_seconds=60)
@@ -206,6 +223,44 @@ class GitHubCliAdapter:
             "url": value.get("html_url"),
         }
 
+    @staticmethod
+    def _repository_name(repository: str | None) -> str | None:
+        if not repository:
+            return None
+        value = repository.strip().removesuffix(".git").rstrip("/")
+        if value.startswith("https://github.com/"):
+            value = value.removeprefix("https://github.com/")
+        elif value.startswith("http://github.com/"):
+            value = value.removeprefix("http://github.com/")
+        return value if "/" in value and not value.startswith("/") else None
+
+    def connection_status(self, repository: str | None = None) -> GitHubConnectionStatus:
+        """Observe the connected account without exposing credential contents."""
+
+        try:
+            user = self._gh_json(["api", "user"])
+            if not isinstance(user, dict) or not isinstance(user.get("login"), str):
+                return GitHubConnectionStatus(connected=False)
+            repository_name = self._repository_name(repository)
+            can_push: bool | None = None
+            if repository_name:
+                repo = self._gh_json(["api", f"repos/{repository_name}"])
+                if isinstance(repo, dict):
+                    permissions = repo.get("permissions")
+                    if isinstance(permissions, dict):
+                        can_push = permissions.get("push") is True
+            return GitHubConnectionStatus(
+                connected=True,
+                login=user["login"],
+                can_push_to_target=can_push,
+                repository=repository_name,
+            )
+        except (OSError, RuntimeError, TimeoutError, ValueError, GitHubError):
+            # A missing login or an expired session is a normal product state,
+            # not a traceback. The diagnostic exception itself may contain
+            # command output, so it is deliberately not returned.
+            return GitHubConnectionStatus(connected=False)
+
     def runtime_snapshot(self, repository: str, ref: str) -> GitHubRuntimeSnapshot:
         user = self._gh_json(["api", "user"])
         repo = self._gh_json(["api", f"repos/{repository}"])
@@ -304,3 +359,50 @@ class GitHubRuntimeObserver:
             },
         )
         return snapshot
+
+
+class GitHubConnectionObserver:
+    """Persist one canonical, token-free GitHub connection observation."""
+
+    def __init__(self, database: Database, github: GitHubTool):
+        self.database = database
+        self.github = github
+
+    def observe(
+        self,
+        mission_id: UUID,
+        repository: str | None = None,
+    ) -> GitHubConnectionStatus:
+        status = self.github.connection_status(repository)
+        evidence = Evidence(
+            mission_id=mission_id,
+            claim=(
+                "GitHub connection observed"
+                if status.connected
+                else "No connected GitHub session observed"
+            ),
+            source_type="github_connection",
+            source_uri=(
+                f"https://github.com/{status.repository}"
+                if status.repository
+                else "github://connection"
+            ),
+            excerpt=status.model_dump_json(exclude={"scopes"}),
+            confidence=1.0,
+            authority="github-cli-session",
+            retrieved_at=status.observed_at,
+        )
+        self.database.save_evidence(evidence)
+        self.database.append_event(
+            mission_id,
+            "GITHUB_CONNECTION_OBSERVED",
+            {
+                "evidence_id": str(evidence.id),
+                "connected": status.connected,
+                "login": status.login,
+                "repository": status.repository,
+                "can_push_to_target": status.can_push_to_target,
+                "source": status.source,
+            },
+        )
+        return status

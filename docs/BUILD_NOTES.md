@@ -1,5 +1,47 @@
 # Build notes
 
+## 2026-09-15 — Product language and installation-scoped GitHub identity
+
+The reported Plow Chat failure exposed two product defects. Project answers
+included `/var/lib/hermes`, container names, branch UUIDs, Python class names,
+and `gh auth` details. GitHub observations also described whichever `gh`
+session happened to be visible, which made it unclear whether the account was
+owned by the current SMS operator or leaked from the installation creator.
+
+The fix adds one presentation boundary in `hackathon_competitor/presentation.py`.
+Normal mission answers receive product-safe facts and are rendered with
+competition, project, repository, tests, GitHub, ready, blocked, paused, and
+cancelled language. Explicit requests such as “show technical details”, “show
+logs”, “where is it stored?”, or “which branch?” select details mode and may
+show the stored diagnostics. The same renderer is a final safety net for model
+text, so routine replies do not expose paths, container names, UUID branches,
+internal classes, database states, or shell commands.
+
+`GitHubConnectionStatus` and `GitHubConnectionObserver` now provide the one
+canonical, token-free connection observation. The CLI's GitHub adapter pins
+`GH_CONFIG_DIR` to the persistent home of the current Joust installation;
+creator or host-wide `gh` configuration is never used when an installation
+home is supplied. `joust mission github-status <mission-id>` returns the
+structured authoritative observation. Product wording is “GitHub connected:
+<login>” or “GitHub isn't connected yet.” It never assumes the SMS sender owns
+that account, and repository owners continue to come from observed GitHub
+data.
+
+Regression coverage now includes normal-versus-details redaction, friendly
+connected/disconnected/insufficient-permission output, token-free connection
+observation, durable evidence, and separate installation config directories.
+The full suite now collects 309 tests and passes; Ruff 0.15.6 is clean.
+
+The fresh-image/fresh-volume check was run without copying `~/.config/gh`:
+the new installation had no active GitHub session and did not report
+`baskpascal`. Reusing the existing Hermes volume intentionally retains its
+existing session, as the persistence contract requires. A real second GitHub
+account and the SMS acceptance transcript still require credentials and a
+tester-controlled Plow line; no account or browser ChatGPT result is being
+presented as evidence. The supported boundary remains one Joust installation
+per GitHub identity. A shared multi-user hosted instance will need a future
+OAuth/GitHub App identity model.
+
 ## 2026-09-15 — An auth failure that looked exactly like an empty answer
 
 Running Test 15's scenario for real, inside the production container, against

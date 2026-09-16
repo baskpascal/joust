@@ -254,9 +254,33 @@ def test_a_question_is_answered_from_stored_state_only(app, tmp_path):
     question_prompt = reasoner.prompts[-1]
     facts = json.loads(question_prompt.split("facts=", 1)[1])
     assert facts["competition"] == "Test Cup"
-    assert facts["project"]["path"].endswith("red-build-triage")
-    assert len(facts["strategies_considered"]) == 3
+    assert facts["project"]["name"] == "red-build-triage"
+    assert "path" not in facts["project"]
+    assert "strategies_considered" not in facts
     assert "using only the facts" in question_prompt
+
+
+def test_technical_question_receives_stored_diagnostics(app, tmp_path):
+    reasoner = ScriptedReasoner(
+        _generation(),
+        {"selected_index": 0, "rationale": "r" * 60, "rejected": []},
+        _plan(),
+        "Path: /var/lib/hermes/home/red-build-triage on branch joust/mission.",
+    )
+    mission, _, _, _ = joust_it(
+        app,
+        _rules_page(tmp_path),
+        reasoner,
+        workspace_path=str(tmp_path / "work"),
+        projects_root=tmp_path / "projects",
+    )
+
+    answer = ask(app, mission.id, "Show technical details", reasoner)
+
+    assert "/var/lib/hermes" in answer
+    facts = json.loads(reasoner.prompts[-1].split("facts=", 1)[1])
+    assert facts["project"]["path"].endswith("red-build-triage")
+    assert "branch" in facts["project"]
 
 
 def test_a_redirect_changes_course_without_losing_the_record(app, tmp_path):

@@ -48,6 +48,14 @@ Authentication proves identity and access, but it is not action approval. Push,
 PR creation, deployment, Agent Index updates, verification requests, and final
 submission remain approval-bound external actions.
 
+The GitHub identity boundary is installation-scoped: one Joust installation
+and its persistent Hermes volume retain one connected GitHub account. A fresh
+volume starts disconnected and must never inherit a creator's `~/.config/gh`
+or any image-baked configuration. This supports one instance per user. A
+single hosted instance shared by many SMS users cannot provide separate
+per-user GitHub identities with the current `gh` model; that future shape
+requires per-user OAuth or GitHub App authorization.
+
 ## Submission safety
 
 Joust may prepare artifacts automatically. Publishing or submitting remains
