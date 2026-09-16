@@ -35,7 +35,9 @@ The full suite now collects 309 tests and passes; Ruff 0.15.6 is clean.
 The fresh-image/fresh-volume check was run without copying `~/.config/gh`:
 the new installation had no active GitHub session and did not report
 `baskpascal`. Reusing the existing Hermes volume intentionally retains its
-existing session, as the persistence contract requires. A real second GitHub
+existing session, as the persistence contract requires; after a normal
+`docker compose up --build -d` recreation, the same connected login was still
+observed. A real second GitHub
 account and the SMS acceptance transcript still require credentials and a
 tester-controlled Plow line; no account or browser ChatGPT result is being
 presented as evidence. The supported boundary remains one Joust installation
