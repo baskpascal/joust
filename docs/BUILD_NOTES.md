@@ -58,7 +58,7 @@ data.
 Regression coverage now includes normal-versus-details redaction, friendly
 connected/disconnected/insufficient-permission output, token-free connection
 observation, durable evidence, and separate installation config directories.
-The full suite now collects 309 tests and passes; Ruff 0.15.6 is clean.
+The full suite now collects 314 tests and passes; Ruff 0.15.6 is clean.
 
 The fresh-image/fresh-volume check was run without copying `~/.config/gh`:
 the new installation had no active GitHub session and did not report
