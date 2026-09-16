@@ -8,6 +8,7 @@ keeps the history it changes.
 """
 
 import json
+from pathlib import Path
 
 import pytest
 from test_ai_strategy import ScriptedReasoner, _candidate
@@ -98,6 +99,20 @@ def test_a_competition_url_becomes_a_chosen_strategy_and_a_real_project(app, tmp
 
     events = {event["event_type"] for event in app.database.events(mission.id)}
     assert {"AI_STRATEGY_SELECTED", "AI_PROJECT_PLANNED"} <= events
+
+
+def test_default_workspace_and_project_live_under_tenant_home(app, tmp_path):
+    reasoner = ScriptedReasoner(
+        _generation(),
+        {"selected_index": 0, "rationale": "r" * 60, "rejected": []},
+        _plan(),
+    )
+
+    mission, _, _, target = joust_it(app, _rules_page(tmp_path), reasoner)
+
+    tenant_home = app.artifact_root.parent.resolve()
+    assert Path(mission.workspace_path) == tenant_home / "workspace"
+    assert Path(target.local_path).parent == tenant_home
 
 
 def _seed_existing_repository(root):

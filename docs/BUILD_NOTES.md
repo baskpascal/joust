@@ -1,5 +1,33 @@
 # Build notes
 
+## 2026-09-15 — Cloud-ready installation boundaries
+
+The cloud-readiness audit checked the five installation invariants. The image
+contains the pinned runtime, persona, skills, and Joust package only: `.env`,
+Plow credentials, GitHub `hosts.yml`, and `AGENT_ID` are absent from the image.
+Compose requires `AGENT_ID` at provisioning time and stores it immutably in the
+tenant's persistent Hermes home. The Agent Index reporter stands down rather
+than guessing when the provisioned value is missing.
+
+GitHub authentication remains volume-scoped through
+`/var/lib/hermes/.config/gh`. A fresh named volume has no GitHub session; the
+existing volume retains its session after a normal container recreation. The
+CLI adapter also pins its `GH_CONFIG_DIR` to the explicit installation home,
+so local host configuration cannot leak into another tenant.
+
+The default `joust-it` and `mission create` paths now put the mission workspace
+and newly generated projects under the installation's persistent tenant home.
+An explicit existing-project path remains an intentional operator override for
+working on a repository that already lives elsewhere. No default depends on a
+developer checkout path, Windows drive, or creator home.
+
+Evidence collected for this audit: a clean image scan found no credential or
+GitHub config files; a fresh-volume CLI run migrated the database, created a
+mission, and reported `GitHubConnectionStatus.connected = false`; changing
+`AGENT_ID` on the same volume was rejected as immutable; and `docker compose
+up --build -d` recreated the live container without deleting its persistent
+home. The live container remains healthy.
+
 ## 2026-09-15 — Product language and installation-scoped GitHub identity
 
 The reported Plow Chat failure exposed two product defects. Project answers

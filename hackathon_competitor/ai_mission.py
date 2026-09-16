@@ -94,7 +94,13 @@ def joust_it(
     current branch, never a freshly invented name or an assumed "main".
     """
 
-    workspace = str(Path(workspace_path or ".").resolve())
+    workspace_root = (
+        Path(workspace_path).expanduser().resolve()
+        if workspace_path
+        else (orchestrator.artifact_root.parent / "workspace").resolve()
+    )
+    workspace_root.mkdir(parents=True, exist_ok=True)
+    workspace = str(workspace_root)
     mission = orchestrator.create_mission(
         title="Competition mission",
         objective="Find and execute the strongest evidence-backed way to win.",

@@ -68,3 +68,15 @@ def test_secret_bearing_paths_are_excluded_from_git_and_build_context():
         and path.name not in {"plow-credentials", ".env"}
     )
     assert not re.search(r"(?:sk|aik|plow)_[A-Za-z0-9_-]{24,}", tracked_text)
+
+
+def test_provisioning_owns_agent_id_and_github_auth_is_volume_scoped():
+    compose = (ROOT / "compose.yml").read_text()
+    dockerfile = (ROOT / "Dockerfile").read_text()
+
+    assert "AGENT_ID: ${AGENT_ID:?" in compose
+    assert "GH_CONFIG_DIR: /var/lib/hermes/.config/gh" in compose
+    assert "agent-home:/var/lib/hermes" in compose
+    assert "COPY .env" not in dockerfile
+    assert "COPY plow-credentials" not in dockerfile
+    assert "hosts.yml" not in dockerfile

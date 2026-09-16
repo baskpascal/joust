@@ -75,3 +75,20 @@ def test_existing_project_path_defaults_to_none(monkeypatch):
     cli.main(["mission", "joust-it", "--url", "https://example.test/rules", "--no-model"])
 
     assert captured["existing_project_path"] is None
+
+
+def test_cli_create_defaults_to_tenant_workspace(monkeypatch):
+    parsed = cli.build_parser().parse_args(
+        ["mission", "create", "--url", "https://example.test/rules"]
+    )
+
+    assert parsed.workspace is None
+
+
+def test_installation_home_is_unique_for_explicit_tenant_homes(tmp_path):
+    first = cli.installation_home(tmp_path / "tenant-a")
+    second = cli.installation_home(tmp_path / "tenant-b")
+
+    assert first == (tmp_path / "tenant-a").resolve()
+    assert second == (tmp_path / "tenant-b").resolve()
+    assert first != second

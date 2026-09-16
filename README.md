@@ -45,6 +45,11 @@ When it says ready:
 docker compose up --build -d
 ```
 
+The image contains no Plow or GitHub credentials. Provisioning supplies a
+stable `AGENT_ID` and mounts the Plow credential at runtime. The persistent
+Compose home holds mission state, generated projects, and the installation's
+GitHub session; a new home starts disconnected from GitHub.
+
 ## First mission
 
 In the operational Plow Chat phone line (SMS; iMessage may be used for line

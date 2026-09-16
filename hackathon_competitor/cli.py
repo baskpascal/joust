@@ -303,7 +303,11 @@ def build_parser() -> argparse.ArgumentParser:
     mission_commands = mission.add_subparsers(dest="mission_command", required=True)
     create = mission_commands.add_parser("create")
     create.add_argument("--url", required=True)
-    create.add_argument("--workspace", default=".")
+    create.add_argument(
+        "--workspace",
+        default=None,
+        help="optional workspace override; defaults to the persistent tenant home",
+    )
     for name in ("show", "resume", "pause", "cancel", "tasks", "github-status"):
         sub = mission_commands.add_parser(name)
         sub.add_argument("mission_id", type=UUID)

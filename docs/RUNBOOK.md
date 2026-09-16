@@ -56,6 +56,12 @@ single hosted instance shared by many SMS users cannot provide separate
 per-user GitHub identities with the current `gh` model; that future shape
 requires per-user OAuth or GitHub App authorization.
 
+Mission state, artifacts, default workspaces, and newly generated projects
+are stored below the tenant home. `joust-it` and `mission create` use that
+location automatically; an explicit existing-project path is the only normal
+way to point a mission outside it. Provisioning supplies `AGENT_ID` and the
+Plow credential at runtime, so neither is baked into the image.
+
 ## Submission safety
 
 Joust may prepare artifacts automatically. Publishing or submitting remains
